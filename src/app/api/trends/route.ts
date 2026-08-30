@@ -10,6 +10,7 @@ import {
   buildOptionBarrierAlert,
   getB3ExpirationDetails,
 } from '@/lib/domain/options-barriers';
+import { calculateHistoricalVolatility, classifyVolatilityRegime } from '@/lib/domain/volatility';
 import { TrendAnalysisResult } from '@/lib/types/financial';
 
 export async function GET(request: NextRequest) {
@@ -52,10 +53,11 @@ export async function GET(request: NextRequest) {
 
           // 4. Barreiras de Opções no Vencimento Mais Líquido
           let barrierAlert;
+          let optionAnalysis;
           try {
             const positionsData = await brapiService.getOptionPositions(cleanSymbol, nearestExp);
             if (positionsData?.positions && positionsData.positions.length > 0) {
-              const optionAnalysis = analyzeOptionPositions(
+              optionAnalysis = analyzeOptionPositions(
                 cleanSymbol,
                 quote.regularMarketPrice,
                 positionsData.positions,
@@ -68,14 +70,20 @@ export async function GET(request: NextRequest) {
             barrierAlert = undefined;
           }
 
-          // 5. Veredito Consolidado
+          // 5. Regime de Volatilidade & Veredito Consolidado CNPI
+          const closes = (quote.historicalDataPrice || []).map((h) => h.close);
+          const realHv21 = calculateHistoricalVolatility(closes, 21) ?? 25.0;
+          const ivAtmValue = optionAnalysis?.ivAtm?.callIv ?? realHv21;
+          const volRegime = classifyVolatilityRegime(ivAtmValue, realHv21);
+
           const verdict = generateConsolidatedVerdict(
             cleanSymbol,
             quote.regularMarketPrice,
             trendAnalysis.trend,
             fundamentals.status,
             barrierAlert,
-            quote.shortName
+            quote.shortName,
+            volRegime
           );
 
           return {

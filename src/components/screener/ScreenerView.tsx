@@ -67,16 +67,16 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
         item.verdict?.verdict === 'COMPRA_COM_ALERTA_BARREIRA'
       );
     }
+    if (filterVerdict === 'IRON_CONDOR') {
+      return item.verdict?.verdict === 'LATERAL_IRON_CONDOR';
+    }
+    if (filterVerdict === 'AGUARDAR') {
+      return item.verdict?.verdict === 'LATERAL_AGUARDAR';
+    }
     if (filterVerdict === 'VENDA') {
       return (
         item.verdict?.verdict === 'VENDA_FORTE' ||
         item.verdict?.verdict === 'VENDA_COM_ALERTA_SUPORTE'
-      );
-    }
-    if (filterVerdict === 'LATERAL') {
-      return (
-        item.verdict?.verdict === 'LATERAL_IRON_CONDOR' ||
-        item.verdict?.verdict === 'LATERAL_AGUARDAR'
       );
     }
     if (filterVerdict === 'BLOQUEADO') {
@@ -91,15 +91,16 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
       i.verdict?.verdict === 'COMPRA_FORTE' ||
       i.verdict?.verdict === 'COMPRA_COM_ALERTA_BARREIRA'
   ).length;
+  const countIronCondor = results.filter(
+    (i) => i.verdict?.verdict === 'LATERAL_IRON_CONDOR'
+  ).length;
+  const countAguardar = results.filter(
+    (i) => i.verdict?.verdict === 'LATERAL_AGUARDAR'
+  ).length;
   const countVenda = results.filter(
     (i) =>
       i.verdict?.verdict === 'VENDA_FORTE' ||
       i.verdict?.verdict === 'VENDA_COM_ALERTA_SUPORTE'
-  ).length;
-  const countLateral = results.filter(
-    (i) =>
-      i.verdict?.verdict === 'LATERAL_IRON_CONDOR' ||
-      i.verdict?.verdict === 'LATERAL_AGUARDAR'
   ).length;
   const countBloqueado = results.filter(
     (i) => i.verdict?.verdict === 'BLOQUEADO_POR_FUNDAMENTOS'
@@ -212,8 +213,8 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
         </div>
       </div>
 
-      {/* Cards de Filtro por Veredito Consolidado */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      {/* Cards de Filtro por Veredito Consolidado (6 Categorias Independentes) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <button
           onClick={() => setFilterVerdict('ALL')}
           className={`p-3.5 rounded-xl border text-left transition ${
@@ -244,18 +245,33 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
         </button>
 
         <button
-          onClick={() => setFilterVerdict('LATERAL')}
+          onClick={() => setFilterVerdict('IRON_CONDOR')}
           className={`p-3.5 rounded-xl border text-left transition ${
-            filterVerdict === 'LATERAL'
+            filterVerdict === 'IRON_CONDOR'
+              ? 'bg-[#111827] border-purple-500 ring-1 ring-purple-500/50'
+              : 'bg-[#0f172a] border-gray-800 hover:border-gray-700'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs text-purple-400 mb-1">
+            <span>Iron Condor</span>
+            <Layers className="w-3.5 h-3.5" />
+          </div>
+          <div className="text-2xl font-bold font-mono text-purple-400">{countIronCondor}</div>
+        </button>
+
+        <button
+          onClick={() => setFilterVerdict('AGUARDAR')}
+          className={`p-3.5 rounded-xl border text-left transition ${
+            filterVerdict === 'AGUARDAR'
               ? 'bg-[#111827] border-amber-500 ring-1 ring-amber-500/50'
               : 'bg-[#0f172a] border-gray-800 hover:border-gray-700'
           }`}
         >
           <div className="flex items-center justify-between text-xs text-amber-400 mb-1">
-            <span>Lateral / Aguardar</span>
+            <span>Lateral (Aguardar)</span>
             <Minus className="w-3.5 h-3.5" />
           </div>
-          <div className="text-2xl font-bold font-mono text-amber-400">{countLateral}</div>
+          <div className="text-2xl font-bold font-mono text-amber-400">{countAguardar}</div>
         </button>
 
         <button
