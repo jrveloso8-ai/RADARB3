@@ -1272,8 +1272,8 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                     </div>
                   </div>
 
-                  {/* GRÁFICO DE CANDLESTICKS OU AVISO DE INVIABILIDADE */}
-                  {plan?.isViable ? (
+                  {/* GRÁFICO DE CANDLESTICKS COM ENTRADA, STOP E ALVOS */}
+                  {plan ? (
                     <StockTradePlanChart
                       symbol={data.symbol}
                       historicalPrices={data.historicalDataPrice}
@@ -1290,9 +1290,20 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                         <span>Plano de trade indisponível para este ativo</span>
                       </div>
                       <p className="text-gray-400">
-                        {plan
-                          ? `Relação risco/retorno de ${plan.riskRewardRatio.toFixed(2)} : 1 está abaixo do mínimo exigido de 1,5 : 1.`
-                          : 'Níveis estruturais de suporte e resistência insuficientes no histórico recente.'}
+                        Níveis estruturais de suporte e resistência insuficientes no histórico recente para traçar o plano de trade.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* AVISO COMPLEMENTAR QUANDO O R:R ESTIVER ABAIXO DO MÍNIMO IDEAL */}
+                  {plan && !plan.isViable && (
+                    <div className="p-4 bg-[#111827] rounded-xl border border-amber-500/30 text-xs text-amber-300 space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-amber-400">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>Atenção: Relação Risco/Retorno Desfavorável ({plan.riskRewardRatio.toFixed(2)} : 1)</span>
+                      </div>
+                      <p className="text-gray-400">
+                        A relação risco/retorno calculada de {plan.riskRewardRatio.toFixed(2)} : 1 está abaixo da assimetria ideal (≥ 1,5 : 1). Recomenda-se cautela ou aguardar recuo para melhor ponto de entrada antes de executar a operação.
                       </p>
                     </div>
                   )}
