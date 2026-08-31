@@ -26,8 +26,11 @@ import {
   Award,
   AlertCircle,
   ExternalLink,
+  PlayCircle,
+  Video,
 } from 'lucide-react';
 import { safeFetchJson } from '@/lib/utils/api-client';
+import { SYSTEM_VERSION } from '@/lib/config/version';
 
 interface SupportMessage {
   id: string;
@@ -638,10 +641,10 @@ Como posso apoiar seus estudos hoje?`,
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-500/30 font-bold">
-                Radar B3 Pro IA · Versão 2
+                {SYSTEM_VERSION.version} • {SYSTEM_VERSION.specVersion}
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-slate-800 text-gray-300 border border-gray-700">
-                Agosto de 2026
+                Publicado em: {SYSTEM_VERSION.releaseDate}
               </span>
             </div>
             <h2 className="text-2xl font-black text-white tracking-wide flex items-center gap-2.5">
@@ -655,13 +658,13 @@ Como posso apoiar seus estudos hoje?`,
           <div className="flex items-center gap-3 self-start md:self-auto">
             <div className="text-right hidden sm:block">
               <div className="text-xs font-mono font-bold text-cyan-400">12 Tópicos Oficiais</div>
-              <div className="text-[11px] text-gray-500 font-sans">Agente de IA integrado</div>
+              <div className="text-[11px] text-gray-500 font-sans">Agente de IA e Vídeo Aulas</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Grid Principal: Manual à Esquerda e Chat de IA à Direita */}
+      {/* Grid Principal: Manual à Esquerda e Chat de IA / Vídeo à Direita */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* ========================================================================= */}
         {/* COLUNA DA ESQUERDA: ESTRUTURA DO MANUAL (7 COLUNAS) */}
@@ -728,115 +731,147 @@ Como posso apoiar seus estudos hoje?`,
         </div>
 
         {/* ========================================================================= */}
-        {/* COLUNA DA DIREITA: AGENTE DE IA ESPECIALISTA NO MANUAL (5 COLUNAS) */}
+        {/* COLUNA DA DIREITA: AGENTE DE IA + VÍDEO EXPLICATIVO (5 COLUNAS) */}
         {/* ========================================================================= */}
-        <div className="lg:col-span-5 bg-[#0f172a] border border-gray-800 rounded-2xl p-4 flex flex-col h-[760px] shadow-lg">
-          {/* Header do Chat */}
-          <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-cyan-950/80 border border-cyan-500/30 text-cyan-400">
-                <Bot className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                  Agente IA do Manual <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                </h3>
-                <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Conhecimento v2 Ativo
-                </span>
+        <div className="lg:col-span-5 space-y-5 flex flex-col">
+          {/* 1. AGENTE DE IA ESPECIALISTA NO MANUAL */}
+          <div className="bg-[#0f172a] border border-gray-800 rounded-2xl p-4 flex flex-col h-[560px] shadow-lg">
+            {/* Header do Chat */}
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-950/80 border border-cyan-500/30 text-cyan-400">
+                  <Bot className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                    Agente IA do Manual <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  </h3>
+                  <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Conhecimento v3.1 Ativo
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Sugestões Rápidas de Perguntas */}
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {[
-              'Como a tendência é calculada?',
-              'Por que liquidez < 1.0 não reprova?',
-              'O que é lista vazia?',
-              'Como calcular o stop ATR?',
-              'Quando o Iron Condor é bloqueado?',
-            ].map((sug) => (
-              <button
-                key={sug}
-                onClick={() => handleSendMessage(sug)}
-                disabled={loading}
-                className="text-[10px] px-2 py-1 rounded-lg bg-[#111827] hover:bg-gray-800 text-gray-300 border border-gray-800 hover:border-cyan-500/40 transition disabled:opacity-50"
-              >
-                {sug}
-              </button>
-            ))}
-          </div>
-
-          {/* Área de Mensagens com Scroll */}
-          <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
-            {messages.map((m) => (
-              <div
-                key={m.id}
-                className={`flex gap-2.5 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                {m.sender === 'ai' && (
-                  <div className="w-6 h-6 rounded-full bg-cyan-950 border border-cyan-500/30 flex items-center justify-center flex-shrink-0 text-cyan-400 mt-1">
-                    <Bot className="w-3.5 h-3.5" />
-                  </div>
-                )}
-                <div
-                  className={`max-w-[88%] p-3 rounded-xl leading-relaxed whitespace-pre-wrap ${
-                    m.sender === 'user'
-                      ? 'bg-cyan-600 text-white rounded-br-none shadow-md font-sans'
-                      : 'bg-[#111827] text-gray-200 border border-gray-800 rounded-bl-none prose prose-invert max-w-none text-xs'
-                  }`}
+            {/* Sugestões Rápidas de Perguntas */}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {[
+                'Como a tendência é calculada?',
+                'Por que liquidez < 1.0 não reprova?',
+                'O que é lista vazia?',
+                'Como calcular o stop ATR?',
+                'Quando o Iron Condor é bloqueado?',
+              ].map((sug) => (
+                <button
+                  key={sug}
+                  onClick={() => handleSendMessage(sug)}
+                  disabled={loading}
+                  className="text-[10px] px-2 py-1 rounded-lg bg-[#111827] hover:bg-gray-800 text-gray-300 border border-gray-800 hover:border-cyan-500/40 transition disabled:opacity-50"
                 >
-                  {m.text}
+                  {sug}
+                </button>
+              ))}
+            </div>
+
+            {/* Área de Mensagens com Scroll */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex gap-2.5 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  {m.sender === 'ai' && (
+                    <div className="w-6 h-6 rounded-full bg-cyan-950 border border-cyan-500/30 flex items-center justify-center flex-shrink-0 text-cyan-400 mt-1">
+                      <Bot className="w-3.5 h-3.5" />
+                    </div>
+                  )}
                   <div
-                    className={`text-[9px] mt-1 text-right ${
-                      m.sender === 'user' ? 'text-cyan-200' : 'text-gray-500'
+                    className={`max-w-[88%] p-3 rounded-xl leading-relaxed whitespace-pre-wrap ${
+                      m.sender === 'user'
+                        ? 'bg-cyan-600 text-white rounded-br-none shadow-md font-sans'
+                        : 'bg-[#111827] text-gray-200 border border-gray-800 rounded-bl-none prose prose-invert max-w-none text-xs'
                     }`}
                   >
-                    {m.timestamp}
+                    {m.text}
+                    <div
+                      className={`text-[9px] mt-1 text-right ${
+                        m.sender === 'user' ? 'text-cyan-200' : 'text-gray-500'
+                      }`}
+                    >
+                      {m.timestamp}
+                    </div>
                   </div>
+                  {m.sender === 'user' && (
+                    <div className="w-6 h-6 rounded-full bg-cyan-700 flex items-center justify-center flex-shrink-0 text-white mt-1">
+                      <User className="w-3.5 h-3.5" />
+                    </div>
+                  )}
                 </div>
-                {m.sender === 'user' && (
-                  <div className="w-6 h-6 rounded-full bg-cyan-700 flex items-center justify-center flex-shrink-0 text-white mt-1">
-                    <User className="w-3.5 h-3.5" />
-                  </div>
-                )}
-              </div>
-            ))}
-            {loading && (
-              <div className="flex items-center gap-2 text-cyan-400 text-xs py-2">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Consultando regras do Manual v2...</span>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
+              ))}
+              {loading && (
+                <div className="flex items-center gap-2 text-cyan-400 text-xs py-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Consultando regras do Manual v3.1...</span>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Formulário de Envio */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendMessage();
+              }}
+              className="mt-3 pt-3 border-t border-gray-800 flex items-center gap-2"
+            >
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Faça uma pergunta sobre o manual..."
+                disabled={loading}
+                className="flex-1 bg-[#111827] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 font-sans transition"
+              />
+              <button
+                type="submit"
+                disabled={loading || !input.trim()}
+                className="p-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-xl transition flex items-center justify-center"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
           </div>
 
-          {/* Formulário de Envio */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSendMessage();
-            }}
-            className="mt-3 pt-3 border-t border-gray-800 flex items-center gap-2"
-          >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Faça uma pergunta sobre o manual..."
-              disabled={loading}
-              className="flex-1 bg-[#111827] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 font-sans transition"
-            />
-            <button
-              type="submit"
-              disabled={loading || !input.trim()}
-              className="p-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-xl transition flex items-center justify-center"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
+          {/* 2. VÍDEO EXPLICATIVO DO RADAR B3 (Logo abaixo do Agente IA) */}
+          <div className="bg-[#0f172a] border border-gray-800 rounded-2xl p-4 shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-2.5">
+              <div className="flex items-center gap-2">
+                <PlayCircle className="w-5 h-5 text-cyan-400" />
+                <h4 className="font-bold text-white text-sm">Vídeo: Desmistificando o Radar B3</h4>
+              </div>
+              <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/30 font-bold flex items-center gap-1">
+                <Video className="w-3 h-3 text-cyan-400" />
+                AULA COMPLETA
+              </span>
+            </div>
+
+            <div className="rounded-xl overflow-hidden border border-gray-800 bg-black shadow-inner">
+              <video
+                controls
+                preload="metadata"
+                className="w-full aspect-video rounded-xl bg-black"
+                src="/videos/Desmistificando_o_Radar_B3.mp4"
+              >
+                Seu navegador não suporta a reprodução de vídeo HTML5.
+              </video>
+            </div>
+
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Assista à aula prática detalhando a arquitetura das 3 camadas, regras de alinhamento das médias móveis, filtros fundamentalistas e estratégias com opções na B3.
+            </p>
+          </div>
         </div>
       </div>
     </div>

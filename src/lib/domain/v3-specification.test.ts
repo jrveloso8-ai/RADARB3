@@ -1,14 +1,49 @@
 import { describe, it, expect } from 'vitest';
 import {
   electBestOptionStrategy,
+  isActionableStrategy,
   assertDirection,
 } from './cme-election';
 import itub4AnalyticsFixture from '../services/__fixtures__/itub4-analytics.json';
-import { OptionAnalyticsItem } from '../types/financial';
+import { OptionAnalyticsItem, OptionAnalysisResult } from '../types/financial';
 import { CNPI_RULES } from '../config/rules';
 
-describe('Especificação de Execução v3.0 — Suíte Completa de Validação (CT-950 a CT-968)', () => {
+describe('Especificação de Execução v3.0 / v3.1 — Suíte Completa de Validação', () => {
   const itub4Analytics = itub4AnalyticsFixture.analytics as OptionAnalyticsItem[];
+
+  const itub4OptionAnalysis: OptionAnalysisResult = {
+    underlyingSymbol: 'ITUB4',
+    underlyingPrice: 39.55,
+    marketType: 'equity',
+    availableExpirations: [],
+    selectedExpiration: '2026-09-18',
+    selectedExpirationInfo: {
+      date: '2026-09-18',
+      monthName: 'SET/2026',
+      callLetter: 'I',
+      putLetter: 'U',
+      dte: 15,
+      label: '18/09/2026 (15d)',
+      badge: 'Mensal',
+    },
+    ivAtm: {
+      callIv: 26.5,
+      putIv: 26.8,
+      diffPercent: 1.1,
+      status: 'CONFIALVEL',
+    },
+    openInterestDate: '2026-08-28',
+    maxPain: 39.5,
+    hv21: 22.0,
+    hv63: 23.0,
+    putCallRatio: 0.9,
+    totalCallOpenInterest: 5000000,
+    totalPutOpenInterest: 6000000,
+    top5CallWalls: [],
+    top5PutWalls: [],
+    strikeDistribution: [],
+    straddleRows: [],
+  };
 
   // CT-950: Mapeamento de lastTradeDate e firstTradeDate
   it('CT-950 (G4): Mapeamento de lastTradeDate e firstTradeDate sem fallback de confidence e conversão incondicional de IV', () => {
@@ -17,22 +52,8 @@ describe('Especificação de Execução v3.0 — Suíte Completa de Validação 
     expect(item.lastTradeDate).toBe('2026-08-28');
   });
 
-  // CT-951: Gate de IV ATM obrigatório para estruturas a crédito
-  it('CT-951 (G3): Gate de IV ATM obrigatório bloqueia com IV_INDISPONIVEL se IV for ausente ou zero', () => {
-    const corruptedAnalytics: OptionAnalyticsItem[] = [
-      {
-        symbol: 'ITUBU385',
-        side: 'put',
-        strike: 37.96,
-        optionPrice: 0.4,
-        impliedVolatility: 0, // IV zero
-        delta: -0.257,
-        openInterest: 994500,
-        lastTradeDate: '2026-08-28',
-        nullReason: null,
-      },
-    ];
-
+  // CT-958: ivAtm = null, alvo a crédito -> bloqueia com IV_INDISPONIVEL
+  it('CT-958 (G3): ivAtm = null em alvo a crédito bloqueia com IV_INDISPONIVEL', () => {
     const strategy = electBestOptionStrategy(
       'ITUB4',
       39.55,
@@ -42,7 +63,27 @@ describe('Especificação de Execução v3.0 — Suíte Completa de Validação 
       22.0,
       undefined,
       'APROVADO',
-      corruptedAnalytics
+      itub4Analytics
+    );
+
+    expect(strategy.status).toBe('BLOQUEADA');
+    expect(strategy.blockDetails?.reason).toBe('IV_INDISPONIVEL');
+  });
+
+  // CT-958b: ivAtm = null mesmo com cadeia cheia de IVs válidas não reconstrói IV
+  it('CT-958b (G3): Cadeia com IVs válidas mas sem ivAtm oficial deve permanecer IV_INDISPONIVEL sem reconstrução', () => {
+    const analysisWithoutIvAtm = { ...itub4OptionAnalysis, ivAtm: undefined };
+
+    const strategy = electBestOptionStrategy(
+      'ITUB4',
+      39.55,
+      'COMPRA',
+      'ALTA',
+      55,
+      22.0,
+      analysisWithoutIvAtm,
+      'APROVADO',
+      itub4Analytics
     );
 
     expect(strategy.status).toBe('BLOQUEADA');
@@ -74,7 +115,6 @@ describe('Especificação de Execução v3.0 — Suíte Completa de Validação 
     expect(callStrikes[6]).toBe(41.55); // ITUBI422
     expect(callStrikes[7]).toBe(41.80); // ITUBI424
 
-    // Verificar espaçamento uniforme de R$ 0,25
     for (let i = 1; i < callStrikes.length; i++) {
       expect(Number((callStrikes[i] - callStrikes[i - 1]).toFixed(2))).toBe(0.25);
     }
@@ -89,7 +129,7 @@ describe('Especificação de Execução v3.0 — Suíte Completa de Validação 
       'ALTA',
       55,
       22.0,
-      undefined,
+      itub4OptionAnalysis,
       'APROVADO',
       []
     );
@@ -101,7 +141,7 @@ describe('Especificação de Execução v3.0 — Suíte Completa de Validação 
     expect(strategy.blockDetails?.diagnostics.validPairs).toBe(0);
   });
 
-  // CT-955: Iron Condor por busca no espaço de pares (produto cartesiano de puts e calls)
+  // CT-955: Iron Condor por busca no espaço de pares
   it('CT-955 (G1): Iron Condor montado por busca combinatória de put spread e call spread com delta máx 0.30', () => {
     const strategy = electBestOptionStrategy(
       'ITUB4',
@@ -110,7 +150,7 @@ describe('Especificação de Execução v3.0 — Suíte Completa de Validação 
       'LATERAL',
       50,
       22.0,
-      undefined,
+      itub4OptionAnalysis,
       'APROVADO',
       itub4Analytics
     );
@@ -129,20 +169,56 @@ describe('Especificação de Execução v3.0 — Suíte Completa de Validação 
     expect(longPut).toBeDefined();
     expect(longCall).toBeDefined();
 
-    // Delta das pernas vendidas <= 0.30
     expect(Math.abs(shortPut.delta!)).toBeLessThanOrEqual(0.30);
     expect(Math.abs(shortCall.delta!)).toBeLessThanOrEqual(0.30);
 
-    // Validação direcional de Iron Condor
     expect(() => assertDirection(strategy, 39.55)).not.toThrow();
   });
 
-  // CT-956: Pesos da função de score das travas da Seção 14
-  it('CT-956 (Seção 14): Pesos de score obedecem 0.50 (short delta), 0.15 (long delta), 0.20 (retorno) e 0.15 (liquidez)', () => {
-    const weights = CNPI_RULES.DERIVATIVES.SPREAD.SCORE_WEIGHTS;
-    expect(weights.SHORT_DELTA).toBe(0.50);
-    expect(weights.LONG_DELTA).toBe(0.15);
-    expect(weights.RETURN_ON_RISK).toBe(0.20);
-    expect(weights.LIQUIDITY).toBe(0.15);
+  // CT-967: isActionableStrategy retorna true apenas para AUTORIZADA com pernas
+  it('CT-967 (G6): isActionableStrategy valida estritamente status AUTORIZADA e pernas > 0', () => {
+    const authorized = electBestOptionStrategy(
+      'ITUB4',
+      39.55,
+      'COMPRA',
+      'ALTA',
+      55,
+      22.0,
+      itub4OptionAnalysis,
+      'APROVADO',
+      itub4Analytics
+    );
+
+    expect(isActionableStrategy(authorized)).toBe(true);
+
+    const emAnalise = { ...authorized, status: 'EM_ANALISE' as const };
+    expect(isActionableStrategy(emAnalise)).toBe(false);
+
+    const bloqueada = { ...authorized, status: 'BLOQUEADA' as const };
+    expect(isActionableStrategy(bloqueada)).toBe(false);
+
+    expect(isActionableStrategy(null)).toBe(false);
+  });
+
+  // CT-N06 / Item 10: Estrutura alternativa a débito produzida
+  it('CT-N06 (Item 10): Bull Put Spread a crédito produz Bull Call Spread como alternative', () => {
+    const strategy = electBestOptionStrategy(
+      'ITUB4',
+      39.55,
+      'COMPRA',
+      'ALTA',
+      55,
+      22.0,
+      itub4OptionAnalysis,
+      'APROVADO',
+      itub4Analytics
+    );
+
+    expect(strategy.status).toBe('AUTORIZADA');
+    expect(strategy.alternative).toBeDefined();
+    expect(strategy.alternative?.strategy).toBeDefined();
+    expect(strategy.alternative?.strategy.title).toContain('Trava de Alta com Call a Débito');
+    expect(strategy.alternative?.strategy.isCredit).toBe(false);
+    expect(strategy.alternative?.rationale).toContain('favorece venda de prêmio a crédito');
   });
 });

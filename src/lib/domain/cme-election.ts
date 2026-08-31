@@ -118,6 +118,12 @@ export class StructureDirectionError extends Error {
 }
 
 /**
+ * Determina de forma padronizada se uma estratégia é acionável para envio de ordem (Spec v3.1)
+ */
+export const isActionableStrategy = (s?: ElectedOptionStrategy | null): s is ElectedOptionStrategy =>
+  Boolean(s && s.status === 'AUTORIZADA' && s.legs && s.legs.length > 0);
+
+/**
  * Mensagens padronizadas por motivo de bloqueio (Spec v3.0)
  */
 export const BLOCK_MESSAGES: Record<BlockReason, string> = {
@@ -448,20 +454,11 @@ export function electBestOptionStrategy(
     );
   }
 
-  // 6. Gate de IV ATM Obrigatório para Estruturas a Crédito (Spec v3.0 Item 03 - G3)
+  // 6. Gate de IV ATM Obrigatório para Estruturas a Crédito (Spec v3.1 Item 03 - G3)
   const isCreditTarget = verdict.includes('COMPRA') || trend === 'ALTA' || verdict.includes('VENDA') || trend === 'BAIXA' || trend === 'LATERAL';
-  if (isCreditTarget) {
-    let atmIv: number | null | undefined = optionAnalysis?.ivAtm?.callIv;
-    if (!atmIv || atmIv <= 0) {
-      const validIvSeries = analyticsList.filter((a) => (a.impliedVolatility || 0) > 0);
-      if (validIvSeries.length > 0) {
-        const closestToSpot = validIvSeries.reduce((prev, curr) =>
-          Math.abs(curr.strike - spot) < Math.abs(prev.strike - spot) ? curr : prev
-        );
-        atmIv = closestToSpot.impliedVolatility;
-      }
-    }
+  const atmIv = optionAnalysis?.ivAtm?.callIv;
 
+  if (isCreditTarget) {
     if (!atmIv || atmIv <= 0) {
       return createBlockedStrategy(
         symbol,
@@ -725,6 +722,118 @@ export function electBestOptionStrategy(
       },
     };
 
+    // 5. Estrutura alternativa a débito (Bull Call Spread - Spec v3.1 Item 10)
+    const callSeries = analyticsList.filter((a) => a.side.toLowerCase() === 'call');
+    const eligibleBuyCalls = callSeries.filter((c) => isEligibleLeg(c, 'LONG', spot, snapshotDate) && c.strike <= spot * 1.02);
+    const eligibleSellCalls = callSeries.filter((c) => isEligibleLeg(c, 'SHORT', spot, snapshotDate) && c.strike > spot);
+
+    let bestDebitPair: { longLeg: OptionAnalyticsItem; shortLeg: OptionAnalyticsItem; width: number; netDebit: number } | null = null;
+    for (const longCall of eligibleBuyCalls) {
+      for (const shortCall of eligibleSellCalls) {
+        if (longCall.strike >= shortCall.strike) continue;
+        const width = Number((shortCall.strike - longCall.strike).toFixed(2));
+        const widthPct = width / spot;
+        if (widthPct < spreadRules.MIN_WIDTH_PCT_OF_SPOT || widthPct > spreadRules.MAX_WIDTH_PCT_OF_SPOT) continue;
+        const netDebit = Number((longCall.optionPrice! - shortCall.optionPrice!).toFixed(2));
+        if (netDebit <= 0 || netDebit >= width) continue;
+        if (!bestDebitPair || netDebit < bestDebitPair.netDebit) {
+          bestDebitPair = { longLeg: longCall, shortLeg: shortCall, width, netDebit };
+        }
+      }
+    }
+
+    if (bestDebitPair) {
+      const altMaxProfit = Number((bestDebitPair.width - bestDebitPair.netDebit).toFixed(2));
+      const altMaxLoss = bestDebitPair.netDebit;
+      const altBreakEven = Number((bestDebitPair.longLeg.strike + bestDebitPair.netDebit).toFixed(2));
+      const altReturnPct = Number(((altMaxProfit / altMaxLoss) * 100).toFixed(1));
+
+      const altStrategy: ElectedOptionStrategy = {
+        strategySpec: OPTION_25_STRATEGIES[0], // #1 Bull Call Spread
+        title: `Trava de Alta com Call a Débito (Bull Call Spread ${bestDebitPair.longLeg.strike.toFixed(2)} / ${bestDebitPair.shortLeg.strike.toFixed(2)})`,
+        bias: 'ALTA',
+        status: 'AUTORIZADA',
+        expirationDate: expDate,
+        dte,
+        underlyingSymbol: symbol,
+        underlyingPrice: spot,
+        priceContext,
+        legs: [
+          {
+            action: 'COMPRA',
+            symbol: bestDebitPair.longLeg.symbol,
+            strike: bestDebitPair.longLeg.strike,
+            type: 'CALL',
+            unitPrice: bestDebitPair.longLeg.optionPrice!,
+            lotQuantity: lotSize,
+            totalFinancial: Number((bestDebitPair.longLeg.optionPrice! * lotSize).toFixed(2)),
+            openInterest: bestDebitPair.longLeg.openInterest || 0,
+            delta: bestDebitPair.longLeg.delta,
+            confidence: bestDebitPair.longLeg.confidence,
+            roleDescription: `(strike MENOR) compra @ R$ ${bestDebitPair.longLeg.optionPrice!.toFixed(2)}  Δ ${bestDebitPair.longLeg.delta?.toFixed(2)}`,
+          },
+          {
+            action: 'VENDA',
+            symbol: bestDebitPair.shortLeg.symbol,
+            strike: bestDebitPair.shortLeg.strike,
+            type: 'CALL',
+            unitPrice: bestDebitPair.shortLeg.optionPrice!,
+            lotQuantity: lotSize,
+            totalFinancial: Number((bestDebitPair.shortLeg.optionPrice! * lotSize).toFixed(2)),
+            openInterest: bestDebitPair.shortLeg.openInterest || 0,
+            delta: bestDebitPair.shortLeg.delta,
+            confidence: bestDebitPair.shortLeg.confidence,
+            roleDescription: `(strike MAIOR) vende @ R$ ${bestDebitPair.shortLeg.optionPrice!.toFixed(2)}  Δ ${bestDebitPair.shortLeg.delta?.toFixed(2)}`,
+          },
+        ],
+        netCostOrCredit: bestDebitPair.netDebit,
+        isCredit: false,
+        totalCostOrCreditForLot: Number((bestDebitPair.netDebit * lotSize).toFixed(2)),
+        spreadWidth: bestDebitPair.width,
+        breakEven: altBreakEven,
+        maxProfit: altMaxProfit,
+        maxProfitLot: Number((altMaxProfit * lotSize).toFixed(2)),
+        maxLoss: altMaxLoss,
+        maxLossLot: Number((altMaxLoss * lotSize).toFixed(2)),
+        returnOnRiskPct: altReturnPct,
+        riskRewardRatio: `1 : ${(altMaxLoss / altMaxProfit).toFixed(1)}`,
+        takeProfitRule: {
+          targetPrice: `R$ ${bestDebitPair.shortLeg.strike.toFixed(2)}`,
+          profitGoal: `Capturar 70% a 80% do ganho máximo`,
+          description: `Encerrar quando o ativo atingir ou superar o strike da call vendida.`,
+        },
+        stopLossRule: {
+          stopPrice: `Perda de 50% do prêmio pago`,
+          lossLimit: `R$ ${(bestDebitPair.netDebit * 0.5 * lotSize).toFixed(2)}`,
+          description: `Stop operacional caso o ativo perca o suporte.`,
+        },
+        timeStopRule: {
+          dteLimit: 5,
+          description: `Desmontar a 5 dias úteis do vencimento.`,
+        },
+        electionRationale: [
+          `Estrutura a débito alternativa direcionada para alta explosiva.`,
+        ],
+        homeBrokerOrderSlip: {
+          orderType: `Ordem de Spread Limite a Débito (Comprar ${bestDebitPair.longLeg.symbol} / Vender ${bestDebitPair.shortLeg.symbol})`,
+          entryPriceRange: `Débito Líquido alvo: R$ ${bestDebitPair.netDebit.toFixed(2)}`,
+          maxSlippage: '0.03',
+          legsSummary: `Comprar 1.000 ${bestDebitPair.longLeg.symbol} (CALL @ ${bestDebitPair.longLeg.strike.toFixed(2)}) + Vender 1.000 ${bestDebitPair.shortLeg.symbol} (CALL @ ${bestDebitPair.shortLeg.strike.toFixed(2)})`,
+        },
+      };
+
+      try {
+        assertDirection(altStrategy, spot);
+        const volLabel = atmIv ? `${atmIv.toFixed(1)}%` : 'elevada';
+        strategyResult.alternative = {
+          strategy: altStrategy,
+          rationale: `Estrutura a débito não foi eleita como principal porque a IV ATM de ${volLabel} favorece venda de prêmio a crédito.`,
+        };
+      } catch {
+        // Sem alternativa se falhar na direção
+      }
+    }
+
     assertDirection(strategyResult, spot);
     return strategyResult;
   }
@@ -873,7 +982,7 @@ export function electBestOptionStrategy(
         openInterest: shortCall.openInterest || 0,
         delta: shortCall.delta,
         confidence: shortCall.confidence,
-        roleDescription: `(strike MENOR) recebe +R$ ${shortCall.optionPrice!.toFixed(2)}/cota  Δ ${shortCall.delta?.toFixed(2)} [conf: ${shortCall.confidence || 'low'}]`,
+        roleDescription: `(strike MENOR) recebe +R$ ${shortCall.optionPrice!.toFixed(2)}/cota  Δ ${shortCall.delta?.toFixed(2)}`,
       },
       {
         action: 'COMPRA',
@@ -886,14 +995,14 @@ export function electBestOptionStrategy(
         openInterest: longCall.openInterest || 0,
         delta: longCall.delta,
         confidence: longCall.confidence,
-        roleDescription: `(strike MAIOR) paga −R$ ${longCall.optionPrice!.toFixed(2)}/cota  Δ ${longCall.delta?.toFixed(2)}  ↳ proteção: limita perda a R$ ${(maxLoss * lotSize).toFixed(0)}`,
+        roleDescription: `(strike MAIOR) paga −R$ ${longCall.optionPrice!.toFixed(2)}/cota  Δ ${longCall.delta?.toFixed(2)}  ↳ proteção`,
       },
     ];
 
     const diagnosticsSummary = `${callSeries.length} séries na cadeia · ${totalEligibleCount} elegíveis · ${validPairs.length} pares válidos`;
 
     const strategyResult: ElectedOptionStrategy = {
-      strategySpec: OPTION_25_STRATEGIES[11], // #12 Bear Spread
+      strategySpec: OPTION_25_STRATEGIES[11], // #12 Bear Call Spread
       title: `Trava de Baixa com Call a Crédito (Bear Call Spread ${shortCall.strike.toFixed(2)} / ${longCall.strike.toFixed(2)})`,
       bias: 'BAIXA',
       status: 'AUTORIZADA',
@@ -942,6 +1051,118 @@ export function electBestOptionStrategy(
         legsSummary: `Vender 1.000 ${shortCall.symbol} + Comprar 1.000 ${longCall.symbol}`,
       },
     };
+
+    // Alternativa a débito na baixa (Bear Put Spread)
+    const putSeries = analyticsList.filter((a) => a.side.toLowerCase() === 'put');
+    const eligibleBuyPuts = putSeries.filter((p) => isEligibleLeg(p, 'LONG', spot, snapshotDate) && p.strike >= spot * 0.98);
+    const eligibleSellPuts = putSeries.filter((p) => isEligibleLeg(p, 'SHORT', spot, snapshotDate) && p.strike < spot);
+
+    let bestDebitPutPair: { longLeg: OptionAnalyticsItem; shortLeg: OptionAnalyticsItem; width: number; netDebit: number } | null = null;
+    for (const longPut of eligibleBuyPuts) {
+      for (const shortPut of eligibleSellPuts) {
+        if (longPut.strike <= shortPut.strike) continue;
+        const width = Number((longPut.strike - shortPut.strike).toFixed(2));
+        const widthPct = width / spot;
+        if (widthPct < spreadRules.MIN_WIDTH_PCT_OF_SPOT || widthPct > spreadRules.MAX_WIDTH_PCT_OF_SPOT) continue;
+        const netDebit = Number((longPut.optionPrice! - shortPut.optionPrice!).toFixed(2));
+        if (netDebit <= 0 || netDebit >= width) continue;
+        if (!bestDebitPutPair || netDebit < bestDebitPutPair.netDebit) {
+          bestDebitPutPair = { longLeg: longPut, shortLeg: shortPut, width, netDebit };
+        }
+      }
+    }
+
+    if (bestDebitPutPair) {
+      const altMaxProfit = Number((bestDebitPutPair.width - bestDebitPutPair.netDebit).toFixed(2));
+      const altMaxLoss = bestDebitPutPair.netDebit;
+      const altBreakEven = Number((bestDebitPutPair.longLeg.strike - bestDebitPutPair.netDebit).toFixed(2));
+      const altReturnPct = Number(((altMaxProfit / altMaxLoss) * 100).toFixed(1));
+
+      const altStrategy: ElectedOptionStrategy = {
+        strategySpec: OPTION_25_STRATEGIES[1], // #2 Bear Put Spread
+        title: `Trava de Baixa com Put a Débito (Bear Put Spread ${bestDebitPutPair.longLeg.strike.toFixed(2)} / ${bestDebitPutPair.shortLeg.strike.toFixed(2)})`,
+        bias: 'BAIXA',
+        status: 'AUTORIZADA',
+        expirationDate: expDate,
+        dte,
+        underlyingSymbol: symbol,
+        underlyingPrice: spot,
+        priceContext,
+        legs: [
+          {
+            action: 'COMPRA',
+            symbol: bestDebitPutPair.longLeg.symbol,
+            strike: bestDebitPutPair.longLeg.strike,
+            type: 'PUT',
+            unitPrice: bestDebitPutPair.longLeg.optionPrice!,
+            lotQuantity: lotSize,
+            totalFinancial: Number((bestDebitPutPair.longLeg.optionPrice! * lotSize).toFixed(2)),
+            openInterest: bestDebitPutPair.longLeg.openInterest || 0,
+            delta: bestDebitPutPair.longLeg.delta,
+            confidence: bestDebitPutPair.longLeg.confidence,
+            roleDescription: `(strike MAIOR) compra @ R$ ${bestDebitPutPair.longLeg.optionPrice!.toFixed(2)}`,
+          },
+          {
+            action: 'VENDA',
+            symbol: bestDebitPutPair.shortLeg.symbol,
+            strike: bestDebitPutPair.shortLeg.strike,
+            type: 'PUT',
+            unitPrice: bestDebitPutPair.shortLeg.optionPrice!,
+            lotQuantity: lotSize,
+            totalFinancial: Number((bestDebitPutPair.shortLeg.optionPrice! * lotSize).toFixed(2)),
+            openInterest: bestDebitPutPair.shortLeg.openInterest || 0,
+            delta: bestDebitPutPair.shortLeg.delta,
+            confidence: bestDebitPutPair.shortLeg.confidence,
+            roleDescription: `(strike MENOR) vende @ R$ ${bestDebitPutPair.shortLeg.optionPrice!.toFixed(2)}`,
+          },
+        ],
+        netCostOrCredit: bestDebitPutPair.netDebit,
+        isCredit: false,
+        totalCostOrCreditForLot: Number((bestDebitPutPair.netDebit * lotSize).toFixed(2)),
+        spreadWidth: bestDebitPutPair.width,
+        breakEven: altBreakEven,
+        maxProfit: altMaxProfit,
+        maxProfitLot: Number((altMaxProfit * lotSize).toFixed(2)),
+        maxLoss: altMaxLoss,
+        maxLossLot: Number((altMaxLoss * lotSize).toFixed(2)),
+        returnOnRiskPct: altReturnPct,
+        riskRewardRatio: `1 : ${(altMaxLoss / altMaxProfit).toFixed(1)}`,
+        takeProfitRule: {
+          targetPrice: `R$ ${bestDebitPutPair.shortLeg.strike.toFixed(2)}`,
+          profitGoal: `Capturar 70% a 80% do ganho máximo`,
+          description: `Encerrar quando o ativo romper abaixo do strike da put vendida.`,
+        },
+        stopLossRule: {
+          stopPrice: `Perda de 50% do prêmio pago`,
+          lossLimit: `R$ ${(bestDebitPutPair.netDebit * 0.5 * lotSize).toFixed(2)}`,
+          description: `Stop operacional caso o ativo retome alta.`,
+        },
+        timeStopRule: {
+          dteLimit: 5,
+          description: `Desmontar a 5 dias úteis do vencimento.`,
+        },
+        electionRationale: [
+          `Estrutura a débito alternativa para baixa acentuada.`,
+        ],
+        homeBrokerOrderSlip: {
+          orderType: `Ordem de Spread Limite a Débito (Comprar ${bestDebitPutPair.longLeg.symbol} / Vender ${bestDebitPutPair.shortLeg.symbol})`,
+          entryPriceRange: `Débito Líquido alvo: R$ ${bestDebitPutPair.netDebit.toFixed(2)}`,
+          maxSlippage: '0.03',
+          legsSummary: `Comprar 1.000 ${bestDebitPutPair.longLeg.symbol} + Vender 1.000 ${bestDebitPutPair.shortLeg.symbol}`,
+        },
+      };
+
+      try {
+        assertDirection(altStrategy, spot);
+        const volLabel = atmIv ? `${atmIv.toFixed(1)}%` : 'elevada';
+        strategyResult.alternative = {
+          strategy: altStrategy,
+          rationale: `Estrutura a débito não foi eleita porque a IV ATM de ${volLabel} favorece venda de prêmio a crédito.`,
+        };
+      } catch {
+        // Sem alternativa se falhar na validação direcional
+      }
+    }
 
     assertDirection(strategyResult, spot);
     return strategyResult;

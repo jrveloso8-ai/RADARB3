@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { ConsolidatedVerdictType, QuoteDetails } from '@/lib/types/financial';
 import { OPTION_25_STRATEGIES, OptionStrategySpec } from '@/lib/domain/cme-strategies';
+import { isActionableStrategy } from '@/lib/domain/cme-election';
 import { AIConsultantView } from '../ai/AIConsultantView';
 import { OptionsBarriersView } from '../options/OptionsBarriersView';
 import { OptionPayoffChart } from '../options/OptionPayoffChart';
@@ -950,7 +951,7 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                 </div>
               )}
 
-              {!isBlocked && execMode === 'OPTIONS' && elected && elected.status !== 'BLOQUEADA' && elected.legs.length > 0 && (
+              {!isBlocked && execMode === 'OPTIONS' && elected && isActionableStrategy(elected) && (
                 <div className="space-y-4">
                   {/* CARD PRINCIPAL DA ESTRATÉGIA ELEITA */}
                   <div className="p-5 bg-[#0b101b] border border-cyan-500/40 rounded-2xl shadow-2xl space-y-4">

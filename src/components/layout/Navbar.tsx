@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { safeFetchJson } from '@/lib/utils/api-client';
 import { BrapiHealthStatus } from '@/lib/services/brapi';
+import { SYSTEM_VERSION } from '@/lib/config/version';
 
 export type ActiveTab = 'overview' | 'quote' | 'screener' | 'options' | 'help';
 
@@ -143,8 +144,17 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
               })}
             </nav>
 
-            {/* Indicador de Status da API BRAPI */}
-            <div className="flex items-center shrink-0">
+            {/* Versão e Indicador de Status da API BRAPI */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div
+                className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gray-900/80 border border-gray-800 text-[10px] font-mono text-gray-300 shadow-sm cursor-help"
+                title={`Publicado em ${SYSTEM_VERSION.fullReleaseString} (${SYSTEM_VERSION.specVersion})`}
+              >
+                <span className="text-emerald-400 font-bold">{SYSTEM_VERSION.version}</span>
+                <span className="text-gray-500">•</span>
+                <span className="text-gray-400">{SYSTEM_VERSION.releaseDate}</span>
+              </div>
+
               <button
                 onClick={() => setShowStatusModal(true)}
                 className={`flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-mono transition shadow-sm ${
@@ -154,7 +164,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
                     ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
                     : 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
                 }`}
-                title="Clique para ver detalhes do status da conexão BRAPI"
+                title="Clique para ver detalhes do status da conexão BRAPI e versão do sistema"
               >
                 <span className="relative flex h-2 w-2">
                   <span
@@ -186,7 +196,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
                 </span>
 
                 {health?.latencyMs !== undefined && health.latencyMs > 0 && (
-                  <span className="text-[10px] text-gray-400 hidden lg:inline">
+                  <span className="text-[10px] text-gray-400 hidden xl:inline">
                     {health.latencyMs}ms
                   </span>
                 )}
@@ -196,14 +206,14 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
         </div>
       </header>
 
-      {/* Modal de Diagnóstico da Conexão */}
+      {/* Modal de Diagnóstico da Conexão e Versão */}
       {showStatusModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-[#111827] border border-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-gray-800 pb-3">
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-white text-base">Diagnóstico de Conexão BRAPI</h3>
+                <h3 className="font-bold text-white text-base">Diagnóstico do Sistema & BRAPI</h3>
               </div>
               <button
                 onClick={() => setShowStatusModal(false)}
@@ -214,6 +224,19 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
             </div>
 
             <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
+                <span className="text-gray-400">Versão do Sistema:</span>
+                <div className="text-right font-mono">
+                  <span className="font-bold text-emerald-400 block text-xs">{SYSTEM_VERSION.version} ({SYSTEM_VERSION.build})</span>
+                  <span className="text-[10px] text-gray-500">{SYSTEM_VERSION.specVersion}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
+                <span className="text-gray-400">Data de Publicação:</span>
+                <span className="font-mono text-white font-semibold text-xs">{SYSTEM_VERSION.fullReleaseString}</span>
+              </div>
+
               <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
                 <span className="text-gray-400">Status dos Dados:</span>
                 <span
@@ -230,13 +253,6 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
               <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
                 <span className="text-gray-400">Tempo de Resposta:</span>
                 <span className="font-mono text-white font-semibold">{health?.latencyMs || 0} ms</span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
-                <span className="text-gray-400">Cobertura de Ativos:</span>
-                <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Ações B3, Índices & Opções
-                </span>
               </div>
 
               <div className="p-3 bg-[#0b0f19] rounded-xl border border-gray-800 text-xs text-gray-300">

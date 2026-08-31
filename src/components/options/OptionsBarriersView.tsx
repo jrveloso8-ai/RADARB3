@@ -21,6 +21,7 @@ import {
 import { OptionAnalysisResult } from '@/lib/types/financial';
 import { safeFetchJson } from '@/lib/utils/api-client';
 import { OptionPayoffChart } from './OptionPayoffChart';
+import { isActionableStrategy } from '@/lib/domain/cme-election';
 
 interface OptionsBarriersViewProps {
   initialSymbol?: string;
@@ -526,8 +527,8 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
             )}
           </div>
 
-          {/* CASO 1: ESTRUTURA AUTORIZADA OU EM_ANALISE */}
-          {data.electedOptionStrategy && data.electedOptionStrategy.status !== 'BLOQUEADA' && data.electedOptionStrategy.legs.length > 0 && (
+          {/* CASO 1: ESTRUTURA AUTORIZADA OU EM_ANALISE (COM PERNAS) */}
+          {data.electedOptionStrategy && (data.electedOptionStrategy.status === 'AUTORIZADA' || data.electedOptionStrategy.status === 'EM_ANALISE') && data.electedOptionStrategy.legs.length > 0 && (
             <div className="space-y-4">
               {(() => {
                 const activeStrategy =
