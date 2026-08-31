@@ -2,17 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  TrendingUp,
-  Search,
-  Layers,
   LayoutDashboard,
+  Search,
+  ListFilter,
+  Target,
+  BookOpen,
+  TrendingUp,
   Activity,
   CheckCircle2,
   AlertTriangle,
-  Key,
   RefreshCw,
-  Bot,
-  HelpCircle,
+  Zap,
+  Users,
 } from 'lucide-react';
 import { safeFetchJson } from '@/lib/utils/api-client';
 import { BrapiHealthStatus } from '@/lib/services/brapi';
@@ -29,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
   const [health, setHealth] = useState<BrapiHealthStatus | null>(null);
   const [checkingHealth, setCheckingHealth] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [uniqueVisitors, setUniqueVisitors] = useState<number | null>(null);
 
   const checkConnection = async () => {
     setCheckingHealth(true);
@@ -44,6 +46,16 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
         testedAt: new Date().toISOString(),
       });
     }
+
+    try {
+      const analyticsRes = await safeFetchJson<{ uniqueToday: number; totalViewsToday: number }>('/api/analytics/track');
+      if (analyticsRes.ok && analyticsRes.data?.uniqueToday) {
+        setUniqueVisitors(analyticsRes.data.uniqueToday);
+      }
+    } catch {
+      // Ignora erro
+    }
+
     setCheckingHealth(false);
   };
 
@@ -69,35 +81,34 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
     {
       id: 'screener' as ActiveTab,
       label: 'Rastreador de Tendências',
-      shortLabel: 'Tendências',
-      icon: TrendingUp,
+      shortLabel: 'Rastreador',
+      icon: ListFilter,
     },
     {
       id: 'options' as ActiveTab,
       label: 'Barreiras de Opções',
       shortLabel: 'Opções',
-      icon: Layers,
+      icon: Target,
     },
     {
       id: 'help' as ActiveTab,
       label: 'Manual & Ajuda IA',
-      shortLabel: 'Manual & Ajuda',
-      icon: HelpCircle,
+      shortLabel: 'Ajuda',
+      icon: BookOpen,
     },
   ];
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b border-gray-800 bg-[#0f172a]/95 backdrop-blur shadow-md">
+      <header className="sticky top-0 z-40 w-full border-b border-gray-800 bg-[#0b0f19]/90 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 gap-2">
-            {/* Logo & Marca */}
+          <div className="flex items-center justify-between h-16 gap-2 sm:gap-4">
+            {/* Logo e Nome da Aplicação */}
             <button
-              type="button"
-              className="flex items-center gap-2.5 cursor-pointer shrink-0 bg-transparent border-0 text-left p-0"
               onClick={() => onTabChange('overview')}
+              className="flex items-center gap-2.5 shrink-0 text-left hover:opacity-90 transition group focus:outline-none"
             >
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+              <div className="p-2 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
                 <TrendingUp className="w-5 h-5 text-slate-950 font-bold" />
               </div>
               <div className="hidden sm:block">
@@ -119,6 +130,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
                     data-testid={`nav-tab-${item.id}`}
                     role="tab"
                     aria-selected={isActive}
+                    aria-controls={`panel-${item.id}`}
                     onClick={() => onTabChange(item.id)}
                     className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shrink-0 ${
                       isActive
@@ -144,8 +156,19 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
               })}
             </nav>
 
-            {/* Versão e Indicador de Status da API BRAPI */}
+            {/* Contador de Acessos, Versão e Indicador de Status */}
             <div className="flex items-center gap-2 shrink-0">
+              {uniqueVisitors !== null && uniqueVisitors > 0 && (
+                <div
+                  className="hidden md:flex items-center gap-1 px-2.5 py-1 rounded-xl bg-cyan-950/60 border border-cyan-500/30 text-[11px] font-mono text-cyan-300 shadow-sm cursor-pointer hover:bg-cyan-900/50 transition"
+                  onClick={() => setShowStatusModal(true)}
+                  title={`${uniqueVisitors} investidores únicos acessaram o Radar B3 hoje (rastreamento anônimo diário).`}
+                >
+                  <Users className="w-3.5 h-3.5 text-cyan-400" />
+                  <span><strong>{uniqueVisitors}</strong> {uniqueVisitors === 1 ? 'único' : 'únicos'}</span>
+                </div>
+              )}
+
               <div
                 className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gray-900/80 border border-gray-800 text-[10px] font-mono text-gray-300 shadow-sm cursor-help"
                 title={`Publicado em ${SYSTEM_VERSION.fullReleaseString} (${SYSTEM_VERSION.specVersion})`}
@@ -213,7 +236,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
             <div className="flex items-center justify-between border-b border-gray-800 pb-3">
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-white text-base">Diagnóstico do Sistema & BRAPI</h3>
+                <h3 className="font-bold text-white text-base">Diagnóstico do Sistema & Analytics</h3>
               </div>
               <button
                 onClick={() => setShowStatusModal(false)}
@@ -225,16 +248,26 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
 
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
+                <span className="text-gray-400">Investidores Únicos Hoje:</span>
+                <span className="font-mono text-cyan-400 font-bold text-xs flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" />
+                  {uniqueVisitors || 1} {uniqueVisitors === 1 ? 'visitante único' : 'visitantes únicos'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
+                <span className="text-gray-400">Vercel Web Analytics:</span>
+                <span className="text-xs font-mono text-emerald-400 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Ativo em Tempo Real
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
                 <span className="text-gray-400">Versão do Sistema:</span>
                 <div className="text-right font-mono">
                   <span className="font-bold text-emerald-400 block text-xs">{SYSTEM_VERSION.version} ({SYSTEM_VERSION.build})</span>
                   <span className="text-[10px] text-gray-500">{SYSTEM_VERSION.specVersion}</span>
                 </div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
-                <span className="text-gray-400">Data de Publicação:</span>
-                <span className="font-mono text-white font-semibold text-xs">{SYSTEM_VERSION.fullReleaseString}</span>
               </div>
 
               <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
