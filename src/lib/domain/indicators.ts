@@ -213,7 +213,7 @@ export function evaluateTechnicalChecklist(
   statusLabel: string;
 } {
   const isMaAligned = mm20 !== null && spot >= mm20;
-  const isRsiHealthy = rsi !== null && rsi >= 42 && rsi <= 68;
+  const isRsiHealthy = rsi !== null && rsi >= 40 && rsi <= 65;
   const isMacdPositive = macdHist !== null && macdHist >= 0;
   const isVolumeConfirming = volRatio >= 90;
   const isAssymetryFavorable = isMaAligned && isMacdPositive;
@@ -227,7 +227,7 @@ export function evaluateTechnicalChecklist(
     },
     {
       id: 'rsi_momentum',
-      title: 'Momentum RSI(14) Saudável (42 - 68)',
+      title: 'Momentum RSI(14) Saudável (40 - 65)',
       detail: `RSI(14) em ${rsi || 'N/D'} — ${isRsiHealthy ? 'zona de tração altista sem sobrecompra (>70)' : 'fora da zona ideal de momentum'}.`,
       passed: isRsiHealthy,
     },

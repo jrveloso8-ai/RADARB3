@@ -51,7 +51,7 @@ export function classifyTrend(
     return 'LATERAL';
   }
 
-  // Com MM200 disponível:
+  // Com MM200 disponível: Alinhamento Estrito Clássico CNPI
   if (mm200 !== null) {
     // Alinhamento clássico de alta: Preço > MM20 > MM50 > MM200
     if (currentPrice > mm20 && mm20 > mm50 && mm50 > mm200) {
@@ -59,14 +59,6 @@ export function classifyTrend(
     }
     // Alinhamento clássico de baixa: Preço < MM20 < MM50 < MM200
     if (currentPrice < mm20 && mm20 < mm50 && mm50 < mm200) {
-      return 'BAIXA';
-    }
-    // Preço e médias de curto alinhadas para cima acima da MM200
-    if (currentPrice > mm200 && mm20 > mm50 && currentPrice > mm20) {
-      return 'ALTA';
-    }
-    // Preço e médias de curto alinhadas para baixo abaixo da MM200
-    if (currentPrice < mm200 && mm20 < mm50 && currentPrice < mm20) {
       return 'BAIXA';
     }
     return 'LATERAL';

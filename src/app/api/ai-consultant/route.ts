@@ -60,8 +60,8 @@ export async function POST(request: NextRequest) {
       const sym = context.symbol;
       const spot = context.spotPrice ? `R$ ${context.spotPrice.toFixed(2)}` : 'Preço atual';
       const trend = context.trend || 'LATERAL';
-      const fundStatus = context.fundamentalStatus || 'APROVADO';
-      const fundScore = context.fundamentalScore ?? 80;
+      const fundStatus = context.fundamentalStatus || 'NÃO ANALISADO';
+      const fundScore = context.fundamentalScore ?? 0;
       const verdict = context.verdictLabel || context.verdict || 'ANÁLISE EM CURSO';
       const callWall = context.callWall
         ? `R$ ${context.callWall.strike.toFixed(2)} (+${context.callWall.distSpot}%)`

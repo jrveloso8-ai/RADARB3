@@ -284,7 +284,7 @@ export class BrapiService {
         returnOnEquity: fin?.returnOnEquity ?? stats?.returnOnEquity ?? item?.returnOnEquity ?? null,
         netMargin: fin?.profitMargins ?? item?.netMargin ?? null,
         ebitdaMargin: fin?.ebitdaMargins ?? item?.ebitdaMargin ?? null,
-        debtToEbitda: fin?.debtToEquity ? fin.debtToEquity / 100 : (item?.debtToEbitda ?? null),
+        debtToEbitda: item?.debtToEbitda ?? fin?.debtToEbitda ?? null,
         currentRatio: fin?.currentRatio ?? item?.currentRatio ?? null,
         priceEarnings: item?.priceEarnings ?? stats?.forwardPE ?? stats?.trailingPE ?? null,
         priceToBook: item?.priceToBook ?? stats?.priceToBook ?? null,

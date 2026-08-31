@@ -152,7 +152,7 @@ describe('Motor de Eleição de Estratégias de Opções B3', () => {
 
     expect(elected).not.toBeNull();
     expect(elected?.status).toBe('EM_ANALISE');
-    expect(elected?.electionRationale[1]).toContain('Risco elevado de rompimento de volatilidade');
+    expect(elected?.electionRationale[0]).toContain('Risco elevado de rompimento de volatilidade');
   });
 
   it('deve BLOQUEAR qualquer estratégia se a empresa for REPROVADA nos fundamentos', () => {

@@ -54,6 +54,9 @@ export async function GET(request: NextRequest) {
           }
 
           // 4. Barreiras de Opções no Vencimento Mais Líquido
+          const closes = (quote.historicalDataPrice || []).map((h) => h.close);
+          const realHv21 = calculateHistoricalVolatility(closes, 21) ?? 25.0;
+
           let barrierAlert;
           let optionAnalysis;
           try {
@@ -64,7 +67,8 @@ export async function GET(request: NextRequest) {
                 quote.regularMarketPrice,
                 positionsData.positions,
                 nearestExp,
-                expirations
+                expirations,
+                closes
               );
               barrierAlert = buildOptionBarrierAlert(optionAnalysis);
             }
@@ -74,14 +78,12 @@ export async function GET(request: NextRequest) {
 
           // 5. Regime de Volatilidade & Veredito Consolidado CNPI
           // IMPORTANTE: Só calculamos o regime de vol quando há dados REAIS de IV das opções.
-          // Sem IV real, ivAtm = HV → ivRatio = 1.0 → sempre MODERADA → Iron Condor incorreto.
-          // Com null, o motor de veredito trata como "dados insuficientes" e retorna AGUARDAR.
-          const closes = (quote.historicalDataPrice || []).map((h) => h.close);
-          const realHv21 = calculateHistoricalVolatility(closes, 21) ?? 25.0;
+          // Sem IV real, ivAtm = null → volRegime = null → motor retorna AGUARDAR (conservador).
           const ivAtmRaw = optionAnalysis?.ivAtm?.callIv;
-          const volRegime = (ivAtmRaw !== undefined && ivAtmRaw > 0)
-            ? classifyVolatilityRegime(ivAtmRaw, realHv21)
-            : null; // Sem IV real → sem regime → AGUARDAR (conservador)
+          const volRegime =
+            ivAtmRaw !== undefined && ivAtmRaw > 0
+              ? classifyVolatilityRegime(ivAtmRaw, realHv21)
+              : null;
 
           const verdict = generateConsolidatedVerdict(
             cleanSymbol,

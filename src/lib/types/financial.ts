@@ -63,7 +63,9 @@ export interface FundamentalAnalysisResult {
     dividendYield: FundamentalMetric;
   };
   reasons: string[];
+  flags?: string[];
   analyzedAt: string;
+  updatedAt?: string;
 }
 
 export interface OptionBarrierAlert {
@@ -214,11 +216,11 @@ export interface OptionAnalysisResult {
   selectedExpirationInfo: B3ExpirationInfo;
   openInterestDate: string;
   maxPain: number;
-  ivAtm: {
+  ivAtm?: {
     callIv: number;
     putIv: number;
     percentile: number;
-  };
+  } | null;
   hv21: number;
   hv63: number;
   putCallRatio: number;

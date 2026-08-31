@@ -31,10 +31,10 @@ describe('Motor de Análise Fundamentalista (Padrão CNPI-P / CG1)', () => {
     });
 
     expect(res.status).toBe('REPROVADO');
-    expect(res.summary).toContain('margem negativa');
+    expect(res.flags.some((f) => f.includes('prejuízo') || f.includes('negativa'))).toBe(true);
   });
 
-  it('deve reprovar empresa com superendividamento crítico (> 3.8x)', () => {
+  it('deve reprovar empresa com superendividamento crítico (> 3.5x)', () => {
     const res = analyzeFundamentals('GOLL4', {
       returnOnEquity: 0.10,
       netMargin: 0.02,
@@ -46,6 +46,14 @@ describe('Motor de Análise Fundamentalista (Padrão CNPI-P / CG1)', () => {
     });
 
     expect(res.status).toBe('REPROVADO');
-    expect(res.summary).toContain('alavancagem');
+    expect(res.flags.some((f) => f.includes('Alavancagem') || f.includes('segurança'))).toBe(true);
+  });
+
+  it('deve REPROVAR e zerar o score quando empresa não possui dados fundamentalistas mínimos (Prevenção de Value Trap)', () => {
+    const res = analyzeFundamentals('TICK3', {});
+
+    expect(res.status).toBe('REPROVADO');
+    expect(res.score).toBe(0);
+    expect(res.flags).toContain('Dados fundamentalistas insuficientes para aprovação no crivo CNPI-P.');
   });
 });

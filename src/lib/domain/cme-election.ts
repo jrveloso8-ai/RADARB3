@@ -537,12 +537,22 @@ export function electBestOptionStrategy(
   // CENÁRIO 3: LATERALIZAÇÃO / MERCADO ESTÁVEL (Iron Condor / Short Strangle Coberto)
   // =========================================================================
   if (trend === 'LATERAL' || verdict.includes('LATERAL')) {
-    // Verificação de Regime de Volatilidade:
-    // Se a volatilidade for MUITO BAIXA (Squeeze), bloquear a venda de crédito do Iron Condor
-    if (volRegime.regime === 'MUITO_BAIXA') {
+    const isDteOutsideRange = dte < 12 || dte > 35;
+
+    // Verificação de Regime de Volatilidade ou DTE inadequado:
+    // Se a volatilidade for MUITO BAIXA (Squeeze) ou DTE fora da janela (12 a 35 DU), bloquear o Iron Condor
+    if (volRegime.regime === 'MUITO_BAIXA' || isDteOutsideRange) {
+      const reasonTitle = isDteOutsideRange
+        ? `Alerta: DTE de ${dte} dias úteis fora da janela ideal (12 a 35 DU)`
+        : 'Alerta: Volatilidade Comprimida (Iron Condor Bloqueado)';
+
+      const rationaleText = isDteOutsideRange
+        ? `Vencimento selecionado possui ${dte} dias úteis até o exercício. A montagem de Iron Condor requer entre 12 e 35 dias úteis para captura eficiente de decaimento temporal (Theta) com controle de risco de cauda.`
+        : `Ativo em consolidação lateral, porém com Volatilidade Implícita muito baixa (IV ATM: ${ivAtm}%, ${volRegime.label}). Risco elevado de rompimento de volatilidade (Squeeze).`;
+
       return {
         strategySpec: OPTION_25_STRATEGIES[12], // #13 Long Butterfly ou Cautela
-        title: 'Alerta: Volatilidade Comprimida (Iron Condor Bloqueado)',
+        title: reasonTitle,
         bias: 'LATERAL',
         status: 'EM_ANALISE',
         expirationDate: expDate,
@@ -565,15 +575,14 @@ export function electBestOptionStrategy(
         stopLossRule: { stopPrice: '-', lossLimit: '-', description: '-' },
         timeStopRule: { dteLimit: 0, description: '-' },
         electionRationale: [
-          `Ativo em consolidação lateral, porém com Volatilidade Implícita muito baixa (IV ATM: ${ivAtm}%, ${volRegime.label}).`,
-          `Risco elevado de rompimento de volatilidade (Volatility Breakout / Squeeze) rompendo as asas do Iron Condor.`,
-          `Venda de crédito desaconselhada neste nível de prêmio. Recomendado aguardar expansão de volatilidade ou operar Borboleta Comprada a débito reduzido.`,
+          rationaleText,
+          `Venda de crédito desaconselhada neste cenário. Recomendado aguardar vencimento adequado ou expansão de volatilidade.`,
         ],
         homeBrokerOrderSlip: {
           orderType: 'EM ESPERA',
-          entryPriceRange: 'Aguardar aumento de IV',
+          entryPriceRange: 'Aguardar condições ideais',
           maxSlippage: '0',
-          legsSummary: 'AGUARDANDO EXPANSÃO DE VOLATILIDADE',
+          legsSummary: 'AGUARDANDO CONDIÇÕES IDEAIS DE VOL/DTE',
         },
       };
     }

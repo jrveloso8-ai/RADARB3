@@ -1,6 +1,7 @@
 /**
  * Motor de Cálculo Real de Volatilidade Histórica (Padrão Black-Scholes / ANBIMA / B3)
  */
+import { CNPI_RULES } from '../config/rules';
 
 /**
  * Calcula a Volatilidade Histórica Anualizada (HV) para um período de N pregões (ex: 21, 63 ou 252 dias)
@@ -50,9 +51,10 @@ export function classifyVolatilityRegime(ivAtm: number, hv21: number): {
   const safeHv = hv21 > 0 ? hv21 : 25.0;
   const safeIv = ivAtm > 0 ? ivAtm : safeHv;
   const ivRatio = Number((safeIv / safeHv).toFixed(2));
+  const volRules = CNPI_RULES.DERIVATIVES.VOLATILITY;
 
-  // Volatilidade Muito Baixa / Squeeze (IV comprimida ou abaixo de 18% / ratio < 0.85)
-  if (safeIv < 18.0 || (ivRatio < 0.85 && safeIv < 24.0)) {
+  // Volatilidade Muito Baixa / Squeeze (IV comprimida < 16% ou ratio < 0.70)
+  if (safeIv < volRules.SQUEEZE_IV_THRESHOLD || (ivRatio < volRules.LOW_RATIO_THRESHOLD && safeIv < 22.0)) {
     return {
       regime: 'MUITO_BAIXA',
       ivRatio,
@@ -62,7 +64,7 @@ export function classifyVolatilityRegime(ivAtm: number, hv21: number): {
     };
   }
 
-  // Volatilidade Extrema / Cisne Negro (IV acima de 75% ou ratio > 2.0)
+  // Volatilidade Extrema / Cisne Negro (IV acima de 75% ou ratio >= 2.0)
   if (safeIv >= 75.0 || ivRatio >= 2.0) {
     return {
       regime: 'EXTREMA',
@@ -73,8 +75,8 @@ export function classifyVolatilityRegime(ivAtm: number, hv21: number): {
     };
   }
 
-  // Volatilidade Alta (IV > HV ou IV >= 35%)
-  if (safeIv >= 35.0 || ivRatio >= 1.05) {
+  // Volatilidade Alta (IV >= 28% ou IV / HV >= 1.05)
+  if (safeIv >= volRules.HIGH_IV_THRESHOLD || ivRatio >= volRules.HIGH_RATIO_THRESHOLD) {
     return {
       regime: 'ALTA',
       ivRatio,
@@ -93,4 +95,3 @@ export function classifyVolatilityRegime(ivAtm: number, hv21: number): {
     description: 'Equilíbrio entre valor intrínseco e extrínseco. Estruturas a crédito ou a débito são viáveis.',
   };
 }
-

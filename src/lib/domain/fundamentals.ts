@@ -2,6 +2,7 @@ import {
   FundamentalAnalysisResult,
   FundamentalMetric,
 } from '../types/financial';
+import { CNPI_RULES } from '../config/rules';
 
 export interface RawFundamentalData {
   returnOnEquity?: number | null; // ROE decimal ou % (ex: 0.18 ou 18)
@@ -28,6 +29,8 @@ function normalizePct(val?: number | null): number | null {
 
 /**
  * Motor Quantitativo de Análise Fundamentalista (Padrão CNPI-P / CG1)
+ * Aplica pesos da especificação (Rentabilidade 35%, Solvência 35%, Valuation 30%)
+ * Política de dados ausentes: DADOS NÃO DISPONÍVEIS NÃO SOMAM PONTOS (Score = 0 por omissão).
  */
 export function analyzeFundamentals(
   symbol: string,
@@ -36,37 +39,42 @@ export function analyzeFundamentals(
   const roeVal = normalizePct(raw.returnOnEquity);
   const netMarginVal = normalizePct(raw.netMargin);
   const ebitdaMarginVal = normalizePct(raw.ebitdaMargin);
-  const debtToEbitdaVal = raw.debtToEbitda !== undefined && raw.debtToEbitda !== null ? Number(raw.debtToEbitda.toFixed(2)) : null;
-  const currentRatioVal = raw.currentRatio !== undefined && raw.currentRatio !== null ? Number(raw.currentRatio.toFixed(2)) : null;
+  const debtToEbitdaVal =
+    raw.debtToEbitda !== undefined && raw.debtToEbitda !== null ? Number(raw.debtToEbitda.toFixed(2)) : null;
+  const currentRatioVal =
+    raw.currentRatio !== undefined && raw.currentRatio !== null ? Number(raw.currentRatio.toFixed(2)) : null;
   const peVal = raw.priceEarnings !== undefined && raw.priceEarnings !== null ? Number(raw.priceEarnings.toFixed(2)) : null;
   const pbVal = raw.priceToBook !== undefined && raw.priceToBook !== null ? Number(raw.priceToBook.toFixed(2)) : null;
   const dyVal = normalizePct(raw.dividendYield);
 
+  const rules = CNPI_RULES.FUNDAMENTALS.THRESHOLDS;
   let score = 0;
   const reasons: string[] = [];
   const flags: string[] = [];
+  let availableMetricsCount = 0;
 
-  // 1. Avaliação do ROE (Retorno sobre Patrimônio Líquido) - Peso 20 pts
+  // 1. Avaliação do ROE (Rentabilidade - até 18 pts)
   let roeMetric: FundamentalMetric;
   if (roeVal !== null) {
-    if (roeVal >= 15) {
-      score += 20;
+    availableMetricsCount++;
+    if (roeVal >= rules.ROE_HEALTHY) {
+      score += 18;
       roeMetric = {
         name: 'ROE',
         value: roeVal,
         formatted: `${roeVal}%`,
-        benchmark: '≥ 15%',
+        benchmark: `≥ ${rules.ROE_HEALTHY}%`,
         status: 'BOM',
         description: 'Excelente rentabilidade sobre o capital próprio.',
       };
-      reasons.push(`ROE elevado de ${roeVal}% demonstra alta eficiência na geração de valor.`);
-    } else if (roeVal >= 8) {
-      score += 10;
+      reasons.push(`ROE de ${roeVal}% demonstra eficiência na geração de valor para o acionista.`);
+    } else if (roeVal >= rules.ROE_MIN) {
+      score += 9;
       roeMetric = {
         name: 'ROE',
         value: roeVal,
         formatted: `${roeVal}%`,
-        benchmark: '8% a 15%',
+        benchmark: `${rules.ROE_MIN}% a ${rules.ROE_HEALTHY}%`,
         status: 'NEUTRO',
         description: 'Rentabilidade moderada.',
       };
@@ -75,45 +83,45 @@ export function analyzeFundamentals(
         name: 'ROE',
         value: roeVal,
         formatted: `${roeVal}%`,
-        benchmark: '< 8%',
+        benchmark: `< ${rules.ROE_MIN}%`,
         status: 'RUIM',
         description: 'Baixo retorno sobre o patrimônio líquido.',
       };
       flags.push(`ROE de apenas ${roeVal}% abaixo do custo de oportunidade.`);
     }
   } else {
-    score += 10;
     roeMetric = {
       name: 'ROE',
       value: null,
       formatted: 'N/D',
-      benchmark: '≥ 12%',
+      benchmark: `≥ ${rules.ROE_HEALTHY}%`,
       status: 'NEUTRO',
-      description: 'Dado não divulgado no período.',
+      description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
 
-  // 2. Avaliação da Margem Líquida - Peso 20 pts (Eliminatória se < 0)
+  // 2. Avaliação da Margem Líquida (Rentabilidade - até 17 pts / Eliminatória se <= 0)
   let netMarginMetric: FundamentalMetric;
   if (netMarginVal !== null) {
-    if (netMarginVal >= 10) {
-      score += 20;
+    availableMetricsCount++;
+    if (netMarginVal >= rules.NET_MARGIN_HEALTHY) {
+      score += 17;
       netMarginMetric = {
         name: 'Margem Líquida',
         value: netMarginVal,
         formatted: `${netMarginVal}%`,
-        benchmark: '≥ 10%',
+        benchmark: `≥ ${rules.NET_MARGIN_HEALTHY}%`,
         status: 'BOM',
         description: 'Alta conversão de receita em lucro líquido.',
       };
       reasons.push(`Margem líquida saudável de ${netMarginVal}%.`);
-    } else if (netMarginVal > 0) {
-      score += 10;
+    } else if (netMarginVal > rules.NET_MARGIN_MIN) {
+      score += 8;
       netMarginMetric = {
         name: 'Margem Líquida',
         value: netMarginVal,
         formatted: `${netMarginVal}%`,
-        benchmark: '0% a 10%',
+        benchmark: `0% a ${rules.NET_MARGIN_HEALTHY}%`,
         status: 'NEUTRO',
         description: 'Margem positiva, porém com menor margem de segurança.',
       };
@@ -122,260 +130,268 @@ export function analyzeFundamentals(
         name: 'Margem Líquida',
         value: netMarginVal,
         formatted: `${netMarginVal}%`,
-        benchmark: '> 0%',
+        benchmark: '≤ 0%',
         status: 'RUIM',
-        description: 'Empresa operando com prejuízo líquido.',
+        description: 'Empresa operando no prejuízo líquido.',
       };
-      flags.push(`Empresa com margem negativa (${netMarginVal}%), operando em prejuízo.`);
+      flags.push(`Margem líquida negativa de ${netMarginVal}% (operação com prejuízo contábil).`);
     }
   } else {
-    score += 10;
     netMarginMetric = {
       name: 'Margem Líquida',
       value: null,
       formatted: 'N/D',
-      benchmark: '> 5%',
+      benchmark: `≥ ${rules.NET_MARGIN_HEALTHY}%`,
       status: 'NEUTRO',
-      description: 'Dado não divulgado.',
+      description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
 
-  // 3. Avaliação de Endividamento: Dívida Líquida / EBITDA - Peso 25 pts
-  let debtMetric: FundamentalMetric;
+  // 3. Avaliação de Dívida Líquida / EBITDA (Solvência - até 20 pts / Eliminatória se superendividada)
+  let debtToEbitdaMetric: FundamentalMetric;
   if (debtToEbitdaVal !== null) {
-    if (debtToEbitdaVal <= 2.0 && debtToEbitdaVal >= 0) {
-      score += 25;
-      debtMetric = {
-        name: 'Dív. Líquida / EBITDA',
+    availableMetricsCount++;
+    if (debtToEbitdaVal <= rules.DEBT_TO_EBITDA_HEALTHY && debtToEbitdaVal >= 0) {
+      score += 20;
+      debtToEbitdaMetric = {
+        name: 'Dív. Líq. / EBITDA',
         value: debtToEbitdaVal,
         formatted: `${debtToEbitdaVal}x`,
-        benchmark: '≤ 2.0x',
+        benchmark: `≤ ${rules.DEBT_TO_EBITDA_HEALTHY}x`,
         status: 'BOM',
-        description: 'Baixo endividamento, sólida solvência financeira.',
+        description: 'Endividamento baixo e perfeitamente controlado pela geração de caixa.',
       };
-      reasons.push(`Alavancagem controlada de ${debtToEbitdaVal}x Dívida Líquida/EBITDA.`);
-    } else if (debtToEbitdaVal <= 3.2) {
-      score += 12;
-      debtMetric = {
-        name: 'Dív. Líquida / EBITDA',
+      reasons.push(`Dívida Líquida/EBITDA equilibrada de ${debtToEbitdaVal}x.`);
+    } else if (debtToEbitdaVal <= rules.DEBT_TO_EBITDA_MAX && debtToEbitdaVal >= 0) {
+      score += 10;
+      debtToEbitdaMetric = {
+        name: 'Dív. Líq. / EBITDA',
         value: debtToEbitdaVal,
         formatted: `${debtToEbitdaVal}x`,
-        benchmark: '2.0x a 3.2x',
+        benchmark: `${rules.DEBT_TO_EBITDA_HEALTHY}x a ${rules.DEBT_TO_EBITDA_MAX}x`,
         status: 'NEUTRO',
-        description: 'Alavancagem moderada, dentro dos limites operacionais.',
+        description: 'Alavancagem moderada dentro dos limites aceitáveis.',
       };
     } else {
-      debtMetric = {
-        name: 'Dív. Líquida / EBITDA',
+      debtToEbitdaMetric = {
+        name: 'Dív. Líq. / EBITDA',
         value: debtToEbitdaVal,
         formatted: `${debtToEbitdaVal}x`,
-        benchmark: '> 3.2x',
+        benchmark: `> ${rules.DEBT_TO_EBITDA_MAX}x`,
         status: 'RUIM',
-        description: 'Alavancagem financeira elevada, risco de juros.',
+        description: 'Elevada alavancagem financeira sobre a geração de caixa operacional.',
       };
-      flags.push(`Alavancagem elevada de ${debtToEbitdaVal}x Dívida Líq./EBITDA.`);
+      flags.push(`Alavancagem de ${debtToEbitdaVal}x excede os limites de segurança.`);
     }
   } else {
-    score += 15;
-    debtMetric = {
-      name: 'Dív. Líquida / EBITDA',
+    debtToEbitdaMetric = {
+      name: 'Dív. Líq. / EBITDA',
       value: null,
       formatted: 'N/D',
-      benchmark: '≤ 2.5x',
+      benchmark: `≤ ${rules.DEBT_TO_EBITDA_MAX}x`,
       status: 'NEUTRO',
-      description: 'Estrutura financeira sem alavancagem crítica reportada.',
+      description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
 
-  // 4. Avaliação de Liquidez Corrente - Peso 15 pts
-  let liqMetric: FundamentalMetric;
+  // 4. Avaliação de Liquidez Corrente (Solvência - até 15 pts)
+  let currentRatioMetric: FundamentalMetric;
   if (currentRatioVal !== null) {
-    if (currentRatioVal >= 1.3) {
+    availableMetricsCount++;
+    if (currentRatioVal >= rules.CURRENT_RATIO_HEALTHY) {
       score += 15;
-      liqMetric = {
+      currentRatioMetric = {
         name: 'Liquidez Corrente',
         value: currentRatioVal,
         formatted: `${currentRatioVal}x`,
-        benchmark: '≥ 1.3x',
+        benchmark: `≥ ${rules.CURRENT_RATIO_HEALTHY}x`,
         status: 'BOM',
-        description: 'Folga financeira confortável no curto prazo.',
+        description: 'Capacidade folgada de pagamento de obrigações de curto prazo.',
       };
-    } else if (currentRatioVal >= 1.0) {
+      reasons.push(`Liquidez corrente robusta de ${currentRatioVal}x.`);
+    } else if (currentRatioVal >= rules.CURRENT_RATIO_MIN) {
       score += 8;
-      liqMetric = {
+      currentRatioMetric = {
         name: 'Liquidez Corrente',
         value: currentRatioVal,
         formatted: `${currentRatioVal}x`,
-        benchmark: '1.0x a 1.3x',
+        benchmark: `${rules.CURRENT_RATIO_MIN}x a ${rules.CURRENT_RATIO_HEALTHY}x`,
         status: 'NEUTRO',
-        description: 'Capacidade de pagamento equilibrada.',
+        description: 'Liquidez adequada para honrar compromissos imediatos.',
       };
     } else {
-      liqMetric = {
+      currentRatioMetric = {
         name: 'Liquidez Corrente',
         value: currentRatioVal,
         formatted: `${currentRatioVal}x`,
-        benchmark: '< 1.0x',
+        benchmark: `< ${rules.CURRENT_RATIO_MIN}x`,
         status: 'RUIM',
-        description: 'Obrigações de curto prazo superam ativos circulantes.',
+        description: 'Ativo circulante menor que o passivo circulante.',
       };
-      flags.push(`Liquidez corrente de ${currentRatioVal}x denota aperto no curto prazo.`);
+      flags.push(`Liquidez corrente de ${currentRatioVal}x indica aperto de caixa no curto prazo.`);
     }
   } else {
-    score += 8;
-    liqMetric = {
+    currentRatioMetric = {
       name: 'Liquidez Corrente',
       value: null,
       formatted: 'N/D',
-      benchmark: '≥ 1.0x',
+      benchmark: `≥ ${rules.CURRENT_RATIO_MIN}x`,
       status: 'NEUTRO',
-      description: 'Dado não divulgado.',
+      description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
 
-  // 5. Avaliação do Valuation (P/L e P/VP) - Peso 20 pts
+  // 5. Avaliação do P/L (Valuation - até 15 pts)
   let peMetric: FundamentalMetric;
   if (peVal !== null) {
-    if (peVal > 0 && peVal <= 16) {
-      score += 10;
+    availableMetricsCount++;
+    if (peVal >= rules.PE_MIN && peVal <= rules.PE_MAX) {
+      score += 15;
       peMetric = {
-        name: 'P/L (Preço / Lucro)',
+        name: 'P/L',
         value: peVal,
         formatted: `${peVal}x`,
-        benchmark: '0x a 16x',
+        benchmark: `${rules.PE_MIN}x a ${rules.PE_MAX}x`,
         status: 'BOM',
-        description: 'Múltiplo de lucro atrativo / razoável.',
+        description: 'Múltiplo de preço sobre lucro atrativo e condizente.',
       };
-      reasons.push(`P/L atrativo de ${peVal}x.`);
-    } else if (peVal > 16 && peVal <= 30) {
-      score += 5;
+      reasons.push(`P/L equilibrado de ${peVal}x.`);
+    } else if (peVal > rules.PE_MAX) {
       peMetric = {
-        name: 'P/L (Preço / Lucro)',
+        name: 'P/L',
         value: peVal,
         formatted: `${peVal}x`,
-        benchmark: '16x a 30x',
+        benchmark: `> ${rules.PE_MAX}x`,
         status: 'NEUTRO',
-        description: 'Preço embute prêmio de crescimento.',
+        description: 'Múltiplo de lucro esticado (precificação de alto crescimento futuro).',
       };
     } else {
       peMetric = {
-        name: 'P/L (Preço / Lucro)',
+        name: 'P/L',
         value: peVal,
-        formatted: peVal < 0 ? `Negativo (${peVal}x)` : `${peVal}x`,
-        benchmark: peVal < 0 ? 'Prejuízo' : 'Elevado (> 30x)',
+        formatted: `${peVal}x`,
+        benchmark: `< ${rules.PE_MIN}x`,
         status: 'RUIM',
-        description: peVal < 0 ? 'Empresa em prejuízo contábil.' : 'Múltiplo esticado.',
+        description: 'P/L negativo ou distorcido por eventos não recorrentes.',
       };
     }
   } else {
-    score += 5;
     peMetric = {
-      name: 'P/L (Preço / Lucro)',
+      name: 'P/L',
       value: null,
       formatted: 'N/D',
-      benchmark: '≤ 15x',
+      benchmark: `${rules.PE_MIN}x a ${rules.PE_MAX}x`,
       status: 'NEUTRO',
-      description: 'Dado não disponível.',
+      description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
 
+  // 6. Avaliação do P/VP (Valuation - até 15 pts)
   let pbMetric: FundamentalMetric;
   if (pbVal !== null) {
-    if (pbVal > 0 && pbVal <= 2.5) {
-      score += 10;
+    availableMetricsCount++;
+    if (pbVal >= rules.P_VP_MIN && pbVal <= rules.P_VP_MAX) {
+      score += 15;
       pbMetric = {
-        name: 'P/VP (Preço / Valor Patrimonial)',
+        name: 'P/VP',
         value: pbVal,
         formatted: `${pbVal}x`,
-        benchmark: '≤ 2.5x',
+        benchmark: `${rules.P_VP_MIN}x a ${rules.P_VP_MAX}x`,
         status: 'BOM',
-        description: 'Negociada com valuation patrimonial equilibrado.',
+        description: 'Preço sobre valor patrimonial em patamar equilibrado.',
       };
-    } else if (pbVal > 2.5 && pbVal <= 5.0) {
-      score += 5;
+      reasons.push(`P/VP justo de ${pbVal}x em relação ao patrimônio líquido.`);
+    } else if (pbVal > rules.P_VP_MAX) {
       pbMetric = {
-        name: 'P/VP (Preço / Valor Patrimonial)',
+        name: 'P/VP',
         value: pbVal,
         formatted: `${pbVal}x`,
-        benchmark: '2.5x a 5.0x',
+        benchmark: `> ${rules.P_VP_MAX}x`,
         status: 'NEUTRO',
-        description: 'Prêmio patrimonial de mercado.',
+        description: 'Ágio elevado sobre o valor patrimonial.',
       };
     } else {
       pbMetric = {
-        name: 'P/VP (Preço / Valor Patrimonial)',
+        name: 'P/VP',
         value: pbVal,
         formatted: `${pbVal}x`,
-        benchmark: '> 5.0x',
+        benchmark: `< ${rules.P_VP_MIN}x`,
         status: 'RUIM',
-        description: 'Preço muito distante do valor contábil.',
+        description: 'Desconto excessivo sobre patrimônio (possível deterioração contábil).',
       };
     }
   } else {
-    score += 5;
     pbMetric = {
-      name: 'P/VP (Preço / Valor Patrimonial)',
+      name: 'P/VP',
       value: null,
       formatted: 'N/D',
-      benchmark: '≤ 3.0x',
+      benchmark: `${rules.P_VP_MIN}x a ${rules.P_VP_MAX}x`,
       status: 'NEUTRO',
-      description: 'Dado não disponível.',
+      description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
 
-  // Dividend Yield complementar
+  // 7. Dividend Yield (Informativo)
   const dyMetric: FundamentalMetric = {
     name: 'Dividend Yield',
     value: dyVal,
     formatted: dyVal !== null ? `${dyVal}%` : 'N/D',
-    benchmark: '≥ 6%',
-    status: dyVal && dyVal >= 6 ? 'BOM' : dyVal && dyVal >= 3 ? 'NEUTRO' : 'RUIM',
-    description: dyVal && dyVal >= 6 ? 'Excelente retorno em proventos.' : 'Proventos moderados ou baixos.',
+    benchmark: 'Informativo',
+    status: dyVal && dyVal >= 6 ? 'BOM' : 'NEUTRO',
+    description: dyVal && dyVal >= 6 ? 'Excelente política de remuneração aos acionistas.' : 'Distribuição de proventos dentro da média.',
   };
 
-  // Crivo Final de Aprovação Fundamentalista (CNPI-P)
-  // Regras de Eliminação: Prejuízo Líquido persistente OU Dívida > 3.8x OU Score < 50
-  const isLossMaking = netMarginVal !== null && netMarginVal < -1.0;
-  const isOverleveraged = debtToEbitdaVal !== null && debtToEbitdaVal > 3.8;
-  const isApproved = score >= 50 && !isLossMaking && !isOverleveraged;
+  const metrics = {
+    roe: roeMetric,
+    netMargin: netMarginMetric,
+    ebitdaMargin:
+      ebitdaMarginVal !== null
+        ? {
+            name: 'Margem EBITDA',
+            value: ebitdaMarginVal,
+            formatted: `${ebitdaMarginVal}%`,
+            benchmark: 'Informativo',
+            status: 'NEUTRO' as const,
+            description: 'Geração operacional sobre a receita líquida.',
+          }
+        : undefined,
+    debtToEbitda: debtToEbitdaMetric,
+    currentLiquidity: currentRatioMetric,
+    peRatio: peMetric,
+    pbRatio: pbMetric,
+    dividendYield: dyMetric,
+  };
+
+  // Se houver menos de 2 métricas disponíveis, o ativo não tem dados mínimos para análise
+  if (availableMetricsCount < 2) {
+    flags.push('Dados fundamentalistas insuficientes para aprovação no crivo CNPI-P.');
+  }
+
+  // Definição do Status de Aprovação Fundamentalista (Corte: Score >= 45 e sem flags eliminatórias)
+  const approvalThreshold = CNPI_RULES.FUNDAMENTALS.APPROVAL_SCORE_THRESHOLD;
+  const isApproved = score >= approvalThreshold && flags.length === 0 && availableMetricsCount >= 2;
+  const status: 'APROVADO' | 'REPROVADO' = isApproved ? 'APROVADO' : 'REPROVADO';
 
   let summary = '';
-  if (isApproved) {
-    summary = `Empresa aprovada no crivo fundamentalista com Score de ${score}/100. Apresenta boa estrutura financeira e solvência para teses de investimento.`;
+  if (status === 'APROVADO') {
+    summary = `Ativo APROVADO no crivo fundamentalista CNPI-P com Score de ${score}/100. Apresenta solvência equilibrada e rentabilidade consistente.`;
   } else {
-    const mainIssue = isLossMaking
-      ? 'operação com margem negativa (prejuízo)'
-      : isOverleveraged
-      ? 'alavancagem financeira crítica (> 3.8x)'
-      : 'score global insuficiente';
-    summary = `Empresa reprovada no crivo fundamentalista (Score: ${score}/100) devido a ${mainIssue}. Compras são desaconselhadas.`;
+    if (availableMetricsCount < 2) {
+      summary = `Ativo REPROVADO por ausência de dados fundamentalistas mínimos na B3 (Score: ${score}/100). Estudos de compra bloqueados por conservadorismo.`;
+    } else {
+      summary = `Ativo REPROVADO no crivo fundamentalista (Score: ${score}/100). Pontos de atenção: ${flags.join('; ')}`;
+    }
   }
 
   return {
     symbol,
     score,
-    status: isApproved ? 'APROVADO' : 'REPROVADO',
+    status,
     summary,
-    metrics: {
-      roe: roeMetric,
-      netMargin: netMarginMetric,
-      ebitdaMargin: ebitdaMarginVal !== null
-        ? {
-            name: 'Margem EBITDA',
-            value: ebitdaMarginVal,
-            formatted: `${ebitdaMarginVal}%`,
-            benchmark: '≥ 20%',
-            status: ebitdaMarginVal >= 20 ? 'BOM' : 'NEUTRO',
-            description: 'Geração de caixa operacional sobre receita.',
-          }
-        : undefined,
-      debtToEbitda: debtMetric,
-      currentLiquidity: liqMetric,
-      peRatio: peMetric,
-      pbRatio: pbMetric,
-      dividendYield: dyMetric,
-    },
-    reasons: isApproved ? reasons : flags,
+    reasons,
+    flags,
+    metrics,
     analyzedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }

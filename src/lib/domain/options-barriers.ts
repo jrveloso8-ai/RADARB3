@@ -7,7 +7,11 @@ import {
   StrikeVolumeDistribution,
   WallItem,
 } from '../types/financial';
-import { calculateBlackScholes, calculateMaxPain } from './black-scholes';
+import {
+  calculateBlackScholes,
+  calculateImpliedVolatility,
+  calculateMaxPain,
+} from './black-scholes';
 import { calculateB3BusinessDays } from './b3-calendar';
 import { calculateHistoricalVolatility } from './volatility';
 
@@ -207,13 +211,29 @@ export function analyzeOptionPositions(
       openInterestDate = pos.openInterestDate;
     }
 
-    // Calcular gregas Black-Scholes (Base 252 DU com Volatilidade Real do Ativo)
+    // Calcular Volatilidade Implícita real via Solver Numérico de Black-Scholes
+    let realIv: number | null = null;
+    if (pos.iv && pos.iv > 0) {
+      realIv = Number(pos.iv.toFixed(1));
+    } else if (pos.lastPrice && pos.lastPrice > 0) {
+      realIv = calculateImpliedVolatility(
+        pos.lastPrice,
+        spot,
+        strike,
+        dteYears,
+        0.1075,
+        side === 'call' ? 'call' : 'put'
+      );
+    }
+
+    // Calcular gregas Black-Scholes (usando IV real se existir, ou HV21 de base para Delta/Gamma)
+    const sigmaForGreeks = (realIv || realHv21 || 25.0) / 100;
     const greeks = calculateBlackScholes(
       spot,
       strike,
       dteYears,
       0.1075,
-      (realHv21 || 25.0) / 100,
+      sigmaForGreeks,
       side === 'call' ? 'call' : 'put'
     );
 
@@ -221,7 +241,7 @@ export function analyzeOptionPositions(
       ...pos,
       strike,
       delta: greeks.delta,
-      iv: pos.iv ? Number(pos.iv.toFixed(1)) : greeks.iv,
+      iv: realIv ?? undefined,
       lastPrice: pos.lastPrice || greeks.theoreticalPrice,
     };
 
@@ -340,8 +360,22 @@ export function analyzeOptionPositions(
       : 0;
 
   // Identificar ATM Call e Put mais próximas para IV ATM real
-  const nearestAtmCall = enrichedCalls.find((c) => Math.abs(c.strike - spot) <= 1.0);
-  const nearestAtmPut = enrichedPuts.find((p) => Math.abs(p.strike - spot) <= 1.0);
+  const nearestAtmCall = enrichedCalls
+    .filter((c) => c.iv !== undefined && c.iv > 0)
+    .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
+  const nearestAtmPut = enrichedPuts
+    .filter((p) => p.iv !== undefined && p.iv > 0)
+    .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
+
+  const hasRealAtmIv = (nearestAtmCall?.iv !== undefined && nearestAtmCall.iv > 0) || (nearestAtmPut?.iv !== undefined && nearestAtmPut.iv > 0);
+
+  const ivAtmResult = hasRealAtmIv
+    ? {
+        callIv: nearestAtmCall?.iv || nearestAtmPut?.iv || 0,
+        putIv: nearestAtmPut?.iv || nearestAtmCall?.iv || 0,
+        percentile: 75,
+      }
+    : undefined;
 
   return {
     underlyingSymbol,
@@ -352,11 +386,7 @@ export function analyzeOptionPositions(
     selectedExpirationInfo,
     openInterestDate: openInterestDate || new Date().toISOString().split('T')[0],
     maxPain: maxPainStrike,
-    ivAtm: {
-      callIv: nearestAtmCall?.iv || realHv21,
-      putIv: nearestAtmPut?.iv || realHv21,
-      percentile: 75,
-    },
+    ivAtm: ivAtmResult,
     hv21: realHv21,
     hv63: realHv63,
     putCallRatio,

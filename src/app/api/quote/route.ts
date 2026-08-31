@@ -138,11 +138,14 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. Regime de Volatilidade & Veredito Consolidado CNPI
-    // realHv21: Volatilidade Histórica de 21 pregões (fallback 25% se histórico insuficiente)
+    // realHv21: Volatilidade Histórica real de 21 pregões
     const realHv21 = calculateHistoricalVolatility(closes, 21) ?? 25.0;
-    // ivAtm: Volatilidade Implícita ATM real das opções; fallback para HV se opções indisponíveis
-    const ivAtmValue = optionAnalysis?.ivAtm?.callIv ?? realHv21;
-    const volRegime = classifyVolatilityRegime(ivAtmValue, realHv21);
+    // ivAtm: Volatilidade Implícita real das opções (null se não houver IV real das opções)
+    const ivAtmRaw = optionAnalysis?.ivAtm?.callIv;
+    const volRegime =
+      ivAtmRaw !== undefined && ivAtmRaw > 0
+        ? classifyVolatilityRegime(ivAtmRaw, realHv21)
+        : null;
 
     const verdict = generateConsolidatedVerdict(
       cleanSymbol,

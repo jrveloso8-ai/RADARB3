@@ -238,10 +238,10 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
               IV ATM (Call/Put)
             </span>
             <span className="text-sm font-bold text-white mt-1 block">
-              {data.ivAtm.callIv}% / {data.ivAtm.putIv}%
+              {data.ivAtm ? `${data.ivAtm.callIv}% / ${data.ivAtm.putIv}%` : 'N/D (Sem Negociação)'}
             </span>
             <span className="text-[10px] text-gray-500 mt-0.5 block font-sans">
-              Percentil IV: ~{data.ivAtm.percentile}%
+              {data.ivAtm ? `Percentil IV: ~${data.ivAtm.percentile}%` : 'Aguardando liquidez'}
             </span>
           </div>
 
