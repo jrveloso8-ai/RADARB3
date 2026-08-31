@@ -126,7 +126,8 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
     }
   };
 
-  const isBlocked = verdict?.actionRecommendation === 'BLOQUEADO' || fund?.status === 'REPROVADO';
+  const isBlocked =
+    verdict?.actionRecommendation === 'BLOQUEADO' || verdict?.verdict === 'BLOQUEADO_POR_FUNDAMENTOS';
   const isVenda = verdict?.actionRecommendation === 'VENDA';
 
   return (
@@ -331,7 +332,7 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
           {/* ========================================================================= */}
           {activeTab === 'technical' && (
             <div className="space-y-4">
-              {/* Alerta de Bloqueio por Fundamentos se aplicável */}
+              {/* Alerta de Bloqueio por Fundamentos quando veredito é BLOQUEADO */}
               {isBlocked && (
                 <div className="p-4 bg-red-950/30 border border-red-500/50 rounded-2xl flex items-start gap-3 shadow-lg">
                   <div className="p-2 bg-red-500/20 rounded-xl text-red-400 shrink-0">
@@ -345,6 +346,23 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                       Embora o gráfico possa apresentar oscilações ou repiques técnicos de curto prazo,
                       as regras de governança do modelo bloqueiam estudos de compra para empresas com fundamentos reprovados
                       (prejuízo recorrente ou superendividamento), visando mitigar o risco de <em>Value Trap</em> (Armadilha de Valor).
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Alerta Informativo quando a Venda Técnica é corroborada por fundamentos fracos */}
+              {isVenda && fund?.status === 'REPROVADO' && (
+                <div className="p-4 bg-rose-950/20 border border-rose-500/30 rounded-2xl flex items-start gap-3 shadow-lg">
+                  <div className="p-2 bg-rose-500/20 rounded-xl text-rose-400 shrink-0">
+                    <TrendingDown className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-rose-300 text-sm">
+                      FUNDAMENTOS CONFIRMAM TENDÊNCIA DE BAIXA (CRIVO CNPI-P)
+                    </h4>
+                    <p className="text-xs text-rose-200/80 mt-1 leading-relaxed">
+                      A deterioração dos fundamentos contábeis (Score: {fund.score}/100) confirma e fundamenta a tendência técnica de baixa (MM20 &lt; MM50), autorizando estudos direcionais de queda (Venda Técnica ou Travas de Baixa) com risco estritamente controlado.
                     </p>
                   </div>
                 </div>

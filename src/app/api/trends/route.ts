@@ -9,6 +9,7 @@ import {
   analyzeOptionPositions,
   buildOptionBarrierAlert,
   getB3ExpirationDetails,
+  getMostLiquidB3Expiration,
 } from '@/lib/domain/options-barriers';
 import { calculateHistoricalVolatility, classifyVolatilityRegime } from '@/lib/domain/volatility';
 import { TrendAnalysisResult } from '@/lib/types/financial';
@@ -20,7 +21,8 @@ export async function GET(request: NextRequest) {
     const limit = limitParam === 'all' ? 200 : limitParam ? parseInt(limitParam, 10) || 60 : 60;
 
     const expirations = getB3ExpirationDetails();
-    const nearestExp = expirations[0]?.date || '2026-09-18';
+    const liquidExp = getMostLiquidB3Expiration(expirations);
+    const nearestExp = liquidExp.date;
 
     // Obter lista dinâmica completa de ações da B3
     const availableStocks = await brapiService.getAvailableStocks(limit);

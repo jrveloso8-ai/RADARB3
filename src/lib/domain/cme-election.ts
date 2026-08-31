@@ -104,14 +104,14 @@ export function electBestOptionStrategy(
   const lotSize = 1000;
 
   // =========================================================================
-  // CRIVO DE SEGURANÇA 1: BLOQUEIO POR FUNDAMENTOS
+  // CRIVO DE SEGURANÇA 1: BLOQUEIO DE COMPRAS POR FUNDAMENTOS
   // =========================================================================
-  const isFundamentalReproved =
-    fundamentalStatus === 'REPROVADO' ||
+  const isBlockedVerdict =
     verdict.includes('BLOQUEADO') ||
-    verdict === 'BLOQUEADO_POR_FUNDAMENTOS';
+    verdict === 'BLOQUEADO_POR_FUNDAMENTOS' ||
+    (fundamentalStatus === 'REPROVADO' && (verdict.includes('COMPRA') || trend === 'ALTA' || trend === 'LATERAL'));
 
-  if (isFundamentalReproved) {
+  if (isBlockedVerdict) {
     return {
       strategySpec: OPTION_25_STRATEGIES[0],
       title: 'Estratégia Bloqueada: Ativo Reprovado nos Fundamentos (CNPI-P)',
@@ -138,7 +138,7 @@ export function electBestOptionStrategy(
       timeStopRule: { dteLimit: 0, description: '-' },
       electionRationale: [
         `Empresa reprovada no crivo fundamentalista (prejuízo líquido recorrente ou superendividamento).`,
-        `Montagem de estratégias com opções terminantemente desaconselhada para evitar armadilhas de valor (Value Trap) e risco de colapso de suporte.`,
+        `Montagem de estratégias de compra/alta terminantemente desaconselhada para evitar armadilhas de valor (Value Trap).`,
       ],
       homeBrokerOrderSlip: {
         orderType: 'BLOQUEADO',
