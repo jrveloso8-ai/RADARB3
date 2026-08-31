@@ -394,10 +394,14 @@ export class BrapiService {
 
       const analytics: OptionAnalyticsItem[] = rawList.map((item: any) => {
         const ivRaw = item.impliedVolatility;
-        const iv =
-          ivRaw !== null && ivRaw !== undefined && !isNaN(ivRaw)
-            ? Number((ivRaw <= 1.0 && ivRaw > 0 ? ivRaw * 100 : ivRaw).toFixed(2))
-            : null;
+        let iv: number | null = null;
+        if (ivRaw !== null && ivRaw !== undefined && !isNaN(Number(ivRaw))) {
+          const num = Number(ivRaw);
+          const converted = Number((num * 100).toFixed(2));
+          if (converted >= 1.0 && converted <= 400.0) {
+            iv = converted;
+          }
+        }
 
         return {
           symbol: item.symbol,
@@ -406,21 +410,24 @@ export class BrapiService {
           optionStyle: item.optionStyle || 'american',
           model: item.model || 'cox-ross-rubinstein',
           priceSource: item.priceSource || 'close',
-          underlyingPrice: item.underlyingPrice,
+          underlyingPrice: item.underlyingPrice !== undefined && item.underlyingPrice !== null ? Number(item.underlyingPrice) : undefined,
           optionPrice:
             item.optionPrice !== undefined && item.optionPrice !== null ? Number(item.optionPrice) : null,
           impliedVolatility: iv,
-          delta: item.delta !== undefined ? Number(item.delta) : undefined,
-          gamma: item.gamma !== undefined ? Number(item.gamma) : undefined,
-          theta: item.theta !== undefined ? Number(item.theta) : undefined,
-          vega: item.vega !== undefined ? Number(item.vega) : undefined,
-          rho: item.rho !== undefined ? Number(item.rho) : undefined,
-          riskFreeRate: item.riskFreeRate !== undefined ? Number(item.riskFreeRate) : 0.14,
-          dividendYield: item.dividendYield !== undefined ? Number(item.dividendYield) : 0,
-          confidence: item.confidence || 'high',
+          delta: item.delta !== undefined && item.delta !== null ? Number(item.delta) : undefined,
+          gamma: item.gamma !== undefined && item.gamma !== null ? Number(item.gamma) : undefined,
+          theta: item.theta !== undefined && item.theta !== null ? Number(item.theta) : undefined,
+          vega: item.vega !== undefined && item.vega !== null ? Number(item.vega) : undefined,
+          rho: item.rho !== undefined && item.rho !== null ? Number(item.rho) : undefined,
+          riskFreeRate: item.riskFreeRate !== undefined && item.riskFreeRate !== null ? Number(item.riskFreeRate) : 0.14,
+          dividendYield: item.dividendYield !== undefined && item.dividendYield !== null ? Number(item.dividendYield) : 0,
+          confidence: item.confidence !== undefined ? item.confidence : undefined,
           nullReason: item.nullReason || null,
           openInterest: item.openInterest ? Number(item.openInterest) : undefined,
           openInterestDate: item.openInterestDate,
+          openInterestChange: item.openInterestChange ? Number(item.openInterestChange) : undefined,
+          lastTradeDate: item.lastTradeDate,
+          firstTradeDate: item.firstTradeDate,
         };
       });
 

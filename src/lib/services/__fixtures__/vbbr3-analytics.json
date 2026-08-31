@@ -15,6 +15,8 @@
       "theta": -0.02,
       "vega": 0.035,
       "openInterest": 15000,
+      "lastTradeDate": "2026-08-28",
+      "nullReason": null,
       "confidence": "high"
     },
     {
@@ -28,6 +30,8 @@
       "theta": -0.045,
       "vega": 0.065,
       "openInterest": 42000,
+      "lastTradeDate": "2026-08-28",
+      "nullReason": null,
       "confidence": "high"
     },
     {
@@ -41,6 +45,8 @@
       "theta": -0.065,
       "vega": 0.088,
       "openInterest": 53700,
+      "lastTradeDate": "2026-08-28",
+      "nullReason": null,
       "confidence": "high"
     },
     {
@@ -54,6 +60,8 @@
       "theta": -0.075,
       "vega": 0.095,
       "openInterest": 97500,
+      "lastTradeDate": "2026-08-28",
+      "nullReason": null,
       "confidence": "high"
     },
     {
@@ -67,6 +75,8 @@
       "theta": -0.078,
       "vega": 0.092,
       "openInterest": 128300,
+      "lastTradeDate": "2026-08-28",
+      "nullReason": null,
       "confidence": "medium"
     },
     {
@@ -80,6 +90,8 @@
       "theta": -0.05,
       "vega": 0.08,
       "openInterest": 85000,
+      "lastTradeDate": "2026-08-28",
+      "nullReason": null,
       "confidence": "high"
     },
     {
@@ -93,6 +105,8 @@
       "theta": -0.035,
       "vega": 0.06,
       "openInterest": 62000,
+      "lastTradeDate": "2026-08-28",
+      "nullReason": null,
       "confidence": "high"
     }
   ]

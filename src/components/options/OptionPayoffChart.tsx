@@ -126,7 +126,7 @@ export const OptionPayoffChart: React.FC<OptionPayoffChartProps> = ({ electedStr
       : { label: 'viés: LATERAL ↔', color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' };
 
   return (
-    <div className="p-5 bg-[#070b14] border border-cyan-500/30 rounded-2xl shadow-2xl space-y-4 font-sans">
+    <div data-testid="options-payoff-chart" className="p-5 bg-[#070b14] border border-cyan-500/30 rounded-2xl shadow-2xl space-y-4 font-sans">
       {/* 1. Header do Gráfico com Identidade da Estratégia e Viés (Spec v2.1 - B4) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-800 pb-3">
         <div>

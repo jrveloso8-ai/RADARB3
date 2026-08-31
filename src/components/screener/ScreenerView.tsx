@@ -165,7 +165,7 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
       {/* ========================================================================= */}
       {/* SEÇÃO 1: 🟢 ALTA — COMPRA */}
       {/* ========================================================================= */}
-      <div className="bg-[#0f172a] border border-emerald-500/30 rounded-2xl p-5 shadow-lg space-y-4">
+      <div data-testid="screener-list-alta" className="bg-[#0f172a] border border-emerald-500/30 rounded-2xl p-5 shadow-lg space-y-4">
         <div className="flex items-center justify-between border-b border-gray-800/80 pb-3">
           <div className="flex items-center gap-2.5">
             <span className="flex h-3 w-3 relative">
@@ -185,16 +185,17 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
         </div>
 
         {altaFiltered.length === 0 ? (
-          <div className="py-8 text-center text-gray-400 text-xs bg-[#111827]/50 rounded-xl border border-dashed border-gray-800">
+          <div data-testid="screener-empty-alta" className="py-8 text-center text-gray-400 text-xs bg-[#111827]/50 rounded-xl border border-dashed border-gray-800">
             Nenhuma operação autorizada nesta direção hoje.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {altaFiltered.map((item) => (
-              <div
+              <button
                 key={item.symbol}
+                type="button"
                 onClick={() => onSelectSymbol && onSelectSymbol(item.symbol)}
-                className="bg-[#111827] border border-gray-800 hover:border-emerald-500/50 p-4 rounded-xl transition cursor-pointer hover:shadow-md space-y-3 group"
+                className="bg-[#111827] border border-gray-800 hover:border-emerald-500/50 p-4 rounded-xl transition cursor-pointer hover:shadow-md space-y-3 group text-left w-full"
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -247,7 +248,7 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
                     </div>
                   )}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -256,7 +257,7 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
       {/* ========================================================================= */}
       {/* SEÇÃO 2: 🔴 BAIXA — VENDA */}
       {/* ========================================================================= */}
-      <div className="bg-[#0f172a] border border-red-500/30 rounded-2xl p-5 shadow-lg space-y-4">
+      <div data-testid="screener-list-baixa" className="bg-[#0f172a] border border-red-500/30 rounded-2xl p-5 shadow-lg space-y-4">
         <div className="flex items-center justify-between border-b border-gray-800/80 pb-3">
           <div className="flex items-center gap-2.5">
             <span className="flex h-3 w-3 relative">
@@ -276,16 +277,17 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
         </div>
 
         {baixaFiltered.length === 0 ? (
-          <div className="py-8 text-center text-gray-400 text-xs bg-[#111827]/50 rounded-xl border border-dashed border-gray-800">
+          <div data-testid="screener-empty-baixa" className="py-8 text-center text-gray-400 text-xs bg-[#111827]/50 rounded-xl border border-dashed border-gray-800">
             Nenhuma operação autorizada nesta direção hoje.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {baixaFiltered.map((item) => (
-              <div
+              <button
                 key={item.symbol}
+                type="button"
                 onClick={() => onSelectSymbol && onSelectSymbol(item.symbol)}
-                className="bg-[#111827] border border-gray-800 hover:border-red-500/50 p-4 rounded-xl transition cursor-pointer hover:shadow-md space-y-3 group"
+                className="bg-[#111827] border border-gray-800 hover:border-red-500/50 p-4 rounded-xl transition cursor-pointer hover:shadow-md space-y-3 group text-left w-full"
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -314,15 +316,14 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
 
                 {/* Resumo da Operação / Opções de Baixa & Alerta de Aluguel */}
                 <div className="bg-[#0b1120] p-2.5 rounded-lg border border-gray-800/80 text-xs space-y-1.5 font-mono">
-                  {item.tradePlan ? (
+                  {item.optionStructure ? (
                     <div className="space-y-1">
-                      <div className="flex justify-between text-[11px] text-gray-400">
-                        <span>Stop: <strong className="text-amber-400">R$ {item.tradePlan.stop.toFixed(2)}</strong></span>
-                        <span>Alvo 1: <strong className="text-red-400">R$ {item.tradePlan.target1.toFixed(2)}</strong></span>
-                        <span>R:R: <strong className="text-cyan-400">{item.tradePlan.riskRewardRatio}:1</strong></span>
+                      <div className="text-[11px] text-red-300 font-semibold truncate">
+                        {item.optionStructure.title}
                       </div>
-                      <div className="text-[10px] text-gray-400 truncate font-sans">
-                        {item.optionStructure ? item.optionStructure.title : 'Trava de baixa com opções (Bear Spread).'}
+                      <div className="flex justify-between text-[10px] text-gray-400">
+                        <span>Max Lucro: <strong className="text-emerald-400">R$ {item.optionStructure.maxProfitLot?.toFixed(0)}</strong></span>
+                        <span>Max Risco: <strong className="text-red-400">R$ {item.optionStructure.maxLossLot?.toFixed(0)}</strong></span>
                       </div>
                     </div>
                   ) : (
@@ -336,7 +337,7 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
                     <span className="truncate">Venda à vista exige aluguel (BTC). Prefira travas de opções.</span>
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -345,7 +346,7 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
       {/* ========================================================================= */}
       {/* SEÇÃO 3: 🟣 LATERAL — IRON CONDOR */}
       {/* ========================================================================= */}
-      <div className="bg-[#0f172a] border border-purple-500/30 rounded-2xl p-5 shadow-lg space-y-4">
+      <div data-testid="screener-list-lateral" className="bg-[#0f172a] border border-purple-500/30 rounded-2xl p-5 shadow-lg space-y-4">
         <div className="flex items-center justify-between border-b border-gray-800/80 pb-3">
           <div className="flex items-center gap-2.5">
             <span className="flex h-3 w-3 relative">
@@ -365,16 +366,17 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
         </div>
 
         {lateralFiltered.length === 0 ? (
-          <div className="py-8 text-center text-gray-400 text-xs bg-[#111827]/50 rounded-xl border border-dashed border-gray-800">
+          <div data-testid="screener-empty-lateral" className="py-8 text-center text-gray-400 text-xs bg-[#111827]/50 rounded-xl border border-dashed border-gray-800">
             Nenhuma operação autorizada nesta direção hoje.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {lateralFiltered.map((item) => (
-              <div
+              <button
                 key={item.symbol}
+                type="button"
                 onClick={() => onSelectSymbol && onSelectSymbol(item.symbol)}
-                className="bg-[#111827] border border-gray-800 hover:border-purple-500/50 p-4 rounded-xl transition cursor-pointer hover:shadow-md space-y-3 group"
+                className="bg-[#111827] border border-gray-800 hover:border-purple-500/50 p-4 rounded-xl transition cursor-pointer hover:shadow-md space-y-3 group text-left w-full"
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -411,7 +413,7 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
                     <span className="text-emerald-400 font-bold">Crédito Institucional</span>
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}

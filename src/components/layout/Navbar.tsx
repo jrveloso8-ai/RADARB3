@@ -91,36 +91,33 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 gap-2">
             {/* Logo & Marca */}
-            <div
-              className="flex items-center gap-2.5 cursor-pointer shrink-0"
+            <button
+              type="button"
+              className="flex items-center gap-2.5 cursor-pointer shrink-0 bg-transparent border-0 text-left p-0"
               onClick={() => onTabChange('overview')}
             >
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
                 <TrendingUp className="w-5 h-5 text-slate-950 font-bold" />
               </div>
               <div className="hidden sm:block">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-extrabold text-base tracking-wide text-white">
-                    RADAR B3
-                  </span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 border border-purple-500/30 font-bold tracking-wider">
-                    PRO IA
-                  </span>
-                </div>
-                <p className="text-[9px] text-gray-400 font-medium leading-none mt-0.5">
-                  Radar de Estudos • Ações & Opções B3
-                </p>
+                <span className="text-base font-black tracking-tight text-white flex items-center gap-1">
+                  RADAR B3 <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-mono font-bold">PRO IA</span>
+                </span>
+                <p className="text-[10px] text-gray-400 font-mono">B3 • BRAPI • CNPI Engine</p>
               </div>
-            </div>
+            </button>
 
-            {/* Navegação Central */}
-            <nav className="flex items-center justify-center gap-1 sm:gap-2 flex-1 max-w-3xl overflow-x-auto no-scrollbar py-1">
+            {/* Navegação Desktop e Mobile */}
+            <nav className="flex items-center gap-1 sm:gap-2 overflow-x-auto py-1 no-scrollbar" role="tablist" aria-label="Navegação Principal">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
                   <button
                     key={item.id}
+                    data-testid={`nav-tab-${item.id}`}
+                    role="tab"
+                    aria-selected={isActive}
                     onClick={() => onTabChange(item.id)}
                     className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shrink-0 ${
                       isActive

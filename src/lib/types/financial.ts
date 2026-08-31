@@ -187,6 +187,7 @@ export interface OptionAnalyticsItem {
   openInterestDate?: string;
   openInterestChange?: number;
   lastTradeDate?: string;
+  firstTradeDate?: string;
 }
 
 export type BlockReason =
@@ -331,6 +332,8 @@ export interface OptionAnalysisResult {
   top5PutWalls: WallItem[];
   strikeDistribution: StrikeVolumeDistribution[];
   straddleRows: StraddleRow[];
+  electedOptionStrategy?: import('../domain/cme-election').ElectedOptionStrategy | null;
+  priceContext?: PriceContext;
 }
 
 export interface QuoteDetails {

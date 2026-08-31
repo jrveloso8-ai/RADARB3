@@ -16,9 +16,11 @@ import {
   Shield,
   Activity,
   CheckCircle2,
+  HelpCircle,
 } from 'lucide-react';
 import { OptionAnalysisResult } from '@/lib/types/financial';
 import { safeFetchJson } from '@/lib/utils/api-client';
+import { OptionPayoffChart } from './OptionPayoffChart';
 
 interface OptionsBarriersViewProps {
   initialSymbol?: string;
@@ -32,6 +34,7 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
   const [symbol, setSymbol] = useState(initialSymbol);
   const [searchInput, setSearchInput] = useState(initialSymbol);
   const [selectedExpiration, setSelectedExpiration] = useState<string>('');
+  const [strategyTab, setStrategyTab] = useState<'PRIMARY' | 'ALTERNATIVE'>('PRIMARY');
   const [data, setData] = useState<OptionAnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +146,7 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
+                  data-testid="options-symbol-input"
                   type="text"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
@@ -182,12 +186,15 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
         </div>
 
         {/* Pílulas de Vencimento com DTE e Letras de Série */}
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="flex flex-wrap gap-2 pt-1" role="tablist">
           {data?.availableExpirations.map((exp) => {
             const isSelected = selectedExpiration === exp.date;
             return (
               <button
                 key={exp.date}
+                data-testid={`options-expiration-${exp.date}`}
+                role="tab"
+                aria-selected={isSelected}
                 onClick={() => handleExpirationSelect(exp.date)}
                 className={`px-3 py-2 rounded-xl text-xs font-mono transition-all flex items-center gap-2 border ${
                   isSelected
@@ -499,6 +506,123 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 5.5 ESTRUTURA ELEGÍVEL PARA O VENCIMENTO (Spec v3.0 Item 09 N101) */}
+      {data && (
+        <div data-testid="options-eligible-structures-panel" className="space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+            <div className="flex items-center gap-2">
+              <Key className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-xs font-bold text-gray-200 font-mono uppercase tracking-wider">
+                Estrutura Elegível para o Vencimento ({data.selectedExpiration})
+              </h3>
+            </div>
+            {data.electedOptionStrategy && (
+              <span data-testid="options-structure-status" className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-500/30">
+                {data.electedOptionStrategy.status}
+              </span>
+            )}
+          </div>
+
+          {/* CASO 1: ESTRUTURA AUTORIZADA OU EM_ANALISE */}
+          {data.electedOptionStrategy && data.electedOptionStrategy.status !== 'BLOQUEADA' && data.electedOptionStrategy.legs.length > 0 && (
+            <div className="space-y-4">
+              {(() => {
+                const activeStrategy =
+                  strategyTab === 'ALTERNATIVE' && data.electedOptionStrategy?.alternative
+                    ? data.electedOptionStrategy.alternative.strategy
+                    : data.electedOptionStrategy;
+
+                return (
+                  <>
+                    {/* Controles de Estrutura: Eleita vs Alternativa (Item 10) */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        data-testid="options-structure-primary"
+                        onClick={() => setStrategyTab('PRIMARY')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold border transition ${
+                          strategyTab === 'PRIMARY'
+                            ? 'bg-cyan-600 text-slate-950 border-cyan-400 shadow-md'
+                            : 'bg-[#111827] text-gray-300 border-gray-700 hover:text-white'
+                        }`}
+                      >
+                        ★ Eleita: {data.electedOptionStrategy.title.split('(')[0].trim()}
+                      </button>
+
+                      <button
+                        data-testid="options-structure-alternative"
+                        disabled={!data.electedOptionStrategy.alternative}
+                        onClick={() => data.electedOptionStrategy?.alternative && setStrategyTab('ALTERNATIVE')}
+                        title={data.electedOptionStrategy.alternative ? 'Alternar para estrutura a débito' : 'Nenhuma estrutura alternativa viável neste vencimento'}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold border transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                          strategyTab === 'ALTERNATIVE'
+                            ? 'bg-cyan-600 text-slate-950 border-cyan-400 shadow-md'
+                            : 'bg-[#111827] text-gray-300 border-gray-700 hover:text-white'
+                        }`}
+                      >
+                        ⚡ Alternativa {data.electedOptionStrategy.alternative ? `: ${data.electedOptionStrategy.alternative.strategy.title.split('(')[0].trim()}` : '(Débito indisponível)'}
+                      </button>
+                    </div>
+
+                    {/* Lista das Pernas com papel explícito */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {activeStrategy.legs.map((leg, idx) => (
+                        <div
+                          key={leg.symbol}
+                          data-testid={`options-structure-leg-${idx}`}
+                          className="p-3.5 bg-[#0b101b] rounded-xl border border-gray-800 flex flex-col justify-between space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${
+                              leg.action === 'VENDA' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                            }`}>
+                              {leg.action} {leg.type}
+                            </span>
+                            <span className="font-mono font-bold text-white text-xs">{leg.symbol}</span>
+                          </div>
+                          <div className="text-xs text-gray-300 font-mono">
+                            Strike: <strong>R$ {leg.strike.toFixed(2)}</strong> • Preço: <strong>R$ {leg.unitPrice.toFixed(2)}</strong> {leg.delta ? `• Δ ${leg.delta.toFixed(2)}` : ''}
+                          </div>
+                          <div className="text-[11px] text-gray-400 font-sans">
+                            {leg.roleDescription || (leg.action === 'VENDA' ? 'Perna curta (recebe prêmio)' : 'Perna longa (proteção)')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Payoff Chart */}
+                    <OptionPayoffChart electedStrategy={activeStrategy} />
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* CASO 2: ESTRUTURA BLOQUEADA OU SEM PERNAS */}
+          {(!data.electedOptionStrategy || data.electedOptionStrategy.status === 'BLOQUEADA' || data.electedOptionStrategy.legs.length === 0) && (
+            <div className="p-6 bg-[#0b101b] border border-amber-500/30 rounded-2xl shadow-xl flex flex-col items-center justify-center gap-3 text-center">
+              <HelpCircle className="w-8 h-8 text-amber-400" />
+              <div className="space-y-1 max-w-lg">
+                <h4 data-testid="options-block-reason" className="font-bold text-white text-sm">
+                  {data.electedOptionStrategy?.blockDetails?.reason
+                    ? `Operação de Opções Não Autorizada (${data.electedOptionStrategy.blockDetails.reason})`
+                    : 'Sem Estratégia de Opções Eleita'}
+                </h4>
+                <p className="text-xs text-amber-300/90 leading-relaxed">
+                  {data.electedOptionStrategy?.blockDetails?.message || 'As séries deste vencimento não atendem aos critérios de montagem.'}
+                </p>
+                {data.electedOptionStrategy?.diagnosticsSummary && (
+                  <div className="pt-2">
+                    <span data-testid="options-block-diagnostics" className="px-3 py-1 bg-gray-900 border border-gray-700/60 rounded-lg text-[11px] font-mono text-gray-400">
+                      📊 {data.electedOptionStrategy.diagnosticsSummary}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

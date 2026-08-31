@@ -93,17 +93,38 @@ export const CNPI_RULES = {
       REQUIRE_TRADED_ON_SNAPSHOT_DATE: true,
     },
 
-    // Seleção de Pernas por Delta e Parâmetros de Trava (Spec v2.2)
+    // Seleção de Pernas por Delta e Parâmetros de Trava (Spec v2.2/v3.0)
     SPREAD: {
       SHORT_LEG_DELTA_TARGET: 0.28,   // |delta| alvo da perna vendida (crédito)
       SHORT_LEG_DELTA_MAX: 0.38,      // acima disso, não é OTM o suficiente
       LONG_LEG_DELTA_TARGET: 0.12,    // |delta| alvo da perna de proteção
       MIN_WIDTH_PCT_OF_SPOT: 0.015,   // largura mínima 1,5% do spot
       MAX_WIDTH_PCT_OF_SPOT: 0.08,    // largura máxima 8,0% do spot
-      MIN_CREDIT_TO_WIDTH: 0.12,      // crédito < 12% da largura -> não compensa (Spec v2.2)
+      MIN_CREDIT_TO_WIDTH: 0.12,      // crédito < 12% da largura -> não compensa
       MAX_CREDIT_TO_WIDTH: 0.45,      // crédito > 45% -> perna vendida ATM demais
       DEBIT_LONG_DELTA_TARGET: 0.55,  // |delta| perna comprada (débito)
       DEBIT_SHORT_DELTA_TARGET: 0.25, // |delta| perna vendida (débito)
+      SCORE_WEIGHTS: {
+        SHORT_DELTA: 0.50, // Spec v3.0 Seção 14
+        LONG_DELTA: 0.15,
+        RETURN_ON_RISK: 0.20,
+        LIQUIDITY: 0.15,
+      },
+    },
+
+    // Parâmetros de Iron Condor (Spec v3.0 Seção 10)
+    IRON_CONDOR: {
+      MIN_DTE: 12,
+      MAX_DTE: 35,
+      SHORT_LEG_DELTA_TARGET: 0.20, // menor que 0.28 das verticais
+      SHORT_LEG_DELTA_MAX: 0.30,
+      MAX_WING_ASYMMETRY: 0.50,
+      SCORE_WEIGHTS: {
+        SHORT_DELTA: 0.35,
+        CREDIT_TO_WIDTH: 0.25,
+        WING_SYMMETRY: 0.20,
+        LIQUIDITY: 0.20,
+      },
     },
 
     // Controle de defasagem de preço D-1 vs D+0 (Spec v2.1/v2.2)

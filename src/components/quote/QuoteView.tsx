@@ -271,8 +271,11 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
             </div>
 
             {/* Navegação por Abas */}
-            <div className="flex items-center gap-1.5 border-t border-gray-800/80 pt-3 overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-1.5 border-t border-gray-800/80 pt-3 overflow-x-auto no-scrollbar" role="tablist" aria-label="Abas da Consulta">
               <button
+                data-testid="quote-tab-technical"
+                role="tab"
+                aria-selected={activeTab === 'technical'}
                 onClick={() => setActiveTab('technical')}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
                   activeTab === 'technical'
@@ -285,6 +288,9 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
               </button>
 
               <button
+                data-testid="quote-tab-fundamentals"
+                role="tab"
+                aria-selected={activeTab === 'fundamentals'}
                 onClick={() => setActiveTab('fundamentals')}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
                   activeTab === 'fundamentals'
@@ -297,6 +303,9 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
               </button>
 
               <button
+                data-testid="quote-tab-options"
+                role="tab"
+                aria-selected={activeTab === 'options'}
                 onClick={() => setActiveTab('options')}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
                   activeTab === 'options'
@@ -309,6 +318,9 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
               </button>
 
               <button
+                data-testid="quote-tab-recommendations"
+                role="tab"
+                aria-selected={activeTab === 'execution'}
                 onClick={() => setActiveTab('execution')}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
                   activeTab === 'execution'
@@ -321,6 +333,8 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
               </button>
 
               <button
+                role="tab"
+                aria-selected={activeTab === 'ai'}
                 onClick={() => setActiveTab('ai')}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
                   activeTab === 'ai'
@@ -838,8 +852,11 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 bg-[#111827] p-1 rounded-xl border border-gray-700 text-xs font-bold">
+                <div className="flex items-center gap-2 bg-[#111827] p-1 rounded-xl border border-gray-700 text-xs font-bold" role="tablist">
                   <button
+                    data-testid="quote-mode-options"
+                    role="tab"
+                    aria-selected={execMode === 'OPTIONS'}
                     onClick={() => setExecMode('OPTIONS')}
                     className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${
                       execMode === 'OPTIONS'
@@ -852,6 +869,9 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                   </button>
 
                   <button
+                    data-testid="quote-mode-stock"
+                    role="tab"
+                    aria-selected={execMode === 'STOCK'}
                     onClick={() => setExecMode('STOCK')}
                     className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${
                       execMode === 'STOCK'
@@ -1241,14 +1261,14 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 font-mono">
                     <div className="p-3.5 bg-[#111827] rounded-xl border border-gray-800">
                       <span className="text-[10px] text-gray-400 block font-sans">PREÇO DE ENTRADA</span>
-                      <span className="text-base font-bold text-white mt-1 block">
+                      <span data-testid="trade-plan-entry" className="text-base font-bold text-white mt-1 block">
                         {plan ? `R$ ${plan.entry.toFixed(2)}` : (data.regularMarketPrice ? `R$ ${data.regularMarketPrice.toFixed(2)}` : '—')}
                       </span>
                     </div>
 
                     <div className="p-3.5 bg-[#111827] rounded-xl border border-red-500/30">
                       <span className="text-[10px] text-red-400 block font-sans">STOP LOSS TÉCNICO</span>
-                      <span className="text-base font-bold text-red-400 mt-1 block">
+                      <span data-testid="trade-plan-stop" className="text-base font-bold text-red-400 mt-1 block">
                         {plan ? `R$ ${plan.stop.toFixed(2)}` : '—'}
                       </span>
                     </div>
@@ -1257,7 +1277,7 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                       <span className="text-[10px] text-emerald-400 block font-sans">
                         {biasFromTrend(data?.trendAnalysis?.trend) === 'SHORT' ? 'ALVO 1 (SUPORTE)' : 'ALVO 1 (RESISTÊNCIA)'}
                       </span>
-                      <span className="text-base font-bold text-emerald-400 mt-1 block">
+                      <span data-testid="trade-plan-target1" className="text-base font-bold text-emerald-400 mt-1 block">
                         {plan ? `R$ ${plan.target1.toFixed(2)}` : '—'}
                       </span>
                     </div>
@@ -1266,7 +1286,7 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                       <span className="text-[10px] text-emerald-400 block font-sans">
                         {biasFromTrend(data?.trendAnalysis?.trend) === 'SHORT' ? 'ALVO 2 (2º SUPORTE)' : 'ALVO 2 (2ª RESISTÊNCIA)'}
                       </span>
-                      <span className="text-base font-bold text-emerald-400 mt-1 block">
+                      <span data-testid="trade-plan-target2" className="text-base font-bold text-emerald-400 mt-1 block">
                         {plan ? `R$ ${plan.target2.toFixed(2)}` : '—'}
                       </span>
                     </div>
@@ -1274,15 +1294,17 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
 
                   {/* GRÁFICO DE CANDLESTICKS COM ENTRADA, STOP E ALVOS */}
                   {plan ? (
-                    <StockTradePlanChart
-                      symbol={data.symbol}
-                      historicalPrices={data.historicalDataPrice}
-                      entryPrice={plan.entry}
-                      stopLoss={plan.stop}
-                      target1={plan.target1}
-                      target2={plan.target2}
-                      bias={biasFromTrend(data.trendAnalysis?.trend)}
-                    />
+                    <div data-testid="trade-plan-chart">
+                      <StockTradePlanChart
+                        symbol={data.symbol}
+                        historicalPrices={data.historicalDataPrice}
+                        entryPrice={plan.entry}
+                        stopLoss={plan.stop}
+                        target1={plan.target1}
+                        target2={plan.target2}
+                        bias={biasFromTrend(data.trendAnalysis?.trend)}
+                      />
+                    </div>
                   ) : (
                     <div className="p-5 bg-[#111827] rounded-xl border border-gray-800 text-xs text-amber-300 space-y-1">
                       <div className="font-bold flex items-center gap-1.5 text-amber-400">
