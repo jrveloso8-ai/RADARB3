@@ -1,5 +1,4 @@
 import { OperationalRiskReward, TechnicalChecklistItem } from '../domain/indicators';
-import { OptionStructureResult } from '../domain/options-structures';
 import { ElectedOptionStrategy } from '../domain/cme-election';
 
 export type TrendType = 'ALTA' | 'BAIXA' | 'LATERAL';
@@ -35,7 +34,9 @@ export interface TechnicalIndicatorsResult {
     score: number;
     statusLabel: string;
   };
-  riskReward: OperationalRiskReward;
+  supports?: number[];
+  resistances?: number[];
+  riskReward?: OperationalRiskReward;
 }
 
 export interface FundamentalMetric {
@@ -186,6 +187,15 @@ export interface OptionAnalyticsItem {
   openInterestDate?: string;
 }
 
+export interface PriceContext {
+  priceDate: string;        // '2026-08-28'
+  priceUnderlying: number;  // 33.38
+  currentSpot: number;      // 34.27
+  spotDriftPct: number;     // +2.67
+  isStale: boolean;         // |spotDriftPct| > 1.5
+  warningMessage?: string;
+}
+
 export interface RentalAlert {
   required: true;
   message: string;
@@ -312,6 +322,6 @@ export interface QuoteDetails {
   verdict?: ConsolidatedVerdictResult;
   barrierAlert?: OptionBarrierAlert;
   indicators?: TechnicalIndicatorsResult;
-  suggestedStructure?: OptionStructureResult;
-  electedOptionStrategy?: ElectedOptionStrategy | null;
+  tradePlan?: import('../domain/trade-plan').TradePlan | null;
+  electedOptionStrategy?: import('../domain/cme-election').ElectedOptionStrategy | null;
 }

@@ -103,7 +103,7 @@ Como posso apoiar seus estudos hoje?`,
                 putWall: currentQuote.barrierAlert?.topPutWall,
                 rsi: currentQuote.indicators?.rsi,
                 macdHist: currentQuote.indicators?.macd.histogram,
-                strategyName: currentQuote.suggestedStructure?.title,
+                strategyName: currentQuote.electedOptionStrategy?.title,
               }
             : undefined,
         }),

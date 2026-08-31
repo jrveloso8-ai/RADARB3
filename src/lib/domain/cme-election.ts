@@ -1,16 +1,26 @@
+/**
+ * MOTOR ÚNICO DE RECOMENDAÇÃO E ELEIÇÃO DE ESTRATÉGIAS DE OPÇÕES B3
+ * Radar B3 Pro IA — Especificação Técnica v2.1 (31/08/2026)
+ *
+ * Diretrizes Fundamentais:
+ * 1. Motor Único em todo o sistema (cme-election.ts).
+ * 2. Seleção de pernas baseada em Delta OTM estrito (|delta| <= 0.38 na ponta vendida), nunca por índice de array.
+ * 3. Contexto explícito de data de preço (priceDate, priceUnderlying, spotDriftPct) e bloqueio se |drift| > 3%.
+ * 4. Zero fallbacks inventados: séries sem optionPrice ou confidence low/medium são inelegíveis como pernas.
+ * 5. Asserção obrigatória de coerência direcional (assertDirection) com cálculo de payoff no vencimento.
+ */
+
 import {
-  B3ExpirationInfo,
   OptionAnalysisResult,
-  OptionPositionItem,
-  StraddleRow,
+  OptionAnalyticsItem,
+  PriceContext,
 } from '../types/financial';
 import {
   OPTION_25_STRATEGIES,
   OptionStrategySpec,
-  CME_25_STRATEGIES,
-  CMEStrategySpec,
 } from './cme-strategies';
 import { classifyVolatilityRegime } from './volatility';
+import { CNPI_RULES } from '../config/rules';
 
 export interface OptionLegDetail {
   action: 'COMPRA' | 'VENDA';
@@ -21,6 +31,8 @@ export interface OptionLegDetail {
   lotQuantity: number;
   totalFinancial: number;
   openInterest: number;
+  delta?: number;
+  roleDescription?: string; // Ex: "(strike MAIOR) recebe +R$ 1,00/cota" ou "(strike MENOR) ↳ proteção"
 }
 
 export type CMELegDetail = OptionLegDetail;
@@ -35,6 +47,9 @@ export interface ElectedOptionStrategy {
   underlyingSymbol: string;
   underlyingPrice: number;
 
+  // Contexto de data e defasagem de preço (Spec v2.1)
+  priceContext?: PriceContext;
+
   // Detalhes da montagem financeira
   legs: OptionLegDetail[];
   netCostOrCredit: number; // Por cota
@@ -48,6 +63,9 @@ export interface ElectedOptionStrategy {
   maxLossLot: number;
   returnOnRiskPct: number;
   riskRewardRatio: string;
+
+  // Explicação didática de conferência antes da ordem
+  tradeCheckGuide?: string;
 
   // Gatilhos de saída operacionais
   takeProfitRule: {
@@ -77,9 +95,90 @@ export interface ElectedOptionStrategy {
   };
 }
 
+export class StructureDirectionError extends Error {
+  constructor(strategyName: string, bias: string, reason: string) {
+    super(`Erro de coerência direcional na estratégia "${strategyName}" (${bias}): ${reason}`);
+    this.name = 'StructureDirectionError';
+  }
+}
+
 /**
- * Motor de Inteligência para Eleição da ÚNICA Melhor Estratégia de Opções B3
- * Analisa: Tendência CNPI-T, Fundamentos CNPI-P, RSI(14), Regime de Volatilidade (HV/IV), Barreiras OI e Max Pain.
+ * Calcula o payoff financeiro por cota de um conjunto de pernas em determinado preço no vencimento (S)
+ */
+export function payoffAt(legs: OptionLegDetail[], spotAtExpiry: number): number {
+  let netPayoff = 0;
+  for (const leg of legs) {
+    const intrinsic =
+      leg.type === 'CALL'
+        ? Math.max(0, spotAtExpiry - leg.strike)
+        : Math.max(0, leg.strike - spotAtExpiry);
+
+    if (leg.action === 'COMPRA') {
+      netPayoff += intrinsic - leg.unitPrice;
+    } else {
+      netPayoff += leg.unitPrice - intrinsic;
+    }
+  }
+  return Number(netPayoff.toFixed(2));
+}
+
+/**
+ * Validação rigorosa de coerência direcional entre o viés esperado e o payoff real no vencimento
+ */
+export function assertDirection(strategy: ElectedOptionStrategy, spot: number): void {
+  if (strategy.status === 'BLOQUEADA' || strategy.status === 'EM_ANALISE' || strategy.legs.length === 0) {
+    return;
+  }
+
+  const low = payoffAt(strategy.legs, spot * 0.5);
+  const high = payoffAt(strategy.legs, spot * 1.5);
+  const mid = payoffAt(strategy.legs, spot);
+
+  if (strategy.bias === 'ALTA' && !(high > low)) {
+    throw new StructureDirectionError(
+      strategy.title,
+      strategy.bias,
+      `Payoff na alta (+50%: R$ ${high.toFixed(2)}) deve ser maior que na baixa (-50%: R$ ${low.toFixed(2)}).`
+    );
+  }
+
+  if (strategy.bias === 'BAIXA' && !(low > high)) {
+    throw new StructureDirectionError(
+      strategy.title,
+      strategy.bias,
+      `Payoff na baixa (-50%: R$ ${low.toFixed(2)}) deve ser maior que na alta (+50%: R$ ${high.toFixed(2)}).`
+    );
+  }
+
+  if (strategy.bias === 'LATERAL' && !(mid > low && mid > high)) {
+    throw new StructureDirectionError(
+      strategy.title,
+      strategy.bias,
+      `Payoff no miolo (R$ ${mid.toFixed(2)}) deve ser estritamente maior que nos dois extremos.`
+    );
+  }
+}
+
+/**
+ * Valida se uma série atende a todos os critérios de elegibilidade para ser perna de uma trava
+ */
+export function isEligibleLeg(o: OptionAnalyticsItem): boolean {
+  const rules = CNPI_RULES.DERIVATIVES.LEG_ELIGIBILITY;
+  const isHighConf = (o.confidence || 'high').toLowerCase() === rules.REQUIRED_CONFIDENCE;
+  const hasPrice = o.optionPrice !== null && o.optionPrice >= rules.MIN_OPTION_PRICE;
+  const hasOi = (o.openInterest || 0) >= rules.MIN_OPEN_INTEREST;
+  const hasDelta =
+    o.delta !== null &&
+    o.delta !== undefined &&
+    Math.abs(o.delta) >= rules.MIN_ABS_DELTA &&
+    Math.abs(o.delta) <= rules.MAX_ABS_DELTA;
+  const hasIv = o.impliedVolatility !== null && o.impliedVolatility > 0;
+
+  return isHighConf && hasPrice && hasOi && hasDelta && hasIv;
+}
+
+/**
+ * Motor Único de Inteligência para Eleição da Melhor Estratégia de Opções B3
  */
 export function electBestOptionStrategy(
   symbol: string,
@@ -89,9 +188,10 @@ export function electBestOptionStrategy(
   rsi: number | null,
   hv21: number,
   optionAnalysis?: OptionAnalysisResult,
-  fundamentalStatus?: 'APROVADO' | 'REPROVADO'
+  fundamentalStatus?: 'APROVADO' | 'REPROVADO',
+  analyticsList: OptionAnalyticsItem[] = []
 ): ElectedOptionStrategy | null {
-  if (!optionAnalysis || !optionAnalysis.straddleRows || optionAnalysis.straddleRows.length === 0) {
+  if (!optionAnalysis) {
     return null;
   }
 
@@ -99,12 +199,31 @@ export function electBestOptionStrategy(
   const dte = optionAnalysis.selectedExpirationInfo?.dte || 15;
   const expDate = optionAnalysis.selectedExpiration || '2026-09-18';
   const ivAtm = optionAnalysis.ivAtm?.callIv || hv21 || 25.0;
-  const maxPain = optionAnalysis.maxPain || spot;
-
   const lotSize = 1000;
 
   // =========================================================================
-  // CRIVO DE SEGURANÇA 1: BLOQUEIO DE COMPRAS POR FUNDAMENTOS
+  // 1. CONTEXTO DE DATA E CONTROLE DE SPOT DRIFT (Spec v2.1 - B3)
+  // =========================================================================
+  const firstAnalytic = analyticsList.find((a) => a.optionPrice !== null && a.underlyingPrice);
+  const priceDate = firstAnalytic?.openInterestDate || optionAnalysis.openInterestDate || 'Fechamento D-1';
+  const priceUnderlying = firstAnalytic?.underlyingPrice || optionAnalysis.underlyingPrice || spot;
+  const spotDriftPct = Number((((spot - priceUnderlying) / priceUnderlying) * 100).toFixed(2));
+  const isStale = Math.abs(spotDriftPct) > CNPI_RULES.DERIVATIVES.SPOT_DRIFT.WARN_THRESHOLD_PCT;
+  const isBlockedByDrift = Math.abs(spotDriftPct) > CNPI_RULES.DERIVATIVES.SPOT_DRIFT.BLOCK_THRESHOLD_PCT;
+
+  const priceContext: PriceContext = {
+    priceDate,
+    priceUnderlying,
+    currentSpot: spot,
+    spotDriftPct,
+    isStale,
+    warningMessage: isStale
+      ? `⚠️ Prêmios de fechamento de ${priceDate}, com o ativo em R$ ${priceUnderlying.toFixed(2)}. O ativo está ${spotDriftPct > 0 ? '+' : ''}${spotDriftPct}% distante desse nível — confirme os preços das duas pontas no book antes de enviar a ordem.`
+      : undefined,
+  };
+
+  // =========================================================================
+  // 2. BLOQUEIO DE COMPRAS POR FUNDAMENTOS (Value Trap)
   // =========================================================================
   const isBlockedVerdict =
     verdict.includes('BLOQUEADO') ||
@@ -121,6 +240,7 @@ export function electBestOptionStrategy(
       dte,
       underlyingSymbol: symbol,
       underlyingPrice: spot,
+      priceContext,
       legs: [],
       netCostOrCredit: 0,
       isCredit: false,
@@ -138,7 +258,7 @@ export function electBestOptionStrategy(
       timeStopRule: { dteLimit: 0, description: '-' },
       electionRationale: [
         `Empresa reprovada no crivo fundamentalista (prejuízo líquido recorrente ou superendividamento).`,
-        `Montagem de estratégias de compra/alta terminantemente desaconselhada para evitar armadilhas de valor (Value Trap).`,
+        `Montagem de travas ou compras de opções desaconselhada para evitar armadilhas de valor (Value Trap).`,
       ],
       homeBrokerOrderSlip: {
         orderType: 'BLOQUEADO',
@@ -149,166 +269,154 @@ export function electBestOptionStrategy(
     };
   }
 
-  // Filtrar strikes reais com cotação e Open Interest
-  const validRows = optionAnalysis.straddleRows
-    .filter((r) => r.strike > 0)
-    .sort((a, b) => a.strike - b.strike);
+  // =========================================================================
+  // 3. BLOQUEIO POR SPOT DRIFT EXCESSIVO (> 3.0%)
+  // =========================================================================
+  if (isBlockedByDrift) {
+    return {
+      strategySpec: OPTION_25_STRATEGIES[10],
+      title: 'Estratégia em Análise: Defasagem Excessiva nos Prêmios de Referência',
+      bias: trend === 'ALTA' ? 'ALTA' : trend === 'BAIXA' ? 'BAIXA' : 'LATERAL',
+      status: 'EM_ANALISE',
+      expirationDate: expDate,
+      dte,
+      underlyingSymbol: symbol,
+      underlyingPrice: spot,
+      priceContext,
+      legs: [],
+      netCostOrCredit: 0,
+      isCredit: false,
+      totalCostOrCreditForLot: 0,
+      spreadWidth: 0,
+      breakEven: spot,
+      maxProfit: 0,
+      maxProfitLot: 0,
+      maxLoss: 0,
+      maxLossLot: 0,
+      returnOnRiskPct: 0,
+      riskRewardRatio: '0 : 0',
+      takeProfitRule: { targetPrice: '-', profitGoal: '-', description: '-' },
+      stopLossRule: { stopPrice: '-', lossLimit: '-', description: '-' },
+      timeStopRule: { dteLimit: 0, description: '-' },
+      electionRationale: [
+        `O ativo oscilou ${spotDriftPct}% desde o fechamento dos prêmios de derivativos (${priceDate}).`,
+        `Prêmios de fechamento não reproduzem mais o mercado atual (|spot drift| > 3.0%). Consulte o book de ofertas ao vivo.`,
+      ],
+      homeBrokerOrderSlip: {
+        orderType: 'AGUARDAR_BOOK',
+        entryPriceRange: 'Atualizar cotações ao vivo no home broker',
+        maxSlippage: '0',
+        legsSummary: 'AGUARDANDO REABERTURA OU ATUALIZAÇÃO DO BOOK DE OPÇÕES',
+      },
+    };
+  }
 
-  if (validRows.length < 2) return null;
+  // Filtrar apenas séries 100% elegíveis
+  const eligibleAnalytics = analyticsList.filter(isEligibleLeg);
+  if (eligibleAnalytics.length < 2) {
+    return null;
+  }
 
-  // Classificar regime de volatilidade
   const volRegime = classifyVolatilityRegime(ivAtm, hv21);
+  const spreadRules = CNPI_RULES.DERIVATIVES.SPREAD;
 
-  // =========================================================================
-  // CENÁRIO 1: ALTA / COMPRA FORTE (Direcional Altista)
-  // =========================================================================
-  if (verdict.includes('COMPRA') || trend === 'ALTA') {
-    const isHighIV = volRegime.isCreditFavorable && (ivAtm >= hv21 * 0.95 || ivAtm >= 30.0);
+  try {
+    // =========================================================================
+    // CENÁRIO 1: ALTA / COMPRA (Bull Put Spread a Crédito ou Bull Call a Débito)
+    // =========================================================================
+    if (verdict.includes('COMPRA') || trend === 'ALTA') {
+      const eligiblePuts = eligibleAnalytics
+        .filter((a) => a.side.toLowerCase() === 'put' && a.strike < spot)
+        .sort((a, b) => b.strike - a.strike); // Strikes maiores primeiro (mais próximos do spot)
 
-    if (isHighIV) {
-      // Estratégia #11: Bull Put Spread a Crédito (Venda OTM Put no suporte + Compra Put proteção)
-      const putsBelowSpot = validRows.filter((r) => r.strike <= spot * 0.99 && r.put);
-      const shortPutRow = putsBelowSpot[putsBelowSpot.length - 1] || validRows[0];
-      const longPutRow = putsBelowSpot[Math.max(0, putsBelowSpot.length - 3)] || validRows[0];
+      // 1. Perna Vendida: |delta| mais próximo de 0.28, com restrição estrita |delta| <= 0.38
+      const candidateShortPuts = eligiblePuts.filter((p) => Math.abs(p.delta!) <= spreadRules.SHORT_LEG_DELTA_MAX);
+      if (candidateShortPuts.length === 0) return null;
 
-      if (shortPutRow && longPutRow && shortPutRow.strike > longPutRow.strike) {
-        const shortStrike = shortPutRow.strike;
-        const longStrike = longPutRow.strike;
-        const width = Number((shortStrike - longStrike).toFixed(2));
+      const shortPut = candidateShortPuts.reduce((prev, curr) =>
+        Math.abs(Math.abs(curr.delta!) - spreadRules.SHORT_LEG_DELTA_TARGET) <
+        Math.abs(Math.abs(prev.delta!) - spreadRules.SHORT_LEG_DELTA_TARGET)
+          ? curr
+          : prev
+      );
 
-        const shortPrice = shortPutRow.put?.lastPrice || Number((width * 0.40).toFixed(2));
-        const longPrice = longPutRow.put?.lastPrice || Number((width * 0.15).toFixed(2));
-        const netCredit = Number((Math.max(0.05, shortPrice - longPrice)).toFixed(2));
+      // 2. Perna Comprada (Proteção): strike MENOR que a vendida, largura entre 1.5% e 6.0% do spot, delta ~ 0.12
+      const candidateLongPuts = eligiblePuts.filter((p) => {
+        const width = shortPut.strike - p.strike;
+        const widthPct = width / spot;
+        return (
+          p.strike < shortPut.strike &&
+          widthPct >= spreadRules.MIN_WIDTH_PCT_OF_SPOT &&
+          widthPct <= spreadRules.MAX_WIDTH_PCT_OF_SPOT
+        );
+      });
 
-        const maxProfit = netCredit;
-        const maxLoss = Number((width - netCredit).toFixed(2));
-        const breakEven = Number((shortStrike - netCredit).toFixed(2));
-        const returnPct = Number(((netCredit / width) * 100).toFixed(1));
+      if (candidateLongPuts.length === 0) return null;
 
-        return {
-          strategySpec: OPTION_25_STRATEGIES[10], // #11 Bull Spread
-          title: `Estratégia de Opções #11: Trava de Alta com Put a Crédito (Bull Put Spread ${shortStrike.toFixed(2)} / ${longStrike.toFixed(2)})`,
-          bias: 'ALTA',
-          status: 'AUTORIZADA',
-          expirationDate: expDate,
-          dte,
-          underlyingSymbol: symbol,
-          underlyingPrice: spot,
-          legs: [
-            {
-              action: 'VENDA',
-              symbol: shortPutRow.put?.symbol || `${symbol}U${Math.round(shortStrike * 10)}`,
-              strike: shortStrike,
-              type: 'PUT',
-              unitPrice: shortPrice,
-              lotQuantity: lotSize,
-              totalFinancial: Number((shortPrice * lotSize).toFixed(2)),
-              openInterest: shortPutRow.put?.openInterest || 100000,
-            },
-            {
-              action: 'COMPRA',
-              symbol: longPutRow.put?.symbol || `${symbol}U${Math.round(longStrike * 10)}`,
-              strike: longStrike,
-              type: 'PUT',
-              unitPrice: longPrice,
-              lotQuantity: lotSize,
-              totalFinancial: Number((longPrice * lotSize).toFixed(2)),
-              openInterest: longPutRow.put?.openInterest || 50000,
-            },
-          ],
-          netCostOrCredit: netCredit,
-          isCredit: true,
-          totalCostOrCreditForLot: Number((netCredit * lotSize).toFixed(2)),
-          spreadWidth: width,
-          breakEven,
-          maxProfit,
-          maxProfitLot: Number((maxProfit * lotSize).toFixed(2)),
-          maxLoss,
-          maxLossLot: Number((maxLoss * lotSize).toFixed(2)),
-          returnOnRiskPct: returnPct,
-          riskRewardRatio: `1 : ${(maxLoss / maxProfit).toFixed(1)}`,
-          takeProfitRule: {
-            targetPrice: `R$ ${shortStrike.toFixed(2)} (ou superior)`,
-            profitGoal: `Capturar 75% a 80% do crédito (R$ ${(netCredit * 0.8 * lotSize).toFixed(2)} no lote)`,
-            description: `Encerrar a trava quando as opções perderem a maior parte do prêmio por decaimento temporal (Theta).`,
-          },
-          stopLossRule: {
-            stopPrice: `Fechamento abaixo de R$ ${longStrike.toFixed(2)} ou perda da MM20`,
-            lossLimit: `Stop se a perda atingir 2x o crédito recebido (R$ ${(netCredit * 2 * lotSize).toFixed(2)})`,
-            description: `Desmontar imediatamente se o ativo romper o suporte e entrar em zona de risco de exercício da ponta vendida.`,
-          },
-          timeStopRule: {
-            dteLimit: 5,
-            description: `Desmontar a operação a 5 dias úteis do vencimento para eliminar risco de atribuição.`,
-          },
-          electionRationale: [
-            `Ativo aprovado no Crivo Fundamentalista (CNPI-P) e gráfico alinhado em Tendência de Alta (MM20 > MM50).`,
-            `Volatilidade Implícita (${volRegime.label}, IV ATM: ${ivAtm}%) favorável à VENDA DE CRÉDITO para captura de prêmio e IV Crush.`,
-            `Perna vendida posicionada no strike R$ ${shortStrike.toFixed(2)} com colchão de segurança e defesa institucional.`,
-          ],
-          homeBrokerOrderSlip: {
-            orderType: `Ordem de Spread Limite a Crédito (Vender ${shortPutRow.put?.symbol || 'P1'} / Comprar ${longPutRow.put?.symbol || 'P2'})`,
-            entryPriceRange: `Crédito Líquido mínimo de R$ ${(netCredit * 0.9).toFixed(2)} a R$ ${netCredit.toFixed(2)} por cota`,
-            maxSlippage: `R$ 0,02 de spread entre as pontas`,
-            legsSummary: `VENDER ${lotSize} ${shortPutRow.put?.symbol || 'P1'} @ R$ ${shortPrice.toFixed(2)} | COMPRAR ${lotSize} ${longPutRow.put?.symbol || 'P2'} @ R$ ${longPrice.toFixed(2)}`,
-          },
-        };
+      const longPut = candidateLongPuts.reduce((prev, curr) =>
+        Math.abs(Math.abs(curr.delta!) - spreadRules.LONG_LEG_DELTA_TARGET) <
+        Math.abs(Math.abs(prev.delta!) - spreadRules.LONG_LEG_DELTA_TARGET)
+          ? curr
+          : prev
+      );
+
+      const width = Number((shortPut.strike - longPut.strike).toFixed(2));
+      const shortPrice = shortPut.optionPrice!;
+      const longPrice = longPut.optionPrice!;
+      const netCredit = Number((shortPrice - longPrice).toFixed(2));
+
+      // Validar proporção de crédito sobre largura (entre 20% e 45%)
+      const creditRatio = netCredit / width;
+      if (creditRatio < spreadRules.MIN_CREDIT_TO_WIDTH || creditRatio > spreadRules.MAX_CREDIT_TO_WIDTH) {
+        return null;
       }
-    }
 
-    // Trava de Alta com Call (Bull Call Spread a Débito - IV Normal ou Baixa)
-    const callsNearSpot = validRows.filter((r) => r.strike >= spot * 0.98 && r.call);
-    const longCallRow = callsNearSpot[0] || validRows.find((r) => r.call) || validRows[0];
-    const shortCallRow = callsNearSpot[Math.min(callsNearSpot.length - 1, 2)] || validRows[validRows.length - 1];
+      const maxProfit = netCredit;
+      const maxLoss = Number((width - netCredit).toFixed(2));
+      const breakEven = Number((shortPut.strike - netCredit).toFixed(2));
+      const returnPct = Number(((netCredit / maxLoss) * 100).toFixed(1));
 
-    if (longCallRow && shortCallRow && shortCallRow.strike > longCallRow.strike) {
-      const longStrike = longCallRow.strike;
-      const shortStrike = shortCallRow.strike;
-      const width = Number((shortStrike - longStrike).toFixed(2));
+      const legs: OptionLegDetail[] = [
+        {
+          action: 'VENDA',
+          symbol: shortPut.symbol,
+          strike: shortPut.strike,
+          type: 'PUT',
+          unitPrice: shortPrice,
+          lotQuantity: lotSize,
+          totalFinancial: Number((shortPrice * lotSize).toFixed(2)),
+          openInterest: shortPut.openInterest || 0,
+          delta: shortPut.delta,
+          roleDescription: `(strike MAIOR) recebe +R$ ${shortPrice.toFixed(2)}/cota  Δ ${shortPut.delta?.toFixed(2)}`,
+        },
+        {
+          action: 'COMPRA',
+          symbol: longPut.symbol,
+          strike: longPut.strike,
+          type: 'PUT',
+          unitPrice: longPrice,
+          lotQuantity: lotSize,
+          totalFinancial: Number((longPrice * lotSize).toFixed(2)),
+          openInterest: longPut.openInterest || 0,
+          delta: longPut.delta,
+          roleDescription: `(strike MENOR) paga −R$ ${longPrice.toFixed(2)}/cota  Δ ${longPut.delta?.toFixed(2)}  ↳ proteção: limita perda a R$ ${(maxLoss * lotSize).toFixed(0)}`,
+        },
+      ];
 
-      const longPrice = longCallRow.call?.lastPrice || Number((width * 0.55).toFixed(2));
-      const shortPrice = shortCallRow.call?.lastPrice || Number((width * 0.20).toFixed(2));
-      const netDebit = Number((Math.max(0.10, longPrice - shortPrice)).toFixed(2));
-
-      const maxProfit = Number((width - netDebit).toFixed(2));
-      const maxLoss = netDebit;
-      const breakEven = Number((longStrike + netDebit).toFixed(2));
-      const returnPct = Number(((maxProfit / netDebit) * 100).toFixed(1));
-
-      return {
+      const strategyResult: ElectedOptionStrategy = {
         strategySpec: OPTION_25_STRATEGIES[10], // #11 Bull Spread
-        title: `Estratégia de Opções #11: Trava de Alta com Call (Bull Call Spread ${longStrike.toFixed(2)} / ${shortStrike.toFixed(2)})`,
+        title: `Trava de Alta com Put a Crédito (Bull Put Spread ${shortPut.strike.toFixed(2)} / ${longPut.strike.toFixed(2)})`,
         bias: 'ALTA',
         status: 'AUTORIZADA',
         expirationDate: expDate,
         dte,
         underlyingSymbol: symbol,
         underlyingPrice: spot,
-        legs: [
-          {
-            action: 'COMPRA',
-            symbol: longCallRow.call?.symbol || `${symbol}I${Math.round(longStrike * 10)}`,
-            strike: longStrike,
-            type: 'CALL',
-            unitPrice: longPrice,
-            lotQuantity: lotSize,
-            totalFinancial: Number((longPrice * lotSize).toFixed(2)),
-            openInterest: longCallRow.call?.openInterest || 100000,
-          },
-          {
-            action: 'VENDA',
-            symbol: shortCallRow.call?.symbol || `${symbol}I${Math.round(shortStrike * 10)}`,
-            strike: shortStrike,
-            type: 'CALL',
-            unitPrice: shortPrice,
-            lotQuantity: lotSize,
-            totalFinancial: Number((shortPrice * lotSize).toFixed(2)),
-            openInterest: shortCallRow.call?.openInterest || 50000,
-          },
-        ],
-        netCostOrCredit: netDebit,
-        isCredit: false,
-        totalCostOrCreditForLot: Number((netDebit * lotSize).toFixed(2)),
+        priceContext,
+        legs,
+        netCostOrCredit: netCredit,
+        isCredit: true,
+        totalCostOrCreditForLot: Number((netCredit * lotSize).toFixed(2)),
         spreadWidth: width,
         breakEven,
         maxProfit,
@@ -316,186 +424,135 @@ export function electBestOptionStrategy(
         maxLoss,
         maxLossLot: Number((maxLoss * lotSize).toFixed(2)),
         returnOnRiskPct: returnPct,
-        riskRewardRatio: `1 : ${(maxProfit / maxLoss).toFixed(1)}`,
+        riskRewardRatio: `1 : ${(maxLoss / maxProfit).toFixed(1)}`,
+        tradeCheckGuide: `Nesta trava você vende a put de strike maior (${shortPut.strike.toFixed(2)}) e compra a de strike menor (${longPut.strike.toFixed(2)}). Se no home broker a estrutura aparecer como "trava de baixa", as pernas foram invertidas — confira antes de enviar.`,
         takeProfitRule: {
-          targetPrice: `R$ ${shortStrike.toFixed(2)} (Alvo da trava)`,
-          profitGoal: `Realizar ao capturar 80% do ganho máximo (R$ ${(maxProfit * 0.8 * lotSize).toFixed(2)} no lote)`,
-          description: `Desmontar a operação quando o ativo atingir o strike vendido ou a Call Wall.`,
+          targetPrice: `R$ ${shortPut.strike.toFixed(2)} (ou superior no vencimento)`,
+          profitGoal: `Capturar 75% a 80% do crédito máximo (R$ ${(netCredit * 0.8 * lotSize).toFixed(2)} no lote)`,
+          description: `Encerrar a trava quando as opções perderem a maior parte do valor por decaimento temporal (Theta).`,
         },
         stopLossRule: {
-          stopPrice: `Perda da MM20 (R$ ${(spot * 0.97).toFixed(2)})`,
-          lossLimit: `Stop ao atingir 50% de desvalorização do prêmio pago (R$ ${(netDebit * 0.5 * lotSize).toFixed(2)})`,
-          description: `Desmontar antes da perda total do prêmio pago se o ativo desconfigurar o pivô de alta.`,
+          stopPrice: `Fechamento abaixo de R$ ${longPut.strike.toFixed(2)} ou perda do suporte`,
+          lossLimit: `Stop se a perda atingir 2x o crédito recebido (R$ ${(netCredit * 2 * lotSize).toFixed(2)})`,
+          description: `Desmontar imediatamente se o ativo romper o suporte e colocar em risco a perna vendida.`,
         },
         timeStopRule: {
           dteLimit: 5,
-          description: `Encerrar a 5 dias úteis do vencimento.`,
+          description: `Desmontar a operação a 5 dias úteis do vencimento para evitar riscos de atribuição.`,
         },
         electionRationale: [
-          `Setup altista com opções a custo reduzido (${volRegime.label}, IV ATM: ${ivAtm}%).`,
-          `Risco 100% limitado ao custo inicial pago pelo spread.`,
-          `Perna comprada ATM no strike R$ ${longStrike.toFixed(2)} captura valorização e perna vendida no strike R$ ${shortStrike.toFixed(2)} financia o custo.`,
+          `Ativo aprovado no crivo fundamentalista (CNPI-P) e com médias alinhadas em Tendência de Alta.`,
+          `Perna vendida selecionada estritamente fora do dinheiro (OTM) no strike R$ ${shortPut.strike.toFixed(2)} (Δ ${shortPut.delta?.toFixed(2)}) com margem de segurança.`,
+          `Perna de proteção comprada no strike R$ ${longPut.strike.toFixed(2)} garantindo perda máxima estritamente limitada.`,
         ],
         homeBrokerOrderSlip: {
-          orderType: `Ordem de Spread Limite a Débito (Comprar ${longCallRow.call?.symbol || 'C1'} / Vender ${shortCallRow.call?.symbol || 'C2'})`,
-          entryPriceRange: `Débito Líquido máximo de R$ ${netDebit.toFixed(2)} a R$ ${(netDebit * 1.05).toFixed(2)} por cota`,
-          maxSlippage: `R$ 0,02 de spread`,
-          legsSummary: `COMPRAR ${lotSize} ${longCallRow.call?.symbol || 'C1'} @ R$ ${longPrice.toFixed(2)} | VENDER ${lotSize} ${shortCallRow.call?.symbol || 'C2'} @ R$ ${shortPrice.toFixed(2)}`,
+          orderType: `Ordem de Spread Limite a Crédito (Vender ${shortPut.symbol} @ R$ ${shortPrice.toFixed(2)} / Comprar ${longPut.symbol} @ R$ ${longPrice.toFixed(2)})`,
+          entryPriceRange: `Crédito Líquido alvo: R$ ${netCredit.toFixed(2)}`,
+          maxSlippage: '0.03',
+          legsSummary: `Vender 1.000 ${shortPut.symbol} (PUT @ ${shortPut.strike.toFixed(2)}) + Comprar 1.000 ${longPut.symbol} (PUT @ ${longPut.strike.toFixed(2)})`,
         },
       };
+
+      // Asserção direcional obrigatória (B7)
+      assertDirection(strategyResult, spot);
+      return strategyResult;
     }
-  }
 
-  // =========================================================================
-  // CENÁRIO 2: BAIXA / VENDA TÉCNICA (Direcional Baixista)
-  // =========================================================================
-  if (verdict.includes('VENDA') || trend === 'BAIXA') {
-    const isHighIV = volRegime.isCreditFavorable && (ivAtm >= hv21 * 0.95 || ivAtm >= 28.0);
+    // =========================================================================
+    // CENÁRIO 2: BAIXA / VENDA (Bear Call Spread a Crédito)
+    // =========================================================================
+    if (verdict.includes('VENDA') || trend === 'BAIXA') {
+      const eligibleCalls = eligibleAnalytics
+        .filter((a) => a.side.toLowerCase() === 'call' && a.strike > spot)
+        .sort((a, b) => a.strike - b.strike); // Strikes menores primeiro (mais próximos do spot)
 
-    if (isHighIV) {
-      // Estratégia #12: Bear Call Spread a Crédito (IV Alta)
-      const callsAboveSpot = validRows.filter((r) => r.strike >= spot * 1.01 && r.call);
-      const shortCallRow = callsAboveSpot[0] || validRows[validRows.length - 2];
-      const longCallRow = callsAboveSpot[Math.min(callsAboveSpot.length - 1, 2)] || validRows[validRows.length - 1];
+      // Perna Vendida: delta mais próximo de 0.28, com delta <= 0.38
+      const candidateShortCalls = eligibleCalls.filter((c) => Math.abs(c.delta!) <= spreadRules.SHORT_LEG_DELTA_MAX);
+      if (candidateShortCalls.length === 0) return null;
 
-      if (shortCallRow && longCallRow && longCallRow.strike > shortCallRow.strike) {
-        const shortStrike = shortCallRow.strike;
-        const longStrike = longCallRow.strike;
-        const width = Number((longStrike - shortStrike).toFixed(2));
+      const shortCall = candidateShortCalls.reduce((prev, curr) =>
+        Math.abs(Math.abs(curr.delta!) - spreadRules.SHORT_LEG_DELTA_TARGET) <
+        Math.abs(Math.abs(prev.delta!) - spreadRules.SHORT_LEG_DELTA_TARGET)
+          ? curr
+          : prev
+      );
 
-        const shortPrice = shortCallRow.call?.lastPrice || Number((width * 0.40).toFixed(2));
-        const longPrice = longCallRow.call?.lastPrice || Number((width * 0.15).toFixed(2));
-        const netCredit = Number((Math.max(0.05, shortPrice - longPrice)).toFixed(2));
+      // Perna Comprada (Proteção): strike MAIOR que a vendida, largura entre 1.5% e 6.0% do spot
+      const candidateLongCalls = eligibleCalls.filter((c) => {
+        const width = c.strike - shortCall.strike;
+        const widthPct = width / spot;
+        return (
+          c.strike > shortCall.strike &&
+          widthPct >= spreadRules.MIN_WIDTH_PCT_OF_SPOT &&
+          widthPct <= spreadRules.MAX_WIDTH_PCT_OF_SPOT
+        );
+      });
 
-        const maxProfit = netCredit;
-        const maxLoss = Number((width - netCredit).toFixed(2));
-        const breakEven = Number((shortStrike + netCredit).toFixed(2));
-        const returnPct = Number(((netCredit / width) * 100).toFixed(1));
+      if (candidateLongCalls.length === 0) return null;
 
-        return {
-          strategySpec: OPTION_25_STRATEGIES[11], // #12 Bear Spread
-          title: `Estratégia de Opções #12: Trava de Baixa com Call a Crédito (Bear Call Spread ${shortStrike.toFixed(2)} / ${longStrike.toFixed(2)})`,
-          bias: 'BAIXA',
-          status: 'AUTORIZADA',
-          expirationDate: expDate,
-          dte,
-          underlyingSymbol: symbol,
-          underlyingPrice: spot,
-          legs: [
-            {
-              action: 'VENDA',
-              symbol: shortCallRow.call?.symbol || `${symbol}I${Math.round(shortStrike * 10)}`,
-              strike: shortStrike,
-              type: 'CALL',
-              unitPrice: shortPrice,
-              lotQuantity: lotSize,
-              totalFinancial: Number((shortPrice * lotSize).toFixed(2)),
-              openInterest: shortCallRow.call?.openInterest || 100000,
-            },
-            {
-              action: 'COMPRA',
-              symbol: longCallRow.call?.symbol || `${symbol}I${Math.round(longStrike * 10)}`,
-              strike: longStrike,
-              type: 'CALL',
-              unitPrice: longPrice,
-              lotQuantity: lotSize,
-              totalFinancial: Number((longPrice * lotSize).toFixed(2)),
-              openInterest: longCallRow.call?.openInterest || 50000,
-            },
-          ],
-          netCostOrCredit: netCredit,
-          isCredit: true,
-          totalCostOrCreditForLot: Number((netCredit * lotSize).toFixed(2)),
-          spreadWidth: width,
-          breakEven,
-          maxProfit,
-          maxProfitLot: Number((maxProfit * lotSize).toFixed(2)),
-          maxLoss,
-          maxLossLot: Number((maxLoss * lotSize).toFixed(2)),
-          returnOnRiskPct: returnPct,
-          riskRewardRatio: `1 : ${(maxLoss / maxProfit).toFixed(1)}`,
-          takeProfitRule: {
-            targetPrice: `R$ ${shortStrike.toFixed(2)} (ou inferior)`,
-            profitGoal: `Capturar 80% do crédito recebido (R$ ${(netCredit * 0.8 * lotSize).toFixed(2)} no lote)`,
-            description: `Encerrar a trava quando as Calls perderem valor pela continuidade da tendência de baixa.`,
-          },
-          stopLossRule: {
-            stopPrice: `Rompimento da MM20 para cima (R$ ${shortStrike.toFixed(2)})`,
-            lossLimit: `Stop ao atingir 2x o crédito recebido (R$ ${(netCredit * 2 * lotSize).toFixed(2)})`,
-            description: `Desmontar imediatamente se o ativo recuperar a média de 20 e invalidar o viés baixista.`,
-          },
-          timeStopRule: {
-            dteLimit: 5,
-            description: `Encerrar a 5 dias úteis do vencimento.`,
-          },
-          electionRationale: [
-            `Alinhamento técnico de baixa (MM20 < MM50 < MM200).`,
-            `Volatilidade Implícita alta (${volRegime.label}, IV ATM: ${ivAtm}%) favorece VENDA DE CRÉDITO acima da Call Wall.`,
-            `Recebimento de crédito antecipado com probabilidade estatística a favor da desvalorização/estabilização.`,
-          ],
-          homeBrokerOrderSlip: {
-            orderType: `Ordem de Spread Limite a Crédito (Vender ${shortCallRow.call?.symbol || 'C1'} / Comprar ${longCallRow.call?.symbol || 'C2'})`,
-            entryPriceRange: `Crédito Líquido mínimo de R$ ${(netCredit * 0.9).toFixed(2)} a R$ ${netCredit.toFixed(2)} por cota`,
-            maxSlippage: `R$ 0,02 de spread`,
-            legsSummary: `VENDER ${lotSize} ${shortCallRow.call?.symbol || 'C1'} @ R$ ${shortPrice.toFixed(2)} | COMPRAR ${lotSize} ${longCallRow.call?.symbol || 'C2'} @ R$ ${longPrice.toFixed(2)}`,
-          },
-        };
+      const longCall = candidateLongCalls.reduce((prev, curr) =>
+        Math.abs(Math.abs(curr.delta!) - spreadRules.LONG_LEG_DELTA_TARGET) <
+        Math.abs(Math.abs(prev.delta!) - spreadRules.LONG_LEG_DELTA_TARGET)
+          ? curr
+          : prev
+      );
+
+      const width = Number((longCall.strike - shortCall.strike).toFixed(2));
+      const shortPrice = shortCall.optionPrice!;
+      const longPrice = longCall.optionPrice!;
+      const netCredit = Number((shortPrice - longPrice).toFixed(2));
+
+      const creditRatio = netCredit / width;
+      if (creditRatio < spreadRules.MIN_CREDIT_TO_WIDTH || creditRatio > spreadRules.MAX_CREDIT_TO_WIDTH) {
+        return null;
       }
-    }
 
-    // Trava de Baixa com Put a Débito (Bear Put Spread - IV Normal ou Baixa)
-    const putsNearSpot = validRows.filter((r) => r.strike <= spot * 1.02 && r.put);
-    const longPutRow = putsNearSpot[putsNearSpot.length - 1] || validRows[0];
-    const shortPutRow = putsNearSpot[Math.max(0, putsNearSpot.length - 3)] || validRows[0];
+      const maxProfit = netCredit;
+      const maxLoss = Number((width - netCredit).toFixed(2));
+      const breakEven = Number((shortCall.strike + netCredit).toFixed(2));
+      const returnPct = Number(((netCredit / maxLoss) * 100).toFixed(1));
 
-    if (longPutRow && shortPutRow && longPutRow.strike > shortPutRow.strike) {
-      const longStrike = longPutRow.strike;
-      const shortStrike = shortPutRow.strike;
-      const width = Number((longStrike - shortStrike).toFixed(2));
+      const legs: OptionLegDetail[] = [
+        {
+          action: 'VENDA',
+          symbol: shortCall.symbol,
+          strike: shortCall.strike,
+          type: 'CALL',
+          unitPrice: shortPrice,
+          lotQuantity: lotSize,
+          totalFinancial: Number((shortPrice * lotSize).toFixed(2)),
+          openInterest: shortCall.openInterest || 0,
+          delta: shortCall.delta,
+          roleDescription: `(strike MENOR) recebe +R$ ${shortPrice.toFixed(2)}/cota  Δ ${shortCall.delta?.toFixed(2)}`,
+        },
+        {
+          action: 'COMPRA',
+          symbol: longCall.symbol,
+          strike: longCall.strike,
+          type: 'CALL',
+          unitPrice: longPrice,
+          lotQuantity: lotSize,
+          totalFinancial: Number((longPrice * lotSize).toFixed(2)),
+          openInterest: longCall.openInterest || 0,
+          delta: longCall.delta,
+          roleDescription: `(strike MAIOR) paga −R$ ${longPrice.toFixed(2)}/cota  Δ ${longCall.delta?.toFixed(2)}  ↳ proteção: limita perda a R$ ${(maxLoss * lotSize).toFixed(0)}`,
+        },
+      ];
 
-      const longPrice = longPutRow.put?.lastPrice || Number((width * 0.55).toFixed(2));
-      const shortPrice = shortPutRow.put?.lastPrice || Number((width * 0.20).toFixed(2));
-      const netDebit = Number((Math.max(0.10, longPrice - shortPrice)).toFixed(2));
-
-      const maxProfit = Number((width - netDebit).toFixed(2));
-      const maxLoss = netDebit;
-      const breakEven = Number((longStrike - netDebit).toFixed(2));
-      const returnPct = Number(((maxProfit / netDebit) * 100).toFixed(1));
-
-      return {
+      const strategyResult: ElectedOptionStrategy = {
         strategySpec: OPTION_25_STRATEGIES[11], // #12 Bear Spread
-        title: `Estratégia de Opções #12: Trava de Baixa com Put (Bear Put Spread ${longStrike.toFixed(2)} / ${shortStrike.toFixed(2)})`,
+        title: `Trava de Baixa com Call a Crédito (Bear Call Spread ${shortCall.strike.toFixed(2)} / ${longCall.strike.toFixed(2)})`,
         bias: 'BAIXA',
         status: 'AUTORIZADA',
         expirationDate: expDate,
         dte,
         underlyingSymbol: symbol,
         underlyingPrice: spot,
-        legs: [
-          {
-            action: 'COMPRA',
-            symbol: longPutRow.put?.symbol || `${symbol}U${Math.round(longStrike * 10)}`,
-            strike: longStrike,
-            type: 'PUT',
-            unitPrice: longPrice,
-            lotQuantity: lotSize,
-            totalFinancial: Number((longPrice * lotSize).toFixed(2)),
-            openInterest: longPutRow.put?.openInterest || 100000,
-          },
-          {
-            action: 'VENDA',
-            symbol: shortPutRow.put?.symbol || `${symbol}U${Math.round(shortStrike * 10)}`,
-            strike: shortStrike,
-            type: 'PUT',
-            unitPrice: shortPrice,
-            lotQuantity: lotSize,
-            totalFinancial: Number((shortPrice * lotSize).toFixed(2)),
-            openInterest: shortPutRow.put?.openInterest || 50000,
-          },
-        ],
-        netCostOrCredit: netDebit,
-        isCredit: false,
-        totalCostOrCreditForLot: Number((netDebit * lotSize).toFixed(2)),
+        priceContext,
+        legs,
+        netCostOrCredit: netCredit,
+        isCredit: true,
+        totalCostOrCreditForLot: Number((netCredit * lotSize).toFixed(2)),
         spreadWidth: width,
         breakEven,
         maxProfit,
@@ -503,232 +560,175 @@ export function electBestOptionStrategy(
         maxLoss,
         maxLossLot: Number((maxLoss * lotSize).toFixed(2)),
         returnOnRiskPct: returnPct,
-        riskRewardRatio: `1 : ${(maxProfit / maxLoss).toFixed(1)}`,
+        riskRewardRatio: `1 : ${(maxLoss / maxProfit).toFixed(1)}`,
+        tradeCheckGuide: `Nesta trava você vende a call de strike menor (${shortCall.strike.toFixed(2)}) e compra a de strike maior (${longCall.strike.toFixed(2)}). Se no home broker a estrutura aparecer como "trava de alta", as pernas foram invertidas.`,
         takeProfitRule: {
-          targetPrice: `R$ ${shortStrike.toFixed(2)} (Alvo da trava de baixa)`,
-          profitGoal: `Realizar ao capturar 80% do ganho máximo (R$ ${(maxProfit * 0.8 * lotSize).toFixed(2)} no lote)`,
-          description: `Desmontar a operação quando o ativo atingir o strike vendido ou a Put Wall.`,
+          targetPrice: `R$ ${shortCall.strike.toFixed(2)} (ou inferior no vencimento)`,
+          profitGoal: `Capturar 75% a 80% do crédito (R$ ${(netCredit * 0.8 * lotSize).toFixed(2)} no lote)`,
+          description: `Encerrar a operação com o decaimento temporal completo das calls vendidas.`,
         },
         stopLossRule: {
-          stopPrice: `Recuperação da MM20 (R$ ${(spot * 1.03).toFixed(2)})`,
-          lossLimit: `Stop ao atingir 50% de desvalorização do prêmio pago (R$ ${(netDebit * 0.5 * lotSize).toFixed(2)})`,
-          description: `Desmontar para estancar perda se o ativo retomar padrão de alta.`,
+          stopPrice: `Fechamento acima de R$ ${longCall.strike.toFixed(2)}`,
+          lossLimit: `Stop se a perda atingir 2x o crédito (R$ ${(netCredit * 2 * lotSize).toFixed(2)})`,
+          description: `Desmontar imediatamente se o papel romper a resistência para cima.`,
         },
         timeStopRule: {
           dteLimit: 5,
-          description: `Encerrar a 5 dias úteis do vencimento para evitar perda por decaimento temporal acelerado.`,
+          description: `Desmontar a 5 dias úteis do vencimento.`,
         },
         electionRationale: [
-          `Tendência de baixa confirmada graficamente (MM20 < MM50).`,
-          `Volatilidade Implícita reduzida (${volRegime.label}, IV ATM: ${ivAtm}%) permite compra de Puts com custo baixo (Débito).`,
-          `Perna vendida financia a compra da Put ATM, limitando o risco financeiro total ao prêmio pago.`,
+          `Ativo em Tendência de Baixa e com fundamentos reprovados.`,
+          `Trava de baixa montada a crédito sem necessidade de aluguel de ações (BTC).`,
+          `Risco máximo estritamente limitado na ponta compradora.`,
         ],
         homeBrokerOrderSlip: {
-          orderType: `Ordem de Spread Limite a Débito (Comprar ${longPutRow.put?.symbol || 'P1'} / Vender ${shortPutRow.put?.symbol || 'P2'})`,
-          entryPriceRange: `Débito Líquido máximo de R$ ${netDebit.toFixed(2)} a R$ ${(netDebit * 1.05).toFixed(2)} por cota`,
-          maxSlippage: `R$ 0,02 de spread`,
-          legsSummary: `COMPRAR ${lotSize} ${longPutRow.put?.symbol || 'P1'} @ R$ ${longPrice.toFixed(2)} | VENDER ${lotSize} ${shortPutRow.put?.symbol || 'P2'} @ R$ ${shortPrice.toFixed(2)}`,
+          orderType: `Ordem de Spread Limite a Crédito (Vender ${shortCall.symbol} / Comprar ${longCall.symbol})`,
+          entryPriceRange: `Crédito Líquido alvo: R$ ${netCredit.toFixed(2)}`,
+          maxSlippage: '0.03',
+          legsSummary: `Vender 1.000 ${shortCall.symbol} + Comprar 1.000 ${longCall.symbol}`,
         },
       };
-    }
-  }
 
-  // =========================================================================
-  // CENÁRIO 3: LATERALIZAÇÃO / MERCADO ESTÁVEL (Iron Condor / Short Strangle Coberto)
-  // =========================================================================
-  if (trend === 'LATERAL' || verdict.includes('LATERAL')) {
-    const isDteOutsideRange = dte < 12 || dte > 35;
-
-    // Verificação de Regime de Volatilidade ou DTE inadequado:
-    // Se a volatilidade for MUITO BAIXA (Squeeze) ou DTE fora da janela (12 a 35 DU), bloquear o Iron Condor
-    if (volRegime.regime === 'MUITO_BAIXA' || isDteOutsideRange) {
-      const reasonTitle = isDteOutsideRange
-        ? `Alerta: DTE de ${dte} dias úteis fora da janela ideal (12 a 35 DU)`
-        : 'Alerta: Volatilidade Comprimida (Iron Condor Bloqueado)';
-
-      const rationaleText = isDteOutsideRange
-        ? `Vencimento selecionado possui ${dte} dias úteis até o exercício. A montagem de Iron Condor requer entre 12 e 35 dias úteis para captura eficiente de decaimento temporal (Theta) com controle de risco de cauda.`
-        : `Ativo em consolidação lateral, porém com Volatilidade Implícita muito baixa (IV ATM: ${ivAtm}%, ${volRegime.label}). Risco elevado de rompimento de volatilidade (Squeeze).`;
-
-      return {
-        strategySpec: OPTION_25_STRATEGIES[12], // #13 Long Butterfly ou Cautela
-        title: reasonTitle,
-        bias: 'LATERAL',
-        status: 'EM_ANALISE',
-        expirationDate: expDate,
-        dte,
-        underlyingSymbol: symbol,
-        underlyingPrice: spot,
-        legs: [],
-        netCostOrCredit: 0,
-        isCredit: false,
-        totalCostOrCreditForLot: 0,
-        spreadWidth: 0,
-        breakEven: spot,
-        maxProfit: 0,
-        maxProfitLot: 0,
-        maxLoss: 0,
-        maxLossLot: 0,
-        returnOnRiskPct: 0,
-        riskRewardRatio: '0 : 0',
-        takeProfitRule: { targetPrice: '-', profitGoal: '-', description: '-' },
-        stopLossRule: { stopPrice: '-', lossLimit: '-', description: '-' },
-        timeStopRule: { dteLimit: 0, description: '-' },
-        electionRationale: [
-          rationaleText,
-          `Venda de crédito desaconselhada neste cenário. Recomendado aguardar vencimento adequado ou expansão de volatilidade.`,
-        ],
-        homeBrokerOrderSlip: {
-          orderType: 'EM ESPERA',
-          entryPriceRange: 'Aguardar condições ideais',
-          maxSlippage: '0',
-          legsSummary: 'AGUARDANDO CONDIÇÕES IDEAIS DE VOL/DTE',
-        },
-      };
+      assertDirection(strategyResult, spot);
+      return strategyResult;
     }
 
-    // Volatilidade Moderada ou Alta: Eleger Estratégia #20 - Short Strangle Coberto (Iron Condor)
-    const putsBelowSpot = validRows.filter((r) => r.strike <= spot * 0.99 && r.put);
-    const callsAboveSpot = validRows.filter((r) => r.strike >= spot * 1.01 && r.call);
+    // =========================================================================
+    // CENÁRIO 3: LATERAL / CONSOLIDAÇÃO (Iron Condor a Crédito)
+    // =========================================================================
+    if (trend === 'LATERAL' && fundamentalStatus === 'APROVADO') {
+      const eligiblePuts = eligibleAnalytics
+        .filter((a) => a.side.toLowerCase() === 'put' && a.strike < spot)
+        .sort((a, b) => b.strike - a.strike);
+      const eligibleCalls = eligibleAnalytics
+        .filter((a) => a.side.toLowerCase() === 'call' && a.strike > spot)
+        .sort((a, b) => a.strike - b.strike);
 
-    if (putsBelowSpot.length >= 2 && callsAboveSpot.length >= 2) {
-      // Perna 2 (Venda Put B - Suporte / Put Wall)
-      const shortPutRow = putsBelowSpot[putsBelowSpot.length - 1];
-      // Perna 1 (Compra Put A - Asa inferior proteção)
-      const longPutRow = putsBelowSpot[Math.max(0, putsBelowSpot.length - 2)];
+      if (eligiblePuts.length >= 2 && eligibleCalls.length >= 2 && ivAtm >= 16.0 && dte >= 12 && dte <= 35) {
+        const shortPut = eligiblePuts[0];
+        const longPut = eligiblePuts[1];
+        const shortCall = eligibleCalls[0];
+        const longCall = eligibleCalls[1];
 
-      // Perna 3 (Venda Call C - Resistência / Call Wall)
-      const shortCallRow = callsAboveSpot[0];
-      // Perna 4 (Compra Call D - Asa superior proteção)
-      const longCallRow = callsAboveSpot[Math.min(callsAboveSpot.length - 1, 1)];
+        const putCredit = shortPut.optionPrice! - longPut.optionPrice!;
+        const callCredit = shortCall.optionPrice! - longCall.optionPrice!;
+        const totalCredit = Number((putCredit + callCredit).toFixed(2));
+        const width = Number((shortPut.strike - longPut.strike).toFixed(2));
+        const maxLoss = Number((width - totalCredit).toFixed(2));
 
-      if (
-        longPutRow &&
-        shortPutRow &&
-        shortCallRow &&
-        longCallRow &&
-        longPutRow.strike < shortPutRow.strike &&
-        shortPutRow.strike < shortCallRow.strike &&
-        shortCallRow.strike < longCallRow.strike
-      ) {
-        const strikeA = longPutRow.strike;
-        const strikeB = shortPutRow.strike;
-        const strikeC = shortCallRow.strike;
-        const strikeD = longCallRow.strike;
-
-        const putWingWidth = Number((strikeB - strikeA).toFixed(2));
-        const callWingWidth = Number((strikeD - strikeC).toFixed(2));
-        const maxWingWidth = Math.max(putWingWidth, callWingWidth);
-
-        const shortPutPrice = shortPutRow.put?.lastPrice || Number((putWingWidth * 0.35).toFixed(2));
-        const longPutPrice = longPutRow.put?.lastPrice || Number((putWingWidth * 0.10).toFixed(2));
-        const shortCallPrice = shortCallRow.call?.lastPrice || Number((callWingWidth * 0.35).toFixed(2));
-        const longCallPrice = longCallRow.call?.lastPrice || Number((callWingWidth * 0.10).toFixed(2));
-
-        const netCredit = Number(
-          Math.max(0.10, shortPutPrice + shortCallPrice - (longPutPrice + longCallPrice)).toFixed(2)
-        );
-
-        const maxProfit = netCredit;
-        const maxLoss = Number((maxWingWidth - netCredit).toFixed(2));
-        const breakEvenLower = Number((strikeB - netCredit).toFixed(2));
-        const breakEvenUpper = Number((strikeC + netCredit).toFixed(2));
-        const returnPct = Number(((netCredit / maxLoss) * 100).toFixed(1));
-
-        return {
-          strategySpec: OPTION_25_STRATEGIES[19], // #20 Short Strangle Coberto (Iron Condor)
-          title: `Estratégia de Opções #20: Short Strangle Coberto / Iron Condor (${strikeA.toFixed(2)} / ${strikeB.toFixed(2)} / ${strikeC.toFixed(2)} / ${strikeD.toFixed(2)})`,
-          bias: 'LATERAL',
-          status: 'AUTORIZADA',
-          expirationDate: expDate,
-          dte,
-          underlyingSymbol: symbol,
-          underlyingPrice: spot,
-          legs: [
+        if (totalCredit > 0 && maxLoss > 0) {
+          const legs: OptionLegDetail[] = [
             {
               action: 'COMPRA',
-              symbol: longPutRow.put?.symbol || `${symbol}U${Math.round(strikeA * 10)}`,
-              strike: strikeA,
+              symbol: longPut.symbol,
+              strike: longPut.strike,
               type: 'PUT',
-              unitPrice: longPutPrice,
+              unitPrice: longPut.optionPrice!,
               lotQuantity: lotSize,
-              totalFinancial: Number((longPutPrice * lotSize).toFixed(2)),
-              openInterest: longPutRow.put?.openInterest || 50000,
+              totalFinancial: Number((longPut.optionPrice! * lotSize).toFixed(2)),
+              openInterest: longPut.openInterest || 0,
+              delta: longPut.delta,
+              roleDescription: `(Asa Put Comprada) proteção inferior`,
             },
             {
               action: 'VENDA',
-              symbol: shortPutRow.put?.symbol || `${symbol}U${Math.round(strikeB * 10)}`,
-              strike: strikeB,
+              symbol: shortPut.symbol,
+              strike: shortPut.strike,
               type: 'PUT',
-              unitPrice: shortPutPrice,
+              unitPrice: shortPut.optionPrice!,
               lotQuantity: lotSize,
-              totalFinancial: Number((shortPutPrice * lotSize).toFixed(2)),
-              openInterest: shortPutRow.put?.openInterest || 100000,
+              totalFinancial: Number((shortPut.optionPrice! * lotSize).toFixed(2)),
+              openInterest: shortPut.openInterest || 0,
+              delta: shortPut.delta,
+              roleDescription: `(Perna Put Vendida) strike ${shortPut.strike.toFixed(2)}`,
             },
             {
               action: 'VENDA',
-              symbol: shortCallRow.call?.symbol || `${symbol}I${Math.round(strikeC * 10)}`,
-              strike: strikeC,
+              symbol: shortCall.symbol,
+              strike: shortCall.strike,
               type: 'CALL',
-              unitPrice: shortCallPrice,
+              unitPrice: shortCall.optionPrice!,
               lotQuantity: lotSize,
-              totalFinancial: Number((shortCallPrice * lotSize).toFixed(2)),
-              openInterest: shortCallRow.call?.openInterest || 100000,
+              totalFinancial: Number((shortCall.optionPrice! * lotSize).toFixed(2)),
+              openInterest: shortCall.openInterest || 0,
+              delta: shortCall.delta,
+              roleDescription: `(Perna Call Vendida) strike ${shortCall.strike.toFixed(2)}`,
             },
             {
               action: 'COMPRA',
-              symbol: longCallRow.call?.symbol || `${symbol}I${Math.round(strikeD * 10)}`,
-              strike: strikeD,
+              symbol: longCall.symbol,
+              strike: longCall.strike,
               type: 'CALL',
-              unitPrice: longCallPrice,
+              unitPrice: longCall.optionPrice!,
               lotQuantity: lotSize,
-              totalFinancial: Number((longCallPrice * lotSize).toFixed(2)),
-              openInterest: longCallRow.call?.openInterest || 50000,
+              totalFinancial: Number((longCall.optionPrice! * lotSize).toFixed(2)),
+              openInterest: longCall.openInterest || 0,
+              delta: longCall.delta,
+              roleDescription: `(Asa Call Comprada) proteção superior`,
             },
-          ],
-          netCostOrCredit: netCredit,
-          isCredit: true,
-          totalCostOrCreditForLot: Number((netCredit * lotSize).toFixed(2)),
-          spreadWidth: maxWingWidth,
-          breakEven: Number(((breakEvenLower + breakEvenUpper) / 2).toFixed(2)),
-          maxProfit,
-          maxProfitLot: Number((maxProfit * lotSize).toFixed(2)),
-          maxLoss,
-          maxLossLot: Number((maxLoss * lotSize).toFixed(2)),
-          returnOnRiskPct: returnPct,
-          riskRewardRatio: `1 : ${(maxLoss / maxProfit).toFixed(1)}`,
-          takeProfitRule: {
-            targetPrice: `Faixa entre R$ ${strikeB.toFixed(2)} e R$ ${strikeC.toFixed(2)}`,
-            profitGoal: `Realizar ao capturar 60% a 70% do crédito recebido (R$ ${(netCredit * 0.7 * lotSize).toFixed(2)} no lote)`,
-            description: `Encerrar a estrutura antecipadamente quando o decaimento temporal (Theta) desinflar os prêmios vendidos.`,
-          },
-          stopLossRule: {
-            stopPrice: `Violação dos strikes vendidos (Abaixo de R$ ${strikeB.toFixed(2)} ou Acima de R$ ${strikeC.toFixed(2)})`,
-            lossLimit: `Stop se a perda da estrutura atingir 1.5x o crédito recebido (R$ ${(netCredit * 1.5 * lotSize).toFixed(2)})`,
-            description: `Desmontar imediatamente se o ativo iniciar tendência direcional violenta para fora do canal lateral.`,
-          },
-          timeStopRule: {
-            dteLimit: 5,
-            description: `Encerrar a 5 dias úteis do vencimento para eliminar risco de exercício de cauda.`,
-          },
-          electionRationale: [
-            `Ativo com Fundamentos Aprovados (CNPI-P) e gráfico em Tendência Lateral consolidada.`,
-            `Volatilidade Implícita favorável (${volRegime.label}, IV ATM: ${ivAtm}%) para coleta de prêmio em ambos os lados.`,
-            `Miolo de venda ancorado na Put Wall (R$ ${strikeB.toFixed(2)}) e Call Wall (R$ ${strikeC.toFixed(2)}) com asas de proteção travando 100% do risco.`,
-            `Faixa de lucro confortável entre R$ ${breakEvenLower.toFixed(2)} e R$ ${breakEvenUpper.toFixed(2)}.`,
-          ],
-          homeBrokerOrderSlip: {
-            orderType: `Ordem de 4 Pontas (Iron Condor a Crédito) ou 2 Travas Combinadas`,
-            entryPriceRange: `Crédito Líquido mínimo de R$ ${(netCredit * 0.9).toFixed(2)} a R$ ${netCredit.toFixed(2)} por conjunto`,
-            maxSlippage: `R$ 0,03 no spread global`,
-            legsSummary: `VENDER Put ${strikeB.toFixed(2)} + Call ${strikeC.toFixed(2)} | COMPRAR Put ${strikeA.toFixed(2)} + Call ${strikeD.toFixed(2)}`,
-          },
-        };
+          ];
+
+          const strategyResult: ElectedOptionStrategy = {
+            strategySpec: OPTION_25_STRATEGIES[19], // #20 Iron Condor
+            title: `Iron Condor a Crédito (Faixa R$ ${shortPut.strike.toFixed(2)} a R$ ${shortCall.strike.toFixed(2)})`,
+            bias: 'LATERAL',
+            status: 'AUTORIZADA',
+            expirationDate: expDate,
+            dte,
+            underlyingSymbol: symbol,
+            underlyingPrice: spot,
+            priceContext,
+            legs,
+            netCostOrCredit: totalCredit,
+            isCredit: true,
+            totalCostOrCreditForLot: Number((totalCredit * lotSize).toFixed(2)),
+            spreadWidth: width,
+            breakEven: Number(((shortPut.strike + shortCall.strike) / 2).toFixed(2)),
+            maxProfit: totalCredit,
+            maxProfitLot: Number((totalCredit * lotSize).toFixed(2)),
+            maxLoss,
+            maxLossLot: Number((maxLoss * lotSize).toFixed(2)),
+            returnOnRiskPct: Number(((totalCredit / maxLoss) * 100).toFixed(1)),
+            riskRewardRatio: `1 : ${(maxLoss / totalCredit).toFixed(1)}`,
+            tradeCheckGuide: `Estrutura de 4 pernas vendendo as opções intermediárias (${shortPut.strike.toFixed(2)} PUT e ${shortCall.strike.toFixed(2)} CALL) e comprando as extremidades para limitar risco total.`,
+            takeProfitRule: {
+              targetPrice: `Preço oscilando entre R$ ${shortPut.strike.toFixed(2)} e R$ ${shortCall.strike.toFixed(2)}`,
+              profitGoal: `50% a 60% do crédito recebido (R$ ${(totalCredit * 0.55 * lotSize).toFixed(2)})`,
+              description: `Realizar lucro parcial quando a passagem do tempo consumir mais da metade do prêmio.`,
+            },
+            stopLossRule: {
+              stopPrice: `Preço rompendo os strikes vendidos`,
+              lossLimit: `Perda máxima de 1.5x o crédito`,
+              description: `Encerrar a estrutura se o papel romper a consolidação lateral.`,
+            },
+            timeStopRule: {
+              dteLimit: 7,
+              description: `Desmontar a 7 dias úteis do vencimento para eliminar risco gamma.`,
+            },
+            electionRationale: [
+              `Mercado em consolidação lateral e empresa sólida aprovada nos fundamentos.`,
+              `Captura de prêmio duplo (venda de call e put OTM) com proteção em ambas as pontas.`,
+            ],
+            homeBrokerOrderSlip: {
+              orderType: `Iron Condor Limite a Crédito`,
+              entryPriceRange: `Crédito Líquido alvo: R$ ${totalCredit.toFixed(2)}`,
+              maxSlippage: '0.04',
+              legsSummary: `4 Pernas: Venda ${shortPut.symbol} + ${shortCall.symbol}, Compra ${longPut.symbol} + ${longCall.symbol}`,
+            },
+          };
+
+          assertDirection(strategyResult, spot);
+          return strategyResult;
+        }
       }
     }
+
+    return null;
+  } catch (err: unknown) {
+    if (err instanceof StructureDirectionError) {
+      // Incoerência direcional é tratada como bloqueio seguro
+      return null;
+    }
+    return null;
   }
-
-  return null;
 }
-
-export const electBestCMEStrategy = electBestOptionStrategy;

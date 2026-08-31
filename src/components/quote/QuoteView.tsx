@@ -99,8 +99,15 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
   const verdict = data?.verdict;
   const barrier = data?.barrierAlert;
   const ind = data?.indicators;
+  const plan = data?.tradePlan;
   const elected = data?.electedOptionStrategy;
   const history = data?.historicalDataPrice || [];
+
+  const biasFromTrend = (trend?: string): 'LONG' | 'SHORT' | 'NEUTRO' => {
+    if (trend === 'ALTA') return 'LONG';
+    if (trend === 'BAIXA') return 'SHORT';
+    return 'NEUTRO';
+  };
 
   const visibleHistory = history.slice(Math.max(0, history.length - chartPeriod));
 
@@ -515,20 +522,20 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                           );
                         })}
 
-                        {ind?.riskReward.resistances[0] && (
+                        {ind?.resistances && ind.resistances[0] && (
                           <g>
-                            <line x1={paddingLeft} y1={getYPrice(ind.riskReward.resistances[0])} x2={width - paddingRight} y2={getYPrice(ind.riskReward.resistances[0])} stroke="#ef4444" strokeDasharray="4 4" strokeWidth="1.5" />
-                            <text x={width - paddingRight + 6} y={getYPrice(ind.riskReward.resistances[0]) + 3} fill="#ef4444" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                              RES {ind.riskReward.resistances[0].toFixed(2)}
+                            <line x1={paddingLeft} y1={getYPrice(ind.resistances[0])} x2={width - paddingRight} y2={getYPrice(ind.resistances[0])} stroke="#ef4444" strokeDasharray="4 4" strokeWidth="1.5" />
+                            <text x={width - paddingRight + 6} y={getYPrice(ind.resistances[0]) + 3} fill="#ef4444" fontSize="9" fontFamily="monospace" fontWeight="bold">
+                              RES {ind.resistances[0].toFixed(2)}
                             </text>
                           </g>
                         )}
 
-                        {ind?.riskReward.supports[0] && (
+                        {ind?.supports && ind.supports[0] && (
                           <g>
-                            <line x1={paddingLeft} y1={getYPrice(ind.riskReward.supports[0])} x2={width - paddingRight} y2={getYPrice(ind.riskReward.supports[0])} stroke="#10b981" strokeDasharray="4 4" strokeWidth="1.5" />
-                            <text x={width - paddingRight + 6} y={getYPrice(ind.riskReward.supports[0]) + 3} fill="#10b981" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                              SUP {ind.riskReward.supports[0].toFixed(2)}
+                            <line x1={paddingLeft} y1={getYPrice(ind.supports[0])} x2={width - paddingRight} y2={getYPrice(ind.supports[0])} stroke="#10b981" strokeDasharray="4 4" strokeWidth="1.5" />
+                            <text x={width - paddingRight + 6} y={getYPrice(ind.supports[0]) + 3} fill="#10b981" fontSize="9" fontFamily="monospace" fontWeight="bold">
+                              SUP {ind.supports[0].toFixed(2)}
                             </text>
                           </g>
                         )}
@@ -674,7 +681,7 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                       </h4>
                     </div>
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-cyan-950 text-cyan-400 border border-cyan-500/30">
-                      R:R 1 : {ind?.riskReward.riskRewardRatio || 1.8}
+                      R:R {plan ? `${plan.riskRewardRatio.toFixed(2)} : 1` : '—'}
                     </span>
                   </div>
 
@@ -693,28 +700,32 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                       <div className="p-3 bg-[#111827] rounded-xl border border-gray-800">
                         <span className="text-[10px] text-gray-400 block font-sans">VIÉS TÉCNICO</span>
                         <span className="text-sm font-bold text-emerald-400 mt-1 block">
-                          {ind?.riskReward.bias || 'LONG'} ({ind?.riskReward.conviction || 'MÉDIA'})
+                          {biasFromTrend(data?.trendAnalysis?.trend)}
                         </span>
                       </div>
 
                       <div className="p-3 bg-[#111827] rounded-xl border border-red-500/20">
                         <span className="text-[10px] text-red-400 block font-sans">STOP TÉCNICO</span>
                         <span className="text-sm font-bold text-red-400 mt-1 block">
-                          R$ {ind?.riskReward.stopLoss.toFixed(2) || '0.00'}
+                          {plan ? `R$ ${plan.stop.toFixed(2)}` : '—'}
                         </span>
                       </div>
 
                       <div className="p-3 bg-[#111827] rounded-xl border border-emerald-500/20">
-                        <span className="text-[10px] text-emerald-400 block font-sans">ALVO 1 (1.0x RISCO)</span>
+                        <span className="text-[10px] text-emerald-400 block font-sans">
+                          {biasFromTrend(data?.trendAnalysis?.trend) === 'SHORT' ? 'ALVO 1 (SUPORTE)' : 'ALVO 1 (RESISTÊNCIA)'}
+                        </span>
                         <span className="text-sm font-bold text-emerald-400 mt-1 block">
-                          R$ {ind?.riskReward.target1.toFixed(2) || '0.00'}
+                          {plan ? `R$ ${plan.target1.toFixed(2)}` : '—'}
                         </span>
                       </div>
 
                       <div className="p-3 bg-[#111827] rounded-xl border border-emerald-500/20">
-                        <span className="text-[10px] text-emerald-400 block font-sans">ALVO 2 (2.0x RISCO)</span>
+                        <span className="text-[10px] text-emerald-400 block font-sans">
+                          {biasFromTrend(data?.trendAnalysis?.trend) === 'SHORT' ? 'ALVO 2 (2º SUPORTE)' : 'ALVO 2 (2ª RESISTÊNCIA)'}
+                        </span>
                         <span className="text-sm font-bold text-emerald-400 mt-1 block">
-                          R$ {ind?.riskReward.target2.toFixed(2) || '0.00'}
+                          {plan ? `R$ ${plan.target2.toFixed(2)}` : '—'}
                         </span>
                       </div>
                     </div>
@@ -724,13 +735,17 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                     <div className="flex items-center justify-between p-2 bg-[#111827]/70 rounded-lg">
                       <span className="text-gray-400 font-sans">Níveis de Suporte:</span>
                       <span className="text-emerald-400 font-bold">
-                        {ind?.riskReward.supports.map((s) => `R$ ${s.toFixed(2)}`).join(' | ')}
+                        {ind?.supports && ind.supports.length > 0
+                          ? ind.supports.map((s) => `R$ ${s.toFixed(2)}`).join(' | ')
+                          : '—'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between p-2 bg-[#111827]/70 rounded-lg">
                       <span className="text-gray-400 font-sans">Níveis de Resistência:</span>
                       <span className="text-red-400 font-bold">
-                        {ind?.riskReward.resistances.map((r) => `R$ ${r.toFixed(2)}`).join(' | ')}
+                        {ind?.resistances && ind.resistances.length > 0
+                          ? ind.resistances.map((r) => `R$ ${r.toFixed(2)}`).join(' | ')
+                          : '—'}
                       </span>
                     </div>
                   </div>
@@ -1208,58 +1223,75 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                       </p>
                     </div>
                     <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-xl text-xs font-bold font-mono">
-                      VIÉS: {isVenda ? 'SHORT / VENDA' : (ind?.riskReward.bias || 'LONG')}
+                      VIÉS: {isVenda ? 'SHORT / VENDA' : biasFromTrend(data?.trendAnalysis?.trend)}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 font-mono">
                     <div className="p-3.5 bg-[#111827] rounded-xl border border-gray-800">
-                      <span className="text-[10px] text-gray-400 block font-sans">PREÇO DE REFERÊNCIA</span>
+                      <span className="text-[10px] text-gray-400 block font-sans">PREÇO DE ENTRADA</span>
                       <span className="text-base font-bold text-white mt-1 block">
-                        R$ {data.regularMarketPrice ? data.regularMarketPrice.toFixed(2) : '0.00'}
+                        {plan ? `R$ ${plan.entry.toFixed(2)}` : (data.regularMarketPrice ? `R$ ${data.regularMarketPrice.toFixed(2)}` : '—')}
                       </span>
                     </div>
 
                     <div className="p-3.5 bg-[#111827] rounded-xl border border-red-500/30">
                       <span className="text-[10px] text-red-400 block font-sans">STOP LOSS TÉCNICO</span>
                       <span className="text-base font-bold text-red-400 mt-1 block">
-                        R$ {ind?.riskReward.stopLoss.toFixed(2) || '0.00'}
+                        {plan ? `R$ ${plan.stop.toFixed(2)}` : '—'}
                       </span>
                     </div>
 
                     <div className="p-3.5 bg-[#111827] rounded-xl border border-emerald-500/30">
-                      <span className="text-[10px] text-emerald-400 block font-sans">ALVO 1 (1.5x RISCO)</span>
+                      <span className="text-[10px] text-emerald-400 block font-sans">
+                        {biasFromTrend(data?.trendAnalysis?.trend) === 'SHORT' ? 'ALVO 1 (SUPORTE)' : 'ALVO 1 (RESISTÊNCIA)'}
+                      </span>
                       <span className="text-base font-bold text-emerald-400 mt-1 block">
-                        R$ {ind?.riskReward.target1.toFixed(2) || '0.00'}
+                        {plan ? `R$ ${plan.target1.toFixed(2)}` : '—'}
                       </span>
                     </div>
 
                     <div className="p-3.5 bg-[#111827] rounded-xl border border-emerald-500/30">
-                      <span className="text-[10px] text-emerald-400 block font-sans">ALVO 2 (2.5x RISCO)</span>
+                      <span className="text-[10px] text-emerald-400 block font-sans">
+                        {biasFromTrend(data?.trendAnalysis?.trend) === 'SHORT' ? 'ALVO 2 (2º SUPORTE)' : 'ALVO 2 (2ª RESISTÊNCIA)'}
+                      </span>
                       <span className="text-base font-bold text-emerald-400 mt-1 block">
-                        R$ {ind?.riskReward.target2.toFixed(2) || '0.00'}
+                        {plan ? `R$ ${plan.target2.toFixed(2)}` : '—'}
                       </span>
                     </div>
                   </div>
 
-                  {/* GRÁFICO DE CANDLESTICKS */}
-                  {ind && (
+                  {/* GRÁFICO DE CANDLESTICKS OU AVISO DE INVIABILIDADE */}
+                  {plan?.isViable ? (
                     <StockTradePlanChart
                       symbol={data.symbol}
                       historicalPrices={data.historicalDataPrice}
-                      entryPrice={data.regularMarketPrice}
-                      stopLoss={ind.riskReward.stopLoss}
-                      target1={ind.riskReward.target1}
-                      target2={ind.riskReward.target2}
-                      bias={ind.riskReward.bias}
+                      entryPrice={plan.entry}
+                      stopLoss={plan.stop}
+                      target1={plan.target1}
+                      target2={plan.target2}
+                      bias={biasFromTrend(data.trendAnalysis?.trend)}
                     />
+                  ) : (
+                    <div className="p-5 bg-[#111827] rounded-xl border border-gray-800 text-xs text-amber-300 space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-amber-400">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>Plano de trade indisponível para este ativo</span>
+                      </div>
+                      <p className="text-gray-400">
+                        {plan
+                          ? `Relação risco/retorno de ${plan.riskRewardRatio.toFixed(2)} : 1 está abaixo do mínimo exigido de 1,5 : 1.`
+                          : 'Níveis estruturais de suporte e resistência insuficientes no histórico recente.'}
+                      </p>
+                    </div>
                   )}
 
                   <div className="p-4 bg-[#111827] rounded-xl border border-gray-800 text-xs space-y-2 text-gray-300">
                     <div className="font-bold text-white">Diretrizes Teóricas de Condução:</div>
-                    <p>• <strong>Gatilho de Estudo:</strong> Região de suporte/resistência em R$ {data.regularMarketPrice?.toFixed(2)}.</p>
+                    <p>• <strong>Gatilho de Estudo:</strong> {plan?.method || 'Região de suporte/resistência estrutural'}.</p>
+                    <p>• <strong>Stop técnico:</strong> {plan ? `R$ ${plan.stop.toFixed(2)} — suporte estrutural com folga de 0,5 × ATR (R$ ${plan.atr.toFixed(2)})` : '—'}.</p>
+                    <p>• <strong>Relação Risco/Retorno Medida:</strong> {plan ? `${plan.riskRewardRatio.toFixed(2)} : 1` : '—'}.</p>
                     <p>• <strong>Trailing Stop:</strong> Em caso de avanço até o Alvo 1, proteger o estudo no preço de entrada (Breakeven).</p>
-                    <p>• <strong>Condução:</strong> Monitorar o fechamento diário em relação à média móvel de 20 períodos.</p>
                   </div>
                 </div>
               )}

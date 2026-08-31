@@ -74,10 +74,38 @@ export const CNPI_RULES = {
       LOW_RATIO_THRESHOLD: 0.70,    // IV / HV < 0.70 é Squeeze
     },
 
-    // Filtro de DTE para Iron Condor (dias úteis na B3)
-    IRON_CONDOR: {
+    // Filtro de DTE para Estruturas (dias úteis na B3)
+    EXPIRATION: {
       MIN_DTE: 12,
       MAX_DTE: 35,
+    },
+
+    // Elegibilidade da série para compor perna de estrutura recomendada (Spec v2.1)
+    LEG_ELIGIBILITY: {
+      MIN_OPTION_PRICE: 0.10,
+      MIN_OPEN_INTEREST: 5000,
+      MIN_ABS_DELTA: 0.05,
+      MAX_ABS_DELTA: 0.95,
+      REQUIRED_CONFIDENCE: 'high',
+    },
+
+    // Seleção de Pernas por Delta e Parâmetros de Trava (Spec v2.1)
+    SPREAD: {
+      SHORT_LEG_DELTA_TARGET: 0.28,   // |delta| alvo da perna vendida (crédito)
+      SHORT_LEG_DELTA_MAX: 0.38,      // acima disso, não é OTM o suficiente
+      LONG_LEG_DELTA_TARGET: 0.12,    // |delta| alvo da perna de proteção
+      MIN_WIDTH_PCT_OF_SPOT: 0.015,   // largura mínima 1,5% do spot
+      MAX_WIDTH_PCT_OF_SPOT: 0.06,    // largura máxima 6,0% do spot
+      MIN_CREDIT_TO_WIDTH: 0.15,      // crédito < 15% da largura -> não compensa
+      MAX_CREDIT_TO_WIDTH: 0.45,      // crédito > 45% -> perna vendida ATM demais
+      DEBIT_LONG_DELTA_TARGET: 0.55,  // |delta| perna comprada (débito)
+      DEBIT_SHORT_DELTA_TARGET: 0.25, // |delta| perna vendida (débito)
+    },
+
+    // Controle de defasagem de preço D-1 vs D+0 (Spec v2.1)
+    SPOT_DRIFT: {
+      WARN_THRESHOLD_PCT: 1.5,  // |drift| > 1.5% exibe advertência obrigatória
+      BLOCK_THRESHOLD_PCT: 3.0, // |drift| > 3.0% bloqueia eleição de estrutura
     },
 
     // Elegibilidade para cálculo de IV ATM a partir do Analytics

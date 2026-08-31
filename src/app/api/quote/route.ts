@@ -127,6 +127,7 @@ export async function GET(request: NextRequest) {
     // 7. Barreiras de Opções & Analytics (Eixo 3)
     let barrierAlert;
     let optionAnalysis;
+    let analyticsItems: import('@/lib/types/financial').OptionAnalyticsItem[] = [];
     const expirations = getB3ExpirationDetails();
     const liquidExp = getMostLiquidB3Expiration(expirations);
     const targetExp = liquidExp.date;
@@ -137,12 +138,14 @@ export async function GET(request: NextRequest) {
         brapiService.getOptionAnalytics(cleanSymbol, targetExp).catch(() => ({ analytics: [] })),
       ]);
 
+      analyticsItems = analyticsData?.analytics || [];
+
       if (positionsData?.positions && positionsData.positions.length > 0) {
         optionAnalysis = analyzeOptionPositions(
           cleanSymbol,
           quote.regularMarketPrice,
           positionsData.positions,
-          analyticsData?.analytics || [],
+          analyticsItems,
           targetExp,
           expirations,
           closes
@@ -184,7 +187,7 @@ export async function GET(request: NextRequest) {
       verdict.rationale = [operation.reason];
     }
 
-    // 9. Eleição da ÚNICA Melhor Estratégia de Opções B3
+    // 9. Eleição da ÚNICA Melhor Estratégia de Opções B3 (Motor Único - Spec v2.1)
     const electedOptionStrategy = electBestOptionStrategy(
       cleanSymbol,
       quote.regularMarketPrice,
@@ -193,7 +196,8 @@ export async function GET(request: NextRequest) {
       rsi,
       realHv21,
       optionAnalysis,
-      fundamentals.status
+      fundamentals.status,
+      analyticsItems
     );
 
     const rentalAlert: RentalAlert | undefined =
@@ -218,6 +222,7 @@ export async function GET(request: NextRequest) {
         rentalAlert,
       },
       fundamentals,
+      indicators,          // ← Exposto no nível raiz conforme Spec v2.1 (A1)
       barrierAlert,
       verdict,
       operation,

@@ -112,7 +112,8 @@ export async function GET(request: NextRequest) {
                 50,
                 realHv21,
                 optionAnalysis,
-                fundamentals.status
+                fundamentals.status,
+                analyticsData?.analytics || []
               );
             }
           } catch {

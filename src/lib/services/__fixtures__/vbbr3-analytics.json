@@ -1,0 +1,99 @@
+{
+  "symbol": "VBBR3",
+  "expirationDate": "2026-09-18",
+  "date": "2026-08-28",
+  "underlyingPrice": 33.38,
+  "analytics": [
+    {
+      "symbol": "VBBRU310",
+      "side": "put",
+      "strike": 30.83,
+      "optionPrice": 0.15,
+      "impliedVolatility": 29.5,
+      "delta": -0.115,
+      "gamma": 0.045,
+      "theta": -0.02,
+      "vega": 0.035,
+      "openInterest": 15000,
+      "confidence": "high"
+    },
+    {
+      "symbol": "VBBRU325",
+      "side": "put",
+      "strike": 32.33,
+      "optionPrice": 0.38,
+      "impliedVolatility": 28.8,
+      "delta": -0.275,
+      "gamma": 0.085,
+      "theta": -0.045,
+      "vega": 0.065,
+      "openInterest": 42000,
+      "confidence": "high"
+    },
+    {
+      "symbol": "VBBRU339",
+      "side": "put",
+      "strike": 33.33,
+      "optionPrice": 0.75,
+      "impliedVolatility": 28.3,
+      "delta": -0.431,
+      "gamma": 0.115,
+      "theta": -0.065,
+      "vega": 0.088,
+      "openInterest": 53700,
+      "confidence": "high"
+    },
+    {
+      "symbol": "VBBRU344",
+      "side": "put",
+      "strike": 33.83,
+      "optionPrice": 1.00,
+      "impliedVolatility": 28.4,
+      "delta": -0.518,
+      "gamma": 0.125,
+      "theta": -0.075,
+      "vega": 0.095,
+      "openInterest": 97500,
+      "confidence": "high"
+    },
+    {
+      "symbol": "VBBRU349",
+      "side": "put",
+      "strike": 34.33,
+      "optionPrice": 1.27,
+      "impliedVolatility": 27.7,
+      "delta": -0.606,
+      "gamma": 0.118,
+      "theta": -0.078,
+      "vega": 0.092,
+      "openInterest": 128300,
+      "confidence": "medium"
+    },
+    {
+      "symbol": "VBBRI350",
+      "side": "call",
+      "strike": 35.00,
+      "optionPrice": 0.85,
+      "impliedVolatility": 26.5,
+      "delta": 0.38,
+      "gamma": 0.11,
+      "theta": -0.05,
+      "vega": 0.08,
+      "openInterest": 85000,
+      "confidence": "high"
+    },
+    {
+      "symbol": "VBBRI360",
+      "side": "call",
+      "strike": 36.00,
+      "optionPrice": 0.45,
+      "impliedVolatility": 26.0,
+      "delta": 0.24,
+      "gamma": 0.08,
+      "theta": -0.035,
+      "vega": 0.06,
+      "openInterest": 62000,
+      "confidence": "high"
+    }
+  ]
+}
