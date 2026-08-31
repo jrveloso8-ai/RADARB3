@@ -893,18 +893,29 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
               {/* =================================================================== */}
               {/* MODO OPÇÕES (QUANDO NÃO BLOQUEADO) */}
               {/* =================================================================== */}
-              {!isBlocked && execMode === 'OPTIONS' && !elected && (
+              {!isBlocked && execMode === 'OPTIONS' && (!elected || elected.status === 'BLOQUEADA' || elected.legs.length === 0) && (
                 <div className="p-6 bg-[#0b101b] border border-amber-500/30 rounded-2xl shadow-xl flex flex-col items-center justify-center gap-4 text-center min-h-[200px]">
                   <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
                     <HelpCircle className="w-6 h-6 text-amber-400" />
                   </div>
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-white text-sm">Sem Estratégia de Opções Eleita</h4>
-                    <p className="text-xs text-gray-400 max-w-xs">
-                      Este ativo não possui opções líquidas suficientes na B3 no vencimento corrente para montagem automatizada.
+                  <div className="space-y-2 max-w-lg">
+                    <h4 className="font-bold text-white text-sm">
+                      {elected?.blockDetails?.reason
+                        ? `Operação de Opções Não Autorizada (${elected.blockDetails.reason})`
+                        : 'Sem Estratégia de Opções Eleita'}
+                    </h4>
+                    <p className="text-xs text-amber-300/90 leading-relaxed">
+                      {elected?.blockDetails?.message || 'As condições técnicas ou de liquidez atuais não atendem aos critérios de montagem automatizada.'}
                     </p>
+                    {elected?.diagnosticsSummary && (
+                      <div className="pt-1">
+                        <span className="px-3 py-1 bg-gray-900 border border-gray-700/60 rounded-lg text-[11px] font-mono text-gray-400">
+                          📊 {elected.diagnosticsSummary}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex flex-col sm:flex-row items-center gap-2 text-xs">
+                  <div className="flex flex-col sm:flex-row items-center gap-2 text-xs pt-1">
                     <span className="px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono font-bold">
                       💡 Veredito: {verdict?.verdictLabel || 'AGUARDAR'}
                     </span>
@@ -919,7 +930,7 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                 </div>
               )}
 
-              {!isBlocked && execMode === 'OPTIONS' && elected && (
+              {!isBlocked && execMode === 'OPTIONS' && elected && elected.status !== 'BLOQUEADA' && elected.legs.length > 0 && (
                 <div className="space-y-4">
                   {/* CARD PRINCIPAL DA ESTRATÉGIA ELEITA */}
                   <div className="p-5 bg-[#0b101b] border border-cyan-500/40 rounded-2xl shadow-2xl space-y-4">

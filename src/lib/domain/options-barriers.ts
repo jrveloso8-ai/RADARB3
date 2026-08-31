@@ -310,44 +310,48 @@ export function analyzeOptionPositions(
       : 0;
 
   // =========================================================================
-  // HEURÍSTICA DE IV ATM (Spec v2 — Seção 3.2.3)
+  // HEURÍSTICA DE IV ATM (Spec v2.2 — Seção 5: Mediana com descarte de outlier)
   // =========================================================================
   const atmRules = CNPI_RULES.DERIVATIVES.ATM_ELIGIBILITY;
 
-  // Filtrar analytics elegíveis:
-  // confidence === 'high' && optionPrice >= 0.10 && openInterest >= 1000 && |strike - spot| / spot <= 0.05
-  const eligibleAnalytics = analytics.filter((o) => {
+  // Filtrar analytics elegíveis sem o gate de confidence:
+  const rawAtmAnalytics = analytics.filter((o) => {
     const priceValid = o.optionPrice !== null && o.optionPrice >= atmRules.MIN_OPTION_PRICE;
     const oiValid = (o.openInterest || 0) >= atmRules.MIN_OPEN_INTEREST;
     const distValid = Math.abs(o.strike - spot) / spot <= atmRules.MAX_DIST_SPOT_PCT;
-    const confValid = (o.confidence || 'high').toLowerCase() === 'high';
     const ivValid = o.impliedVolatility !== null && o.impliedVolatility > 0;
-    return priceValid && oiValid && distValid && confValid && ivValid;
+    const nullReasonValid = o.nullReason === null || o.nullReason === undefined;
+    return priceValid && oiValid && distValid && ivValid && nullReasonValid;
   });
 
   let ivAtmResult: { callIv: number; putIv: number; percentile: number } | null = null;
   let ivQuality: 'CONFIÁVEL' | 'DIVERGENTE' | 'INSUFICIENTE' = 'INSUFICIENTE';
 
-  if (eligibleAnalytics.length > 0) {
-    const validIvs = eligibleAnalytics
-      .map((a) => a.impliedVolatility as number)
-      .sort((a, b) => a - b);
+  if (rawAtmAnalytics.length > 0) {
+    // 1. Calcular mediana preliminar
+    const rawIvs = rawAtmAnalytics.map((a) => a.impliedVolatility as number).sort((a, b) => a - b);
+    const prelimMid = Math.floor(rawIvs.length / 2);
+    const prelimMedian =
+      rawIvs.length % 2 !== 0
+        ? rawIvs[prelimMid]
+        : (rawIvs[prelimMid - 1] + rawIvs[prelimMid]) / 2;
 
-    const mid = Math.floor(validIvs.length / 2);
-    const medianIv =
-      validIvs.length % 2 !== 0
-        ? validIvs[mid]
-        : Number(((validIvs[mid - 1] + validIvs[mid]) / 2).toFixed(2));
+    // 2. Descarte de outliers (afastamento > 40% da mediana preliminar)
+    const filteredAnalytics = rawAtmAnalytics.filter((a) => {
+      const iv = a.impliedVolatility as number;
+      const deviation = Math.abs(iv - prelimMedian) / prelimMedian;
+      return deviation <= atmRules.OUTLIER_DEVIATION_PCT;
+    });
 
-    const nearestCall = eligibleAnalytics
+    // 3. Checar divergência Call/Put > 5 pontos percentuais no strike mais próximo do spot
+    const nearestCall = filteredAnalytics
       .filter((a) => a.side?.toLowerCase() === 'call')
       .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
 
-    const nearestPut = eligibleAnalytics
+    const nearestPut = filteredAnalytics
       .filter((a) => a.side?.toLowerCase() === 'put')
       .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
 
-    // Checar divergência Call/Put > 5 pontos percentuais
     if (
       nearestCall?.impliedVolatility !== null &&
       nearestCall?.impliedVolatility !== undefined &&
@@ -356,14 +360,24 @@ export function analyzeOptionPositions(
       Math.abs(nearestCall.impliedVolatility - nearestPut.impliedVolatility) > atmRules.MAX_CALL_PUT_IV_DIVERGENCE_PP
     ) {
       ivQuality = 'DIVERGENTE';
-      ivAtmResult = null; // Tratado como dado não confiável -> sem IV ATM
-    } else {
+      ivAtmResult = null;
+    } else if (filteredAnalytics.length >= atmRules.MIN_SAMPLE_SIZE) {
+      const validIvs = filteredAnalytics.map((a) => a.impliedVolatility as number).sort((a, b) => a - b);
+      const mid = Math.floor(validIvs.length / 2);
+      const finalMedian =
+        validIvs.length % 2 !== 0
+          ? validIvs[mid]
+          : Number(((validIvs[mid - 1] + validIvs[mid]) / 2).toFixed(2));
+
       ivQuality = 'CONFIÁVEL';
       ivAtmResult = {
-        callIv: nearestCall?.impliedVolatility || medianIv,
-        putIv: nearestPut?.impliedVolatility || medianIv,
+        callIv: nearestCall?.impliedVolatility || finalMedian,
+        putIv: nearestPut?.impliedVolatility || finalMedian,
         percentile: 75,
       };
+    } else {
+      ivQuality = 'INSUFICIENTE';
+      ivAtmResult = null;
     }
   }
 

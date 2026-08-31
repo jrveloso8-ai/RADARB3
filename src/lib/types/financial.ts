@@ -185,6 +185,35 @@ export interface OptionAnalyticsItem {
   nullReason?: string | null;
   openInterest?: number;
   openInterestDate?: string;
+  openInterestChange?: number;
+  lastTradeDate?: string;
+}
+
+export type BlockReason =
+  | 'SEM_ANALYTICS'          // fonte não devolveu a cadeia
+  | 'SEM_SERIES_ELEGIVEIS'   // cadeia existe, nenhuma série passou nos critérios
+  | 'SEM_PAR_VALIDO'         // séries elegíveis existem, nenhum par atende largura/crédito
+  | 'DELTA_FORA_DA_FAIXA'    // nenhuma série com |delta| <= 0,38
+  | 'VOL_COMPRIMIDA'         // squeeze bloqueia venda de crédito
+  | 'DTE_FORA_DA_JANELA'     // fora de 12–35 dias úteis
+  | 'PRECO_DEFASADO'         // drift do spot > 3%
+  | 'FUNDAMENTOS_REPROVADOS' // matriz de operação
+  | 'IV_INDISPONIVEL';       // sem IV ATM confiável
+
+export interface StructureBlockDiagnostics {
+  seriesInChain: number;
+  seriesEligible: number;
+  validPairs: number;
+  bestShortDelta: number | null;
+  dte: number;
+  spotDriftPct: number;
+}
+
+export interface StructureBlock {
+  status: 'BLOQUEADA';
+  reason: BlockReason;
+  message: string;
+  diagnostics: StructureBlockDiagnostics;
 }
 
 export interface PriceContext {
