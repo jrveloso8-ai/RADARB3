@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Footer } from '@/components/layout/Footer';
+import { Analytics } from '@vercel/analytics/react';
 
 export const metadata: Metadata = {
   title: 'RADAR B3 PRO IA — Estudos Quantitativos, Tendências & Opções B3',
@@ -18,6 +19,7 @@ export default function RootLayout({
       <body className="bg-[#0b0f19] text-gray-100 antialiased min-h-screen flex flex-col justify-between">
         <main className="flex-1">{children}</main>
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
