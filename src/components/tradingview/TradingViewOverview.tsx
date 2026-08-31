@@ -29,6 +29,7 @@ import {
   Gauge,
   PieChart,
 } from 'lucide-react';
+import { MarketOpeningSubscribeCard } from '../newsletter/MarketOpeningSubscribeCard';
 
 export type OverviewViewType = 'sentimento' | 'indices' | 'setores';
 
@@ -449,6 +450,9 @@ export const TradingViewOverview: React.FC = () => {
               <span className="text-[10px] text-gray-500 font-sans">Entrada em blue chips</span>
             </div>
           </div>
+
+          {/* Card de Inscrição no Resumo da Abertura do Mercado */}
+          <MarketOpeningSubscribeCard />
         </div>
       )}
 
