@@ -10,6 +10,7 @@ import {
   analyzeOptionPositions,
   buildOptionBarrierAlert,
   getB3ExpirationDetails,
+  getMostLiquidB3Expiration,
 } from '@/lib/domain/options-barriers';
 import {
   calculateATR,
@@ -112,20 +113,21 @@ export async function GET(request: NextRequest) {
       fundamentals = analyzeFundamentals(cleanSymbol, {});
     }
 
-    // 5. Barreiras de Opções no Vencimento Mais Líquido
+    // 5. Barreiras de Opções no Vencimento Mais Líquido (Série Mensal B3)
     let barrierAlert;
     let optionAnalysis;
     try {
       const expirations = getB3ExpirationDetails();
-      const nearestExp = expirations[0]?.date || '2026-09-18';
-      const positionsData = await brapiService.getOptionPositions(cleanSymbol, nearestExp);
+      const liquidExp = getMostLiquidB3Expiration(expirations);
+      const targetExp = liquidExp.date;
+      const positionsData = await brapiService.getOptionPositions(cleanSymbol, targetExp);
 
       if (positionsData?.positions && positionsData.positions.length > 0) {
         optionAnalysis = analyzeOptionPositions(
           cleanSymbol,
           quote.regularMarketPrice,
           positionsData.positions,
-          nearestExp,
+          targetExp,
           expirations,
           closes
         );

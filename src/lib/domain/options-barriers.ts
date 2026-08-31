@@ -120,6 +120,44 @@ export function getB3ExpirationDetails(startDate: Date | string = new Date()): B
 }
 
 /**
+ * Seleciona automaticamente o vencimento mais líquido da B3:
+ * 1. Prioriza séries Mensais (3ª sexta-feira do mês), onde se concentram mais de 95% do volume e Open Interest da B3.
+ * 2. Aplica rolagem institucional se DTE <= 4 dias úteis (migração de liquidez para a série mensal seguinte).
+ * 3. Evita séries semanais (W1, W2, etc.) que possuem baixíssima liquidez e spreads largos.
+ */
+export function getMostLiquidB3Expiration(expirations: B3ExpirationInfo[]): B3ExpirationInfo {
+  if (!expirations || expirations.length === 0) {
+    return {
+      date: '2026-09-18',
+      monthName: 'Setembro',
+      callLetter: 'I',
+      putLetter: 'U',
+      dte: 14,
+      label: 'Série Setembro',
+      badge: 'Mensal',
+    };
+  }
+
+  // Filtrar apenas vencimentos Mensais (3ª sexta-feira do mês)
+  const monthlyExpirations = expirations.filter(
+    (e) => e.badge.includes('Mensal') || (!e.badge.includes('Semanal') && !e.label.includes(' W'))
+  );
+
+  if (monthlyExpirations.length === 0) {
+    return expirations[0];
+  }
+
+  // Se o primeiro vencimento mensal tiver DTE >= 5 dias úteis, é o mais líquido ativo
+  const firstMonthly = monthlyExpirations[0];
+  if (firstMonthly.dte >= 5 || monthlyExpirations.length === 1) {
+    return firstMonthly;
+  }
+
+  // Se DTE < 5 dias úteis (semana de exercício com liquidez migrando), seleciona a próxima série mensal
+  return monthlyExpirations[1];
+}
+
+/**
  * Analisa as posições em aberto de opções gerando Top 5 Walls, Max Pain, Gregas e Grade Straddle
  */
 export function analyzeOptionPositions(

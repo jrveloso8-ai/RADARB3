@@ -3,6 +3,7 @@ import { brapiService } from '@/lib/services/brapi';
 import {
   analyzeOptionPositions,
   getB3ExpirationDetails,
+  getMostLiquidB3Expiration,
 } from '@/lib/domain/options-barriers';
 
 export async function GET(request: NextRequest) {
@@ -11,10 +12,11 @@ export async function GET(request: NextRequest) {
 
   // Obter grade oficial dos vencimentos B3
   const availableExpirations = getB3ExpirationDetails();
+  const mostLiquidExpiration = getMostLiquidB3Expiration(availableExpirations);
   const selectedExpiration =
     searchParams.get('expiration') ||
     searchParams.get('expirationDate') ||
-    availableExpirations[0].date;
+    mostLiquidExpiration.date;
 
   try {
     const cleanSymbol = symbol.trim().toUpperCase();

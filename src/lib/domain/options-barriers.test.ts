@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   getB3ExpirationDetails,
+  getMostLiquidB3Expiration,
   analyzeOptionPositions,
 } from './options-barriers';
 import { calculateBlackScholes, calculateMaxPain } from './black-scholes';
@@ -98,6 +99,29 @@ describe('Motor Matemático de Opções - Black Scholes & Max Pain & Walls', () 
       expect(result.top5PutWalls[0].symbol).toBe('PETRU300');
       expect(result.straddleRows.length).toBe(1);
       expect(result.straddleRows[0].strike).toBe(30.0);
+    });
+  });
+
+  describe('getMostLiquidB3Expiration', () => {
+    it('deve selecionar a série mensal principal e ignorar séries semanais ilíquidas', () => {
+      const expirations = getB3ExpirationDetails('2026-08-29');
+      const mostLiquid = getMostLiquidB3Expiration(expirations);
+
+      expect(mostLiquid).toBeDefined();
+      expect(mostLiquid.badge).toContain('Mensal');
+      expect(mostLiquid.date).toBe('2026-09-18');
+      expect(mostLiquid.dte).toBe(13); // 13 dias úteis (considera feriado 07/09)
+    });
+
+    it('deve rolar para a próxima série mensal se o DTE da série atual for menor que 5 dias úteis', () => {
+      const expirations = getB3ExpirationDetails('2026-09-16'); // 2 dias úteis antes do vencimento de 18/09
+      const mostLiquid = getMostLiquidB3Expiration(expirations);
+
+      expect(mostLiquid).toBeDefined();
+      expect(mostLiquid.badge).toContain('Mensal');
+      // Deve ter rolado para o vencimento de Outubro (16/10)
+      expect(mostLiquid.date).toBe('2026-10-16');
+      expect(mostLiquid.dte).toBeGreaterThan(15);
     });
   });
 });
