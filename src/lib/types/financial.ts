@@ -47,12 +47,15 @@ export interface FundamentalMetric {
   description: string;
 }
 
+export type EliminatoryFlag = 'LUCRO_NEGATIVO' | 'MARGEM_NEGATIVA' | 'SUPERENDIVIDAMENTO';
+
 export interface FundamentalAnalysisResult {
   symbol: string;
   score: number; // 0 a 100
   status: 'APROVADO' | 'REPROVADO';
   summary: string;
   metrics: {
+    netIncome?: FundamentalMetric;
     roe: FundamentalMetric;
     netMargin: FundamentalMetric;
     ebitdaMargin?: FundamentalMetric;
@@ -64,6 +67,7 @@ export interface FundamentalAnalysisResult {
   };
   reasons: string[];
   flags?: string[];
+  eliminatoryFlags?: EliminatoryFlag[];
   analyzedAt: string;
   updatedAt?: string;
 }
@@ -128,6 +132,63 @@ export interface TrendAnalysisResult {
   fundamentals?: FundamentalAnalysisResult;
   verdict?: ConsolidatedVerdictResult;
   indicators?: TechnicalIndicatorsResult;
+  operation?: import('../domain/operation-matrix').OperationDecision;
+  tradePlan?: import('../domain/trade-plan').TradePlan | null;
+  rentalAlert?: RentalAlert;
+}
+
+export interface AssetDecisionResult {
+  symbol: string;
+  shortName?: string;
+  currentPrice: number;
+  changePercent: number;
+  trend: TrendType;
+  movingAverages: MovingAverages;
+  fundamentals: FundamentalAnalysisResult;
+  operation: import('../domain/operation-matrix').OperationDecision;
+  tradePlan?: import('../domain/trade-plan').TradePlan | null;
+  optionStructure?: ElectedOptionStrategy | null;
+  barrierAlert?: OptionBarrierAlert;
+  rentalAlert?: RentalAlert;
+  updatedAt: string;
+}
+
+export interface TrendsApiResponse {
+  totalAnalyzed: number;
+  lists: {
+    alta: AssetDecisionResult[];
+    baixa: AssetDecisionResult[];
+    lateral: AssetDecisionResult[];
+  };
+  updatedAt: string;
+}
+
+export interface OptionAnalyticsItem {
+  symbol: string;
+  side: 'call' | 'put' | 'CALL' | 'PUT';
+  strike: number;
+  optionStyle?: 'american' | 'european' | string;
+  model?: string;
+  priceSource?: string;
+  underlyingPrice?: number;
+  optionPrice: number | null;
+  impliedVolatility: number | null; // Percentual normalizado na borda (ex: 28.72)
+  delta?: number;
+  gamma?: number;
+  theta?: number;
+  vega?: number;
+  rho?: number;
+  riskFreeRate?: number;
+  dividendYield?: number;
+  confidence?: 'high' | 'medium' | 'low' | string;
+  nullReason?: string | null;
+  openInterest?: number;
+  openInterestDate?: string;
+}
+
+export interface RentalAlert {
+  required: true;
+  message: string;
 }
 
 export interface OptionPositionItem {
@@ -221,6 +282,7 @@ export interface OptionAnalysisResult {
     putIv: number;
     percentile: number;
   } | null;
+  ivQuality?: 'CONFIÁVEL' | 'DIVERGENTE' | 'INSUFICIENTE';
   hv21: number;
   hv63: number;
   putCallRatio: number;

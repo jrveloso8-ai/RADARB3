@@ -1,0 +1,17 @@
+{
+  "symbol": "MGLU3",
+  "financialData": {
+    "totalCash": 1762000000,
+    "totalDebt": 10570000000,
+    "ebitda": 3116000000,
+    "currentRatio": 1.099,
+    "returnOnEquity": 0.0079,
+    "profitMargins": 0.0023
+  },
+  "defaultKeyStatistics": {
+    "netIncomeToCommon": 85000000,
+    "trailingPE": 45.2,
+    "priceToBook": 1.45,
+    "bookValue": 2.10
+  }
+}

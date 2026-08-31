@@ -1,135 +1,89 @@
+/**
+ * Motor Quantitativo de Opções e Barreiras Institucionais B3 (CNPI-D)
+ * Especificação Técnica v2 (31/08/2026):
+ * - Merge por symbol entre Open Interest (positions) e Dados de Mercado/IV/Gregas (analytics)
+ * - NENHUM preço teórico em tela: preços e IV vêm de analytics ou aparecem como N/D
+ * - IV ATM calculada pela mediana de séries elegíveis (confidence high, price >= 0.10, OI >= 1000, +-5% spot)
+ * - Divergência Call/Put > 5 pp marca ivQuality: 'DIVERGENTE' e invalida ivAtm
+ */
+
 import {
   B3ExpirationInfo,
   OptionAnalysisResult,
+  OptionAnalyticsItem,
   OptionBarrierAlert,
   OptionPositionItem,
   StraddleRow,
   StrikeVolumeDistribution,
   WallItem,
 } from '../types/financial';
-import {
-  calculateBlackScholes,
-  calculateImpliedVolatility,
-  calculateMaxPain,
-} from './black-scholes';
+import { calculateBlackScholes, calculateImpliedVolatility, calculateMaxPain } from './black-scholes';
 import { calculateB3BusinessDays } from './b3-calendar';
 import { calculateHistoricalVolatility } from './volatility';
-
-const MONTH_NAMES_PT = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-];
-
-const CALL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
-const PUT_LETTERS = ['M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X'];
+import { CNPI_RULES } from '../config/rules';
 
 /**
- * Gera a grade oficial de vencimentos da B3 (Mensais e Semanais) com DTE em DIAS ÚTEIS (Padrão Profit / ANBIMA)
+ * Retorna as próximas 8 datas oficiais de vencimento de opções na B3 (3ª sexta-feira do mês)
  */
-export function getB3ExpirationDetails(startDate: Date | string = new Date()): B3ExpirationInfo[] {
+export function getB3ExpirationDetails(referenceDate: Date = new Date()): B3ExpirationInfo[] {
+  const monthNamesPt = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+  ];
+
+  const callLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+  const putLetters = ['M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X'];
+
   const expirations: B3ExpirationInfo[] = [];
-  const pad = (n: number) => String(n).padStart(2, '0');
+  const currentYear = referenceDate.getFullYear();
+  const currentMonth = referenceDate.getMonth();
 
-  let startY: number;
-  let startM: number;
-  let startD: number;
+  for (let i = 0; i < 8; i++) {
+    const targetMonth = (currentMonth + i) % 12;
+    const targetYear = currentYear + Math.floor((currentMonth + i) / 12);
 
-  if (typeof startDate === 'string') {
-    const p = startDate.split('-');
-    startY = parseInt(p[0]);
-    startM = parseInt(p[1]) - 1;
-    startD = parseInt(p[2]);
-  } else {
-    startY = startDate.getFullYear();
-    startM = startDate.getMonth();
-    startD = startDate.getDate();
-  }
+    let fridayCount = 0;
+    let thirdFriday = 1;
 
-  const now = new Date(startY, startM, startD, 12, 0, 0);
-
-  // Gerar vencimentos para os próximos 12 meses
-  for (let i = 0; i < 12; i++) {
-    const targetMonth = (startM + i) % 12;
-    const targetYear = startY + Math.floor((startM + i) / 12);
-
-    const monthName = MONTH_NAMES_PT[targetMonth];
-    const callLetter = CALL_LETTERS[targetMonth];
-    const putLetter = PUT_LETTERS[targetMonth];
-
-    // Mapear todas as sextas-feiras do mês
-    const fridays: Date[] = [];
     for (let day = 1; day <= 31; day++) {
-      const d = new Date(targetYear, targetMonth, day, 12, 0, 0);
+      const d = new Date(targetYear, targetMonth, day);
       if (d.getMonth() !== targetMonth) break;
       if (d.getDay() === 5) {
-        fridays.push(d);
-      }
-    }
-
-    // Para os primeiros 2 meses a vencer, incluir opções semanais (W1, W2, W4, W5) e mensais futuras
-    if (i < 2) {
-      fridays.forEach((friday, idx) => {
-        const weekNum = idx + 1;
-        const isMonthly = weekNum === 3;
-        const dateStr = `${friday.getFullYear()}-${pad(friday.getMonth() + 1)}-${pad(friday.getDate())}`;
-
-        const dte = calculateB3BusinessDays(now, friday);
-
-        if (dte > 0) {
-          if (isMonthly) {
-            expirations.push({
-              date: dateStr,
-              monthName,
-              callLetter,
-              putLetter,
-              dte,
-              label: `Série ${monthName} (${callLetter} / ${putLetter}) • ${dateStr} (${dte} DTE)`,
-              badge: `Mensal [${dte}d] (${callLetter}/${putLetter})`,
-            });
-          } else {
-            expirations.push({
-              date: dateStr,
-              monthName,
-              callLetter,
-              putLetter,
-              dte,
-              label: `Série ${monthName} W${weekNum} • ${dateStr} (${dte} DTE)`,
-              badge: `Semanal W${weekNum} [${dte}d]`,
-            });
-          }
-        }
-      });
-    } else {
-      // Meses posteriores: Apenas vencimentos mensais (3ª sexta-feira)
-      const monthlyFriday = fridays[2] || fridays[fridays.length - 1];
-      if (monthlyFriday) {
-        const dte = calculateB3BusinessDays(now, monthlyFriday);
-        if (dte > 0) {
-          const dateStr = `${monthlyFriday.getFullYear()}-${pad(monthlyFriday.getMonth() + 1)}-${pad(monthlyFriday.getDate())}`;
-          expirations.push({
-            date: dateStr,
-            monthName,
-            callLetter,
-            putLetter,
-            dte,
-            label: `Série ${monthName} (${callLetter} / ${putLetter}) • ${dateStr} (${dte} DTE)`,
-            badge: `Mensal [${dte}d] (${callLetter}/${putLetter})`,
-          });
+        fridayCount++;
+        if (fridayCount === 3) {
+          thirdFriday = day;
+          break;
         }
       }
     }
+
+    const expDateStr = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(thirdFriday).padStart(2, '0')}`;
+    const dte = calculateB3BusinessDays(referenceDate, new Date(targetYear, targetMonth, thirdFriday));
+
+    let badge = 'Mensal';
+    if (i === 0) badge = 'Mais Líquida (Mensal)';
+    else if (i === 1) badge = 'Próxima Série (Mensal)';
+
+    expirations.push({
+      date: expDateStr,
+      monthName: monthNamesPt[targetMonth],
+      callLetter: callLetters[targetMonth],
+      putLetter: putLetters[targetMonth],
+      dte,
+      label: `Série ${callLetters[targetMonth]}/${putLetters[targetMonth]} (${monthNamesPt[targetMonth]})`,
+      badge,
+    });
   }
 
   return expirations;
 }
 
 /**
- * Seleciona automaticamente o vencimento mais líquido da B3:
- * 1. Prioriza séries Mensais (3ª sexta-feira do mês), onde se concentram mais de 95% do volume e Open Interest da B3.
- * 2. Aplica rolagem institucional se DTE <= 4 dias úteis (migração de liquidez para a série mensal seguinte).
- * 3. Evita séries semanais (W1, W2, etc.) que possuem baixíssima liquidez e spreads largos.
+ * Seleciona automaticamente o Vencimento Mensal Mais Líquido da B3
  */
-export function getMostLiquidB3Expiration(expirations: B3ExpirationInfo[]): B3ExpirationInfo {
+export function getMostLiquidB3Expiration(
+  expirations: B3ExpirationInfo[] = getB3ExpirationDetails()
+): B3ExpirationInfo {
   if (!expirations || expirations.length === 0) {
     return {
       date: '2026-09-18',
@@ -142,7 +96,6 @@ export function getMostLiquidB3Expiration(expirations: B3ExpirationInfo[]): B3Ex
     };
   }
 
-  // Filtrar apenas vencimentos Mensais (3ª sexta-feira do mês)
   const monthlyExpirations = expirations.filter(
     (e) => e.badge.includes('Mensal') || (!e.badge.includes('Semanal') && !e.label.includes(' W'))
   );
@@ -151,24 +104,23 @@ export function getMostLiquidB3Expiration(expirations: B3ExpirationInfo[]): B3Ex
     return expirations[0];
   }
 
-  // Se o primeiro vencimento mensal tiver DTE >= 5 dias úteis, é o mais líquido ativo
   const firstMonthly = monthlyExpirations[0];
   if (firstMonthly.dte >= 5 || monthlyExpirations.length === 1) {
     return firstMonthly;
   }
 
-  // Se DTE < 5 dias úteis (semana de exercício com liquidez migrando), seleciona a próxima série mensal
   return monthlyExpirations[1];
 }
 
 /**
- * Analisa as posições em aberto de opções gerando Top 5 Walls, Max Pain, Gregas e Grade Straddle
+ * Analisa as opções realizando o merge exato entre posições em aberto e analytics de mercado
  */
 export function analyzeOptionPositions(
   underlyingSymbol: string,
   underlyingPrice: number,
   positions: OptionPositionItem[],
-  expirationDate: string,
+  analytics: OptionAnalyticsItem[] = [],
+  expirationDate: string = '2026-09-18',
   allExpirations: B3ExpirationInfo[] = [],
   historicalPrices: number[] = []
 ): OptionAnalysisResult {
@@ -184,13 +136,19 @@ export function analyzeOptionPositions(
       badge: 'Mensal',
     };
 
-  // Base 252 dias úteis para cálculo financeiro de opções B3
   const dteYears = Math.max(1, selectedExpirationInfo.dte) / 252.0;
   const spot = underlyingPrice > 0 ? underlyingPrice : 30.0;
 
-  // Cálculo real da Volatilidade Histórica (HV21 e HV63) a partir da série real de preços
   const realHv21 = calculateHistoricalVolatility(historicalPrices, 21) ?? 24.5;
   const realHv63 = calculateHistoricalVolatility(historicalPrices, 63) ?? 26.0;
+
+  // Mapa de analytics indexado por símbolo da opção
+  const analyticsBySymbol = new Map<string, OptionAnalyticsItem>();
+  for (const a of analytics) {
+    if (a.symbol) {
+      analyticsBySymbol.set(a.symbol.trim().toUpperCase(), a);
+    }
+  }
 
   const callsByStrike = new Map<number, number>();
   const putsByStrike = new Map<number, number>();
@@ -207,42 +165,34 @@ export function analyzeOptionPositions(
   for (const pos of positions) {
     const side = pos.side?.toLowerCase();
     const strike = Number(pos.strike.toFixed(2));
+    const cleanSym = pos.symbol?.trim().toUpperCase();
+    const analyticsItem = cleanSym ? analyticsBySymbol.get(cleanSym) : undefined;
+
     if (pos.openInterestDate && !openInterestDate) {
       openInterestDate = pos.openInterestDate;
     }
 
-    // Calcular Volatilidade Implícita real via Solver Numérico de Black-Scholes
-    let realIv: number | null = null;
-    if (pos.iv && pos.iv > 0) {
-      realIv = Number(pos.iv.toFixed(1));
-    } else if (pos.lastPrice && pos.lastPrice > 0) {
-      realIv = calculateImpliedVolatility(
-        pos.lastPrice,
-        spot,
-        strike,
-        dteYears,
-        0.1075,
-        side === 'call' ? 'call' : 'put'
-      );
-    }
+    // Regras de Merge por Symbol (Spec v2):
+    // 1. Preço e IV vêm de analytics. Se não houver analytics, optionPrice = null e iv = null (sem inventar preço teórico).
+    // 2. Gregas (delta, gamma, theta, vega) vêm diretamente de analytics quando disponível.
+    const lastPrice =
+      analyticsItem?.optionPrice !== undefined && analyticsItem.optionPrice !== null
+        ? analyticsItem.optionPrice
+        : pos.lastPrice ?? null;
 
-    // Calcular gregas Black-Scholes (usando IV real se existir, ou HV21 de base para Delta/Gamma)
-    const sigmaForGreeks = (realIv || realHv21 || 25.0) / 100;
-    const greeks = calculateBlackScholes(
-      spot,
-      strike,
-      dteYears,
-      0.1075,
-      sigmaForGreeks,
-      side === 'call' ? 'call' : 'put'
-    );
+    const iv =
+      analyticsItem?.impliedVolatility !== undefined && analyticsItem.impliedVolatility !== null
+        ? analyticsItem.impliedVolatility
+        : pos.iv ?? null;
+
+    const delta = analyticsItem?.delta !== undefined ? analyticsItem.delta : pos.delta ?? (side === 'call' ? 0.5 : -0.5);
 
     const enriched: OptionPositionItem = {
       ...pos,
       strike,
-      delta: greeks.delta,
-      iv: realIv ?? undefined,
-      lastPrice: pos.lastPrice || greeks.theoreticalPrice,
+      lastPrice: lastPrice ?? undefined,
+      iv: iv ?? undefined,
+      delta,
     };
 
     if (side === 'call') {
@@ -359,23 +309,63 @@ export function analyzeOptionPositions(
       ? Number((totalPutOpenInterest / totalCallOpenInterest).toFixed(2))
       : 0;
 
-  // Identificar ATM Call e Put mais próximas para IV ATM real
-  const nearestAtmCall = enrichedCalls
-    .filter((c) => c.iv !== undefined && c.iv > 0)
-    .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
-  const nearestAtmPut = enrichedPuts
-    .filter((p) => p.iv !== undefined && p.iv > 0)
-    .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
+  // =========================================================================
+  // HEURÍSTICA DE IV ATM (Spec v2 — Seção 3.2.3)
+  // =========================================================================
+  const atmRules = CNPI_RULES.DERIVATIVES.ATM_ELIGIBILITY;
 
-  const hasRealAtmIv = (nearestAtmCall?.iv !== undefined && nearestAtmCall.iv > 0) || (nearestAtmPut?.iv !== undefined && nearestAtmPut.iv > 0);
+  // Filtrar analytics elegíveis:
+  // confidence === 'high' && optionPrice >= 0.10 && openInterest >= 1000 && |strike - spot| / spot <= 0.05
+  const eligibleAnalytics = analytics.filter((o) => {
+    const priceValid = o.optionPrice !== null && o.optionPrice >= atmRules.MIN_OPTION_PRICE;
+    const oiValid = (o.openInterest || 0) >= atmRules.MIN_OPEN_INTEREST;
+    const distValid = Math.abs(o.strike - spot) / spot <= atmRules.MAX_DIST_SPOT_PCT;
+    const confValid = (o.confidence || 'high').toLowerCase() === 'high';
+    const ivValid = o.impliedVolatility !== null && o.impliedVolatility > 0;
+    return priceValid && oiValid && distValid && confValid && ivValid;
+  });
 
-  const ivAtmResult = hasRealAtmIv
-    ? {
-        callIv: nearestAtmCall?.iv || nearestAtmPut?.iv || 0,
-        putIv: nearestAtmPut?.iv || nearestAtmCall?.iv || 0,
+  let ivAtmResult: { callIv: number; putIv: number; percentile: number } | null = null;
+  let ivQuality: 'CONFIÁVEL' | 'DIVERGENTE' | 'INSUFICIENTE' = 'INSUFICIENTE';
+
+  if (eligibleAnalytics.length > 0) {
+    const validIvs = eligibleAnalytics
+      .map((a) => a.impliedVolatility as number)
+      .sort((a, b) => a - b);
+
+    const mid = Math.floor(validIvs.length / 2);
+    const medianIv =
+      validIvs.length % 2 !== 0
+        ? validIvs[mid]
+        : Number(((validIvs[mid - 1] + validIvs[mid]) / 2).toFixed(2));
+
+    const nearestCall = eligibleAnalytics
+      .filter((a) => a.side?.toLowerCase() === 'call')
+      .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
+
+    const nearestPut = eligibleAnalytics
+      .filter((a) => a.side?.toLowerCase() === 'put')
+      .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))[0];
+
+    // Checar divergência Call/Put > 5 pontos percentuais
+    if (
+      nearestCall?.impliedVolatility !== null &&
+      nearestCall?.impliedVolatility !== undefined &&
+      nearestPut?.impliedVolatility !== null &&
+      nearestPut?.impliedVolatility !== undefined &&
+      Math.abs(nearestCall.impliedVolatility - nearestPut.impliedVolatility) > atmRules.MAX_CALL_PUT_IV_DIVERGENCE_PP
+    ) {
+      ivQuality = 'DIVERGENTE';
+      ivAtmResult = null; // Tratado como dado não confiável -> sem IV ATM
+    } else {
+      ivQuality = 'CONFIÁVEL';
+      ivAtmResult = {
+        callIv: nearestCall?.impliedVolatility || medianIv,
+        putIv: nearestPut?.impliedVolatility || medianIv,
         percentile: 75,
-      }
-    : undefined;
+      };
+    }
+  }
 
   return {
     underlyingSymbol,
@@ -387,6 +377,7 @@ export function analyzeOptionPositions(
     openInterestDate: openInterestDate || new Date().toISOString().split('T')[0],
     maxPain: maxPainStrike,
     ivAtm: ivAtmResult,
+    ivQuality,
     hv21: realHv21,
     hv63: realHv63,
     putCallRatio,
@@ -420,20 +411,23 @@ export function buildOptionBarrierAlert(analysis: OptionAnalysisResult): OptionB
   const isCallImminent = topCall.distSpot >= 0 && topCall.distSpot <= 3.0; // Preço a <= 3% da Call Wall
   const isPutImminent = topPut.distSpot <= 0 && Math.abs(topPut.distSpot) <= 3.0; // Preço a <= 3% da Put Wall
 
+  let hasAlert = false;
   let alertType: 'CALL_WALL_RESISTANCE' | 'PUT_WALL_SUPPORT' | 'MAX_PAIN_PIN' | undefined;
-  let alertMessage: string | undefined;
+  let alertMessage = '';
 
   if (isCallImminent) {
+    hasAlert = true;
     alertType = 'CALL_WALL_RESISTANCE';
-    alertMessage = `Atenção: Preço à vista (R$ ${spot.toFixed(2)}) a apenas ${topCall.distSpot}% da Call Wall institucional em R$ ${topCall.strike.toFixed(2)} (${topCall.contracts.toLocaleString('pt-BR')} contratos). Forte barreira de resistência e travamento de alta pelos lançadores.`;
+    alertMessage = `Alerta de Barreira Institucional: Preço (R$ ${spot.toFixed(2)}) a apenas ${topCall.distSpot}% da Call Wall (${topCall.symbol} @ R$ ${topCall.strike.toFixed(2)} com ${topCall.contracts.toLocaleString('pt-BR')} contratos). Risco de resistência por defesa de lançadores institucionais.`;
   } else if (isPutImminent) {
+    hasAlert = true;
     alertType = 'PUT_WALL_SUPPORT';
-    alertMessage = `Atenção: Preço à vista (R$ ${spot.toFixed(2)}) a apenas ${Math.abs(topPut.distSpot)}% da Put Wall institucional em R$ ${topPut.strike.toFixed(2)} (${topPut.contracts.toLocaleString('pt-BR')} contratos). Zona relevante de suporte e defesa institucional.`;
+    alertMessage = `Alerta de Suporte Institucional: Preço (R$ ${spot.toFixed(2)}) a apenas ${Math.abs(topPut.distSpot)}% da Put Wall (${topPut.symbol} @ R$ ${topPut.strike.toFixed(2)} com ${topPut.contracts.toLocaleString('pt-BR')} contratos). Probabilidade de suporte forte por recompra de market makers.`;
   }
 
   return {
     expirationDate: analysis.selectedExpiration,
-    dte: analysis.selectedExpirationInfo?.dte || 0,
+    dte: analysis.selectedExpirationInfo.dte,
     spotPrice: spot,
     maxPain: analysis.maxPain,
     topCallWall: {
@@ -450,7 +444,7 @@ export function buildOptionBarrierAlert(analysis: OptionAnalysisResult): OptionB
       distSpot: topPut.distSpot,
       isImminent: isPutImminent,
     },
-    hasAlert: isCallImminent || isPutImminent,
+    hasAlert,
     alertType,
     alertMessage,
   };

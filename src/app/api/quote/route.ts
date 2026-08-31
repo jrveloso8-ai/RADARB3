@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { brapiService } from '@/lib/services/brapi';
 import {
   analyzeAssetTrend,
+  calculateSMA,
   calculateHistoricalSMA,
   generateConsolidatedVerdict,
 } from '@/lib/domain/trends';
+import {
+  calculateATR,
+  calculateMACD,
+  calculateRSI,
+  calculateSupportResistance,
+  calculateVolumeRatio,
+  evaluateTechnicalChecklist,
+} from '@/lib/domain/indicators';
 import { analyzeFundamentals } from '@/lib/domain/fundamentals';
 import {
   analyzeOptionPositions,
@@ -12,99 +21,89 @@ import {
   getB3ExpirationDetails,
   getMostLiquidB3Expiration,
 } from '@/lib/domain/options-barriers';
-import {
-  calculateATR,
-  calculateHistoricalRSI,
-  calculateMACD,
-  calculateRiskReward,
-  calculateRSI,
-  calculateSupportResistance,
-  calculateVolumeRatio,
-  evaluateTechnicalChecklist,
-} from '@/lib/domain/indicators';
-import { buildSuggestedOptionStructure } from '@/lib/domain/options-structures';
-import { electBestCMEStrategy } from '@/lib/domain/cme-election';
 import { calculateHistoricalVolatility, classifyVolatilityRegime } from '@/lib/domain/volatility';
+import { electBestOptionStrategy } from '@/lib/domain/cme-election';
+import { resolveOperation } from '@/lib/domain/operation-matrix';
+import { buildTradePlan } from '@/lib/domain/trade-plan';
+import { RentalAlert } from '@/lib/types/financial';
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const symbol = searchParams.get('symbol');
-
-  if (!symbol) {
-    return NextResponse.json(
-      { error: 'Parâmetro symbol é obrigatório (ex: ?symbol=PETR4).' },
-      { status: 400 }
-    );
-  }
-
   try {
+    const { searchParams } = new URL(request.url);
+    const symbol = searchParams.get('symbol');
+
+    if (!symbol) {
+      return NextResponse.json(
+        { error: 'Parâmetro "symbol" é obrigatório.' },
+        { status: 400 }
+      );
+    }
+
     const cleanSymbol = symbol.trim().toUpperCase();
 
-    // 1. Obter cotação e histórico de 12 meses
+    // 1. Cotação e Histórico 12M
     const quote = await brapiService.getQuoteWith12MHistory(cleanSymbol);
-    const closes = quote.historicalDataPrice.map((h) => h.close);
+    const rawHistory = quote.historicalDataPrice || [];
 
-    // 2. Análise Técnica (MM20, MM50 e MM200)
+    // Enriquecer histórico com séries de médias móveis
+    const sma20Series = calculateHistoricalSMA(rawHistory, 20);
+    const sma50Series = calculateHistoricalSMA(rawHistory, 50);
+    const sma200Series = calculateHistoricalSMA(rawHistory, 200);
+
+    const enrichedHistorical = rawHistory.map((item, index) => ({
+      ...item,
+      sma20: sma20Series[index] ?? undefined,
+      sma50: sma50Series[index] ?? undefined,
+      sma200: sma200Series[index] ?? undefined,
+    }));
+
+    // 2. Análise de Tendência Básica
     const trendAnalysis = analyzeAssetTrend(
-      quote.symbol,
+      cleanSymbol,
       quote.regularMarketPrice,
       quote.regularMarketChangePercent,
-      quote.historicalDataPrice,
+      rawHistory,
       quote.shortName
     );
 
-    // Calcular séries de médias móveis para o gráfico
-    const mm20Series = calculateHistoricalSMA(quote.historicalDataPrice, 20);
-    const mm50Series = calculateHistoricalSMA(quote.historicalDataPrice, 50);
-    const mm200Series = calculateHistoricalSMA(quote.historicalDataPrice, 200);
-    const rsiSeries = calculateHistoricalRSI(closes, 14);
+    // 3. Indicadores Técnicos
+    const closes = rawHistory.map((h) => h.close);
+    const highs = rawHistory.map((h) => h.high);
+    const lows = rawHistory.map((h) => h.low);
 
-    const enrichedHistorical = quote.historicalDataPrice.map((item, index) => ({
-      ...item,
-      mm20: mm20Series[index],
-      mm50: mm50Series[index],
-      mm200: mm200Series[index],
-      rsi: rsiSeries[index],
-    }));
-
-    // 3. Indicadores CNPI-T Avançados
     const rsi = calculateRSI(closes, 14);
     const macd = calculateMACD(closes);
-    const atr = calculateATR(quote.historicalDataPrice, 14);
-    const volumeRatio = calculateVolumeRatio(quote.historicalDataPrice, 20);
-    const { supports, resistances } = calculateSupportResistance(
-      quote.historicalDataPrice,
-      quote.regularMarketPrice
-    );
+    const atr = calculateATR(rawHistory, 14);
+    const sma20 = calculateSMA(closes, 20);
+    const sma50 = calculateSMA(closes, 50);
+    const sma200 = calculateSMA(closes, 200);
+    const volumeRatio = calculateVolumeRatio(rawHistory, 20);
 
+    const sr = calculateSupportResistance(rawHistory, quote.regularMarketPrice);
     const checklist = evaluateTechnicalChecklist(
       quote.regularMarketPrice,
-      trendAnalysis.movingAverages.mm20,
-      trendAnalysis.movingAverages.mm50,
-      trendAnalysis.movingAverages.mm200,
+      sma20,
+      sma50,
+      sma200,
       rsi,
-      macd.histogram,
+      macd?.histogram ?? null,
       volumeRatio
     );
 
-    const riskReward = calculateRiskReward(
-      quote.regularMarketPrice,
-      trendAnalysis.trend,
-      atr,
-      supports,
-      resistances
-    );
-
     const indicators = {
+      sma20,
+      sma50,
+      sma200,
       rsi,
       macd,
       atr,
       volumeRatio,
       checklist,
-      riskReward,
+      supports: sr.supports,
+      resistances: sr.resistances,
     };
 
-    // 4. Crivo Fundamentalista (CNPI-P)
+    // 4. Crivo Fundamentalista (CNPI-P v2)
     let fundamentals;
     try {
       const rawFundamentals = await brapiService.getFundamentals(cleanSymbol);
@@ -113,20 +112,37 @@ export async function GET(request: NextRequest) {
       fundamentals = analyzeFundamentals(cleanSymbol, {});
     }
 
-    // 5. Barreiras de Opções no Vencimento Mais Líquido (Série Mensal B3)
+    // 5. Decisão Operacional da Matriz (Eixo 1 x Eixo 2)
+    const operation = resolveOperation(trendAnalysis.trend, fundamentals.status);
+
+    // 6. Plano de Trade (PR4)
+    const tradePlan = buildTradePlan(
+      quote.regularMarketPrice,
+      trendAnalysis.trend,
+      highs,
+      lows,
+      closes
+    );
+
+    // 7. Barreiras de Opções & Analytics (Eixo 3)
     let barrierAlert;
     let optionAnalysis;
+    const expirations = getB3ExpirationDetails();
+    const liquidExp = getMostLiquidB3Expiration(expirations);
+    const targetExp = liquidExp.date;
+
     try {
-      const expirations = getB3ExpirationDetails();
-      const liquidExp = getMostLiquidB3Expiration(expirations);
-      const targetExp = liquidExp.date;
-      const positionsData = await brapiService.getOptionPositions(cleanSymbol, targetExp);
+      const [positionsData, analyticsData] = await Promise.all([
+        brapiService.getOptionPositions(cleanSymbol, targetExp).catch(() => ({ positions: [] })),
+        brapiService.getOptionAnalytics(cleanSymbol, targetExp).catch(() => ({ analytics: [] })),
+      ]);
 
       if (positionsData?.positions && positionsData.positions.length > 0) {
         optionAnalysis = analyzeOptionPositions(
           cleanSymbol,
           quote.regularMarketPrice,
           positionsData.positions,
+          analyticsData?.analytics || [],
           targetExp,
           expirations,
           closes
@@ -137,10 +153,8 @@ export async function GET(request: NextRequest) {
       barrierAlert = undefined;
     }
 
-    // 6. Regime de Volatilidade & Veredito Consolidado CNPI
-    // realHv21: Volatilidade Histórica real de 21 pregões
+    // 8. Regime de Volatilidade & Veredito Consolidado CNPI
     const realHv21 = calculateHistoricalVolatility(closes, 21) ?? 25.0;
-    // ivAtm: Volatilidade Implícita real das opções (null se não houver IV real das opções)
     const ivAtmRaw = optionAnalysis?.ivAtm?.callIv;
     const volRegime =
       ivAtmRaw !== undefined && ivAtmRaw > 0
@@ -157,15 +171,21 @@ export async function GET(request: NextRequest) {
       volRegime
     );
 
-    // 7. Estrutura Genérica & Eleição da ÚNICA Melhor Estratégia de Opções B3
-    const suggestedStructure = buildSuggestedOptionStructure(
-      cleanSymbol,
-      quote.regularMarketPrice,
-      verdict.verdict,
-      optionAnalysis
-    );
+    // Tratamento especial para SAIDA_STOP na consulta individual (Caso 6 da spec):
+    if (operation.operation === 'SAIDA_STOP') {
+      verdict.verdictLabel = 'SAÍDA / STOP (GESTÃO DE POSIÇÃO)';
+      verdict.actionRecommendation = 'AGUARDAR';
+      verdict.rationale = [
+        'Tendência de baixa — saída ou stop de posição existente. Nenhuma estrutura nova autorizada.',
+      ];
+    } else if (operation.operation === 'SEM_OPERACAO') {
+      verdict.verdictLabel = 'SEM OPERAÇÃO AUTORIZADA';
+      verdict.actionRecommendation = 'BLOQUEADO';
+      verdict.rationale = [operation.reason];
+    }
 
-    const electedOptionStrategy = electBestCMEStrategy(
+    // 9. Eleição da ÚNICA Melhor Estratégia de Opções B3
+    const electedOptionStrategy = electBestOptionStrategy(
       cleanSymbol,
       quote.regularMarketPrice,
       verdict.verdict,
@@ -176,6 +196,15 @@ export async function GET(request: NextRequest) {
       fundamentals.status
     );
 
+    const rentalAlert: RentalAlert | undefined =
+      operation.operation === 'VENDA'
+        ? {
+            required: true,
+            message:
+              'Venda à vista exige aluguel (BTC). Confirmar disponibilidade de doador e taxa na corretora antes de executar. Alternativa sem aluguel: trava de baixa com opções.',
+          }
+        : undefined;
+
     return NextResponse.json({
       ...quote,
       historicalDataPrice: enrichedHistorical,
@@ -184,19 +213,24 @@ export async function GET(request: NextRequest) {
         fundamentals,
         verdict,
         indicators,
+        operation,
+        tradePlan,
+        rentalAlert,
       },
       fundamentals,
       barrierAlert,
       verdict,
-      indicators,
-      suggestedStructure,
+      operation,
+      tradePlan,
+      rentalAlert,
+      optionAnalysis,
       electedOptionStrategy,
+      selectedExpiration: targetExp,
+      availableExpirations: expirations,
+      updatedAt: new Date().toISOString(),
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Erro ao processar consulta de cotação.';
-    return NextResponse.json(
-      { error: message, available: false },
-      { status: 404 }
-    );
+    const message = error instanceof Error ? error.message : 'Erro ao processar consulta de ativo.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

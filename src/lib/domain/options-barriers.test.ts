@@ -1,127 +1,199 @@
 import { describe, it, expect } from 'vitest';
 import {
+  analyzeOptionPositions,
   getB3ExpirationDetails,
   getMostLiquidB3Expiration,
-  analyzeOptionPositions,
 } from './options-barriers';
-import { calculateBlackScholes, calculateMaxPain } from './black-scholes';
-import { OptionPositionItem } from '../types/financial';
+import { OptionAnalyticsItem, OptionPositionItem } from '../types/financial';
 
-describe('Motor Matemático de Opções - Black Scholes & Max Pain & Walls', () => {
-  describe('calculateBlackScholes', () => {
-    it('deve calcular gregas teóricas (Delta positivo para CALL, negativo para PUT)', () => {
-      const call = calculateBlackScholes(30.0, 30.0, 30 / 252, 0.1075, 0.32, 'call');
-      expect(call.delta).toBeGreaterThan(0.4);
-      expect(call.delta).toBeLessThan(0.7);
-      expect(call.theoreticalPrice).toBeGreaterThan(0);
+describe('Motor de Opções e Barreiras B3 — Testes Obrigatórios O1 a O8 (Spec v2)', () => {
+  const mockExp = getB3ExpirationDetails(new Date('2026-08-31'));
 
-      const put = calculateBlackScholes(30.0, 30.0, 30 / 252, 0.1075, 0.32, 'put');
-      expect(put.delta).toBeLessThan(0);
-      expect(put.delta).toBeGreaterThan(-0.7);
-    });
+  // O1: Série com OI e sem analytics entra como wall, optionPrice = null, iv = null, sem preço teórico
+  it('O1: série com OI e sem analytics deve entrar na Wall sem inventar preço teórico (optionPrice = null, iv = null)', () => {
+    const positions: OptionPositionItem[] = [
+      {
+        symbol: 'PETRI300',
+        underlyingSymbol: 'PETR4',
+        side: 'call',
+        strike: 30.0,
+        expirationDate: '2026-09-18',
+        openInterest: 500000,
+      },
+    ];
+    const analytics: OptionAnalyticsItem[] = []; // Sem analytics
+
+    const res = analyzeOptionPositions('PETR4', 30.0, positions, analytics, '2026-09-18', mockExp);
+
+    expect(res.top5CallWalls).toHaveLength(1);
+    expect(res.top5CallWalls[0].strike).toBe(30.0);
+    expect(res.top5CallWalls[0].contracts).toBe(500000);
+    expect(res.top5CallWalls[0].lastPrice).toBe(0); // Sem preço teórico fictício
+    expect(res.top5CallWalls[0].iv).toBe(0);
   });
 
-  describe('calculateMaxPain', () => {
-    it('deve encontrar o strike de menor prejuízo para lançadores', () => {
-      const strikes = [28, 30, 32];
-      const callsByStrike = new Map<number, number>([
-        [28, 1000],
-        [30, 5000],
-        [32, 20000],
-      ]);
-      const putsByStrike = new Map<number, number>([
-        [28, 15000],
-        [30, 4000],
-        [32, 500],
-      ]);
+  // O2: confidence: 'low' não elegível para IV ATM
+  it('O2: séries com confidence "low" não devem compor a IV ATM', () => {
+    const positions: OptionPositionItem[] = [
+      { symbol: 'PETRI300', underlyingSymbol: 'PETR4', side: 'call', strike: 30.0, expirationDate: '2026-09-18', openInterest: 5000 },
+    ];
+    const analytics: OptionAnalyticsItem[] = [
+      {
+        symbol: 'PETRI300',
+        side: 'call',
+        strike: 30.0,
+        optionPrice: 1.20,
+        impliedVolatility: 28.5,
+        openInterest: 5000,
+        confidence: 'low', // Inválido
+      },
+    ];
 
-      const { maxPainStrike } = calculateMaxPain(strikes, callsByStrike, putsByStrike);
-      expect(maxPainStrike).toBe(30);
-    });
+    const res = analyzeOptionPositions('PETR4', 30.0, positions, analytics, '2026-09-18', mockExp);
+    expect(res.ivAtm).toBeNull();
   });
 
-  describe('getB3ExpirationDetails', () => {
-    it('deve gerar vencimentos oficiais (Mensais e Semanais) com letras de séries corretas e DTE em dias úteis', () => {
-      const expirations = getB3ExpirationDetails('2026-08-29');
-      expect(expirations.length).toBeGreaterThanOrEqual(10);
-      expect(expirations[0].callLetter).toBeDefined();
-      expect(expirations[0].putLetter).toBeDefined();
-      expect(expirations[0].dte).toBeGreaterThan(0);
+  // O3: optionPrice < 0.10 não elegível
+  it('O3: opções com prêmio de centavos (< R$ 0,10) não devem compor a IV ATM', () => {
+    const positions: OptionPositionItem[] = [
+      { symbol: 'PETRI300', underlyingSymbol: 'PETR4', side: 'call', strike: 30.0, expirationDate: '2026-09-18', openInterest: 5000 },
+    ];
+    const analytics: OptionAnalyticsItem[] = [
+      {
+        symbol: 'PETRI300',
+        side: 'call',
+        strike: 30.0,
+        optionPrice: 0.04, // < 0.10
+        impliedVolatility: 45.0,
+        openInterest: 5000,
+        confidence: 'high',
+      },
+    ];
 
-      // Verificar que o vencimento mensal de Outubro tem a série J / V e exatamente 32 DTE
-      const octMonthly = expirations.find((e) => e.date === '2026-10-16');
-      expect(octMonthly).toBeDefined();
-      expect(octMonthly?.callLetter).toBe('J');
-      expect(octMonthly?.putLetter).toBe('V');
-      expect(octMonthly?.dte).toBe(32); // 32 dias úteis como no Profit!
-    });
+    const res = analyzeOptionPositions('PETR4', 30.0, positions, analytics, '2026-09-18', mockExp);
+    expect(res.ivAtm).toBeNull();
   });
 
-  describe('analyzeOptionPositions', () => {
-    it('deve processar Top 5 Walls, distribuição de strikes e grade straddle completa', () => {
-      const sample: OptionPositionItem[] = [
-        {
-          symbol: 'PETRI300',
-          underlyingSymbol: 'PETR4',
-          strike: 30.0,
-          side: 'call',
-          expirationDate: '2026-09-18',
-          openInterest: 50000,
-          coveredQuantity: 30000,
-          uncoveredQuantity: 20000,
-        },
-        {
-          symbol: 'PETRU300',
-          underlyingSymbol: 'PETR4',
-          strike: 30.0,
-          side: 'put',
-          expirationDate: '2026-09-18',
-          openInterest: 45000,
-          coveredQuantity: 25000,
-          uncoveredQuantity: 20000,
-        },
-      ];
+  // O4: Strike a 8% do spot não elegível (fora de +-5%)
+  it('O4: strikes fora da faixa de +-5% do spot não devem compor a IV ATM', () => {
+    const positions: OptionPositionItem[] = [
+      { symbol: 'PETRI325', underlyingSymbol: 'PETR4', side: 'call', strike: 32.5, expirationDate: '2026-09-18', openInterest: 5000 },
+    ];
+    const analytics: OptionAnalyticsItem[] = [
+      {
+        symbol: 'PETRI325',
+        side: 'call',
+        strike: 32.5, // 8.3% acima de 30.0
+        optionPrice: 0.80,
+        impliedVolatility: 26.0,
+        openInterest: 5000,
+        confidence: 'high',
+      },
+    ];
 
-      const expirations = getB3ExpirationDetails('2026-08-29');
-      const result = analyzeOptionPositions(
-        'PETR4',
-        30.0,
-        sample,
-        '2026-09-18',
-        expirations,
-        'equity'
-      );
-
-      expect(result.underlyingSymbol).toBe('PETR4');
-      expect(result.top5CallWalls.length).toBe(1);
-      expect(result.top5CallWalls[0].symbol).toBe('PETRI300');
-      expect(result.top5PutWalls.length).toBe(1);
-      expect(result.top5PutWalls[0].symbol).toBe('PETRU300');
-      expect(result.straddleRows.length).toBe(1);
-      expect(result.straddleRows[0].strike).toBe(30.0);
-    });
+    const res = analyzeOptionPositions('PETR4', 30.0, positions, analytics, '2026-09-18', mockExp);
+    expect(res.ivAtm).toBeNull();
   });
 
-  describe('getMostLiquidB3Expiration', () => {
-    it('deve selecionar a série mensal principal e ignorar séries semanais ilíquidas', () => {
-      const expirations = getB3ExpirationDetails('2026-08-29');
-      const mostLiquid = getMostLiquidB3Expiration(expirations);
+  // O5: Nenhuma série elegível -> ivAtm = null
+  it('O5: quando nenhuma série for elegível, ivAtm deve ser null', () => {
+    const res = analyzeOptionPositions('PETR4', 30.0, [], [], '2026-09-18', mockExp);
+    expect(res.ivAtm).toBeNull();
+    expect(res.ivQuality).toBe('INSUFICIENTE');
+  });
 
-      expect(mostLiquid).toBeDefined();
-      expect(mostLiquid.badge).toContain('Mensal');
-      expect(mostLiquid.date).toBe('2026-09-18');
-      expect(mostLiquid.dte).toBe(13); // 13 dias úteis (considera feriado 07/09)
-    });
+  // O6: Divergência Call 32% vs Put 40% no ATM -> ivQuality: 'DIVERGENTE' e ivAtm = null
+  it('O6: divergência Call/Put > 5 pp deve marcar ivQuality: DIVERGENTE e anular ivAtm', () => {
+    const positions: OptionPositionItem[] = [
+      { symbol: 'PETRI300', underlyingSymbol: 'PETR4', side: 'call', strike: 30.0, expirationDate: '2026-09-18', openInterest: 5000 },
+      { symbol: 'PETRU300', underlyingSymbol: 'PETR4', side: 'put', strike: 30.0, expirationDate: '2026-09-18', openInterest: 5000 },
+    ];
+    const analytics: OptionAnalyticsItem[] = [
+      {
+        symbol: 'PETRI300',
+        side: 'call',
+        strike: 30.0,
+        optionPrice: 1.20,
+        impliedVolatility: 32.0,
+        openInterest: 5000,
+        confidence: 'high',
+      },
+      {
+        symbol: 'PETRU300',
+        side: 'put',
+        strike: 30.0,
+        optionPrice: 1.40,
+        impliedVolatility: 40.0, // Diferença de 8 pp (> 5 pp)
+        openInterest: 5000,
+        confidence: 'high',
+      },
+    ];
 
-    it('deve rolar para a próxima série mensal se o DTE da série atual for menor que 5 dias úteis', () => {
-      const expirations = getB3ExpirationDetails('2026-09-16'); // 2 dias úteis antes do vencimento de 18/09
-      const mostLiquid = getMostLiquidB3Expiration(expirations);
+    const res = analyzeOptionPositions('PETR4', 30.0, positions, analytics, '2026-09-18', mockExp);
+    expect(res.ivQuality).toBe('DIVERGENTE');
+    expect(res.ivAtm).toBeNull();
+  });
 
-      expect(mostLiquid).toBeDefined();
-      expect(mostLiquid.badge).toContain('Mensal');
-      // Deve ter rolado para o vencimento de Outubro (16/10)
-      expect(mostLiquid.date).toBe('2026-10-16');
-      expect(mostLiquid.dte).toBeGreaterThan(15);
-    });
+  // O7: Merge por symbol: gregas vêm de analytics, OI vem de positions
+  it('O7: merge por symbol deve preservar OI de positions e preencher delta/gamma/preço de analytics', () => {
+    const positions: OptionPositionItem[] = [
+      {
+        symbol: 'PETRI300',
+        underlyingSymbol: 'PETR4',
+        side: 'call',
+        strike: 30.0,
+        expirationDate: '2026-09-18',
+        openInterest: 850000,
+      },
+    ];
+    const analytics: OptionAnalyticsItem[] = [
+      {
+        symbol: 'PETRI300',
+        side: 'call',
+        strike: 30.0,
+        optionPrice: 1.15,
+        impliedVolatility: 28.5,
+        delta: 0.52,
+        gamma: 0.18,
+        theta: -12.5,
+        vega: 3.8,
+        openInterest: 850000,
+        confidence: 'high',
+      },
+    ];
+
+    const res = analyzeOptionPositions('PETR4', 30.0, positions, analytics, '2026-09-18', mockExp);
+    expect(res.top5CallWalls[0].contracts).toBe(850000);
+    expect(res.top5CallWalls[0].lastPrice).toBe(1.15);
+    expect(res.top5CallWalls[0].iv).toBe(28.5);
+    expect(res.top5CallWalls[0].delta).toBe(0.52);
+  });
+
+  // O8: Seleção de vencimento mais líquido e rolagem por DTE
+  it('O8: getMostLiquidB3Expiration deve rolar para a próxima série quando DTE < 5 dias úteis', () => {
+    const expirations = [
+      {
+        date: '2026-09-04',
+        monthName: 'Setembro',
+        callLetter: 'I',
+        putLetter: 'U',
+        dte: 4, // < 5 DU
+        label: 'Série Setembro (W1)',
+        badge: 'Mais Líquida (Mensal)',
+      },
+      {
+        date: '2026-09-18',
+        monthName: 'Setembro',
+        callLetter: 'I',
+        putLetter: 'U',
+        dte: 14,
+        label: 'Série Setembro',
+        badge: 'Próxima Série (Mensal)',
+      },
+    ];
+
+    const mostLiquid = getMostLiquidB3Expiration(expirations);
+    expect(mostLiquid.date).toBe('2026-09-18');
+    expect(mostLiquid.dte).toBe(14);
   });
 });

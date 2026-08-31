@@ -1,4 +1,9 @@
-import { HistoricalPrice, OptionPositionItem, QuoteDetails } from '../types/financial';
+import {
+  HistoricalPrice,
+  OptionAnalyticsItem,
+  OptionPositionItem,
+  QuoteDetails,
+} from '../types/financial';
 import { RawFundamentalData } from '../domain/fundamentals';
 
 interface CacheEntry<T> {
@@ -280,11 +285,26 @@ export class BrapiService {
       const fin = item?.financialData || {};
       const stats = item?.defaultKeyStatistics || {};
 
+      // Dívida Líquida / EBITDA — calcular, não ler campo inexistente
+      const totalDebt = fin?.totalDebt ?? null;
+      const totalCash = fin?.totalCash ?? null;
+      const ebitda = fin?.ebitda ?? null;
+      const debtToEbitda =
+        totalDebt !== null && totalCash !== null && ebitda !== null && ebitda > 0
+          ? Number(((totalDebt - totalCash) / ebitda).toFixed(2))
+          : null;
+
+      const netIncome = stats?.netIncomeToCommon ?? null;
+
       return {
+        netIncome,
+        totalDebt,
+        totalCash,
+        ebitda,
         returnOnEquity: fin?.returnOnEquity ?? stats?.returnOnEquity ?? item?.returnOnEquity ?? null,
         netMargin: fin?.profitMargins ?? item?.netMargin ?? null,
         ebitdaMargin: fin?.ebitdaMargins ?? item?.ebitdaMargin ?? null,
-        debtToEbitda: item?.debtToEbitda ?? fin?.debtToEbitda ?? null,
+        debtToEbitda,
         currentRatio: fin?.currentRatio ?? item?.currentRatio ?? null,
         priceEarnings: item?.priceEarnings ?? stats?.forwardPE ?? stats?.trailingPE ?? null,
         priceToBook: item?.priceToBook ?? stats?.priceToBook ?? null,
@@ -341,6 +361,82 @@ export class BrapiService {
         );
       }
       throw err;
+    }
+  }
+
+  /**
+   * Consulta rota oficial v2: Analytics de Opções (Preço de mercado, IV real e Gregas B3).
+   * GET /api/v2/options/analytics?underlying=PETR4&expirationDate=YYYY-MM-DD
+   */
+  async getOptionAnalytics(
+    underlying: string,
+    expirationDate: string,
+    date?: string
+  ): Promise<{
+    underlying: string;
+    expirationDate: string;
+    date: string;
+    analytics: OptionAnalyticsItem[];
+  }> {
+    const cleanUnderlying = underlying.trim().toUpperCase();
+    const params: Record<string, string> = {
+      underlying: cleanUnderlying,
+      expirationDate,
+    };
+    if (date) params.date = date;
+
+    const url = this.buildUrl('/v2/options/analytics', params);
+    const cacheKey = `options_analytics_${cleanUnderlying}_${expirationDate}_${date || 'latest'}`;
+
+    try {
+      const data = await this.fetchWithTimeout<any>(url, cacheKey, 300);
+      const rawList: any[] = data?.analytics || data?.options || data?.results || (Array.isArray(data) ? data : []);
+
+      const analytics: OptionAnalyticsItem[] = rawList.map((item: any) => {
+        const ivRaw = item.impliedVolatility;
+        const iv =
+          ivRaw !== null && ivRaw !== undefined && !isNaN(ivRaw)
+            ? Number((ivRaw <= 1.0 && ivRaw > 0 ? ivRaw * 100 : ivRaw).toFixed(2))
+            : null;
+
+        return {
+          symbol: item.symbol,
+          side: item.side,
+          strike: Number(item.strike),
+          optionStyle: item.optionStyle || 'american',
+          model: item.model || 'cox-ross-rubinstein',
+          priceSource: item.priceSource || 'close',
+          underlyingPrice: item.underlyingPrice,
+          optionPrice:
+            item.optionPrice !== undefined && item.optionPrice !== null ? Number(item.optionPrice) : null,
+          impliedVolatility: iv,
+          delta: item.delta !== undefined ? Number(item.delta) : undefined,
+          gamma: item.gamma !== undefined ? Number(item.gamma) : undefined,
+          theta: item.theta !== undefined ? Number(item.theta) : undefined,
+          vega: item.vega !== undefined ? Number(item.vega) : undefined,
+          rho: item.rho !== undefined ? Number(item.rho) : undefined,
+          riskFreeRate: item.riskFreeRate !== undefined ? Number(item.riskFreeRate) : 0.14,
+          dividendYield: item.dividendYield !== undefined ? Number(item.dividendYield) : 0,
+          confidence: item.confidence || 'high',
+          nullReason: item.nullReason || null,
+          openInterest: item.openInterest ? Number(item.openInterest) : undefined,
+          openInterestDate: item.openInterestDate,
+        };
+      });
+
+      return {
+        underlying: data?.underlying || cleanUnderlying,
+        expirationDate: data?.expirationDate || expirationDate,
+        date: data?.date || '',
+        analytics,
+      };
+    } catch {
+      return {
+        underlying: cleanUnderlying,
+        expirationDate,
+        date: '',
+        analytics: [],
+      };
     }
   }
 }

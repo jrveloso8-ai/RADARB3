@@ -1,0 +1,18 @@
+{
+  "symbol": "PETR4",
+  "financialData": {
+    "totalCash": 53764000000,
+    "totalDebt": 676283000000,
+    "ebitda": 273323000000,
+    "currentRatio": 0.8544373,
+    "returnOnEquity": 0.2781079,
+    "profitMargins": 0.2438609
+  },
+  "defaultKeyStatistics": {
+    "netIncomeToCommon": 133376000000,
+    "trailingPE": 4.662618,
+    "priceToBook": 1.1670742,
+    "bookValue": 37.315536,
+    "enterpriseToEbitda": 4.3312244
+  }
+}

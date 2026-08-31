@@ -4,27 +4,30 @@ import React, { useState, useEffect } from 'react';
 import {
   TrendingUp,
   TrendingDown,
-  Minus,
   RefreshCw,
   Info,
-  CheckCircle2,
-  AlertTriangle,
-  Key,
-  Shield,
   Layers,
   Search,
   ExternalLink,
-  Ban,
-  Activity,
-  SlidersHorizontal,
+  ShieldCheck,
+  AlertCircle,
+  Clock,
+  Target,
+  ShieldAlert,
 } from 'lucide-react';
-import { ConsolidatedVerdictType, TrendAnalysisResult } from '@/lib/types/financial';
+import { AssetDecisionResult } from '@/lib/types/financial';
 import { safeFetchJson } from '@/lib/utils/api-client';
 
 interface ScreenerResponse {
   type: string;
   totalAnalyzed: number;
-  results: TrendAnalysisResult[];
+  lists: {
+    alta: AssetDecisionResult[];
+    baixa: AssetDecisionResult[];
+    lateral: AssetDecisionResult[];
+  };
+  results?: AssetDecisionResult[];
+  updatedAt: string;
   requiresToken?: boolean;
 }
 
@@ -33,9 +36,14 @@ interface ScreenerViewProps {
 }
 
 export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) => {
-  const [filterVerdict, setFilterVerdict] = useState<string>('ALL');
   const [selectedLimit, setSelectedLimit] = useState<number | 'all'>(60);
-  const [results, setResults] = useState<TrendAnalysisResult[]>([]);
+  const [lists, setLists] = useState<{
+    alta: AssetDecisionResult[];
+    baixa: AssetDecisionResult[];
+    lateral: AssetDecisionResult[];
+  }>({ alta: [], baixa: [], lateral: [] });
+  const [totalAnalyzed, setTotalAnalyzed] = useState(0);
+  const [searchFilter, setSearchFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [requiresToken, setRequiresToken] = useState(false);
 
@@ -47,10 +55,19 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
     );
 
     if (ok && data) {
-      setResults(data.results);
+      if (data.lists) {
+        setLists(data.lists);
+      } else if (data.results) {
+        setLists({
+          alta: data.results.filter((r) => r.operation?.operation === 'COMPRA'),
+          baixa: data.results.filter((r) => r.operation?.operation === 'VENDA'),
+          lateral: data.results.filter((r) => r.operation?.operation === 'IRON_CONDOR'),
+        });
+      }
+      setTotalAnalyzed(data.totalAnalyzed || 0);
       setRequiresToken(!!data.requiresToken);
     } else {
-      setResults([]);
+      setLists({ alta: [], baixa: [], lateral: [] });
     }
     setLoading(false);
   };
@@ -59,105 +76,20 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
     fetchTrends(selectedLimit);
   }, [selectedLimit]);
 
-  const filteredResults = results.filter((item) => {
-    if (filterVerdict === 'ALL') return true;
-    if (filterVerdict === 'COMPRA') {
-      return (
-        item.verdict?.verdict === 'COMPRA_FORTE' ||
-        item.verdict?.verdict === 'COMPRA_COM_ALERTA_BARREIRA'
-      );
-    }
-    if (filterVerdict === 'IRON_CONDOR') {
-      return item.verdict?.verdict === 'LATERAL_IRON_CONDOR';
-    }
-    if (filterVerdict === 'AGUARDAR') {
-      return item.verdict?.verdict === 'LATERAL_AGUARDAR';
-    }
-    if (filterVerdict === 'VENDA') {
-      return (
-        item.verdict?.verdict === 'VENDA_FORTE' ||
-        item.verdict?.verdict === 'VENDA_COM_ALERTA_SUPORTE'
-      );
-    }
-    if (filterVerdict === 'BLOQUEADO') {
-      return item.verdict?.verdict === 'BLOQUEADO_POR_FUNDAMENTOS';
-    }
-    return true;
-  });
-
-  const countAll = results.length;
-  const countCompra = results.filter(
-    (i) =>
-      i.verdict?.verdict === 'COMPRA_FORTE' ||
-      i.verdict?.verdict === 'COMPRA_COM_ALERTA_BARREIRA'
-  ).length;
-  const countIronCondor = results.filter(
-    (i) => i.verdict?.verdict === 'LATERAL_IRON_CONDOR'
-  ).length;
-  const countAguardar = results.filter(
-    (i) => i.verdict?.verdict === 'LATERAL_AGUARDAR'
-  ).length;
-  const countVenda = results.filter(
-    (i) =>
-      i.verdict?.verdict === 'VENDA_FORTE' ||
-      i.verdict?.verdict === 'VENDA_COM_ALERTA_SUPORTE'
-  ).length;
-  const countBloqueado = results.filter(
-    (i) => i.verdict?.verdict === 'BLOQUEADO_POR_FUNDAMENTOS'
-  ).length;
-
-  const renderVerdictBadge = (verdict?: ConsolidatedVerdictType) => {
-    switch (verdict) {
-      case 'COMPRA_FORTE':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-500/50 font-mono shadow-sm">
-            <TrendingUp className="w-3.5 h-3.5" /> COMPRA FORTE
-          </span>
-        );
-      case 'COMPRA_COM_ALERTA_BARREIRA':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-950/80 text-amber-300 border border-amber-500/50 font-mono">
-            <AlertTriangle className="w-3.5 h-3.5" /> COMPRA C/ ALERTA CALL
-          </span>
-        );
-      case 'LATERAL_IRON_CONDOR':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-950/80 text-purple-300 border border-purple-500/50 font-mono shadow-sm">
-            <Layers className="w-3.5 h-3.5 text-purple-400" /> LATERAL (IRON CONDOR)
-          </span>
-        );
-      case 'LATERAL_AGUARDAR':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-amber-400 border border-amber-500/30 font-mono">
-            <Minus className="w-3.5 h-3.5" /> LATERAL / AGUARDAR
-          </span>
-        );
-      case 'VENDA_FORTE':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-red-950/80 text-red-400 border border-red-500/50 font-mono shadow-sm">
-            <TrendingDown className="w-3.5 h-3.5" /> VENDA TÉCNICA
-          </span>
-        );
-      case 'VENDA_COM_ALERTA_SUPORTE':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-red-950/80 text-red-300 border border-red-500/50 font-mono">
-            <Shield className="w-3.5 h-3.5" /> VENDA C/ ALERTA PUT
-          </span>
-        );
-      case 'BLOQUEADO_POR_FUNDAMENTOS':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-gray-800 text-gray-400 border border-gray-700 font-mono">
-            <Ban className="w-3.5 h-3.5 text-gray-500" /> COMPRA BLOQUEADA
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-amber-400 border border-amber-500/30 font-mono">
-            <Minus className="w-3.5 h-3.5" /> LATERAL / AGUARDAR
-          </span>
-        );
-    }
+  // Filtro de busca por ticker ou nome
+  const applySearch = (items: AssetDecisionResult[]) => {
+    if (!searchFilter.trim()) return items;
+    const q = searchFilter.trim().toLowerCase();
+    return items.filter(
+      (item) =>
+        item.symbol.toLowerCase().includes(q) ||
+        (item.shortName && item.shortName.toLowerCase().includes(q))
+    );
   };
+
+  const altaFiltered = applySearch(lists.alta);
+  const baixaFiltered = applySearch(lists.baixa);
+  const lateralFiltered = applySearch(lists.lateral);
 
   return (
     <div className="space-y-6">
@@ -166,19 +98,19 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold text-white tracking-wide">
-              Rastreador de Tendências & Veredito CNPI
+              Rastreador de Oportunidades & Lista de Execução
             </h2>
             <div className="flex items-center gap-1 text-[11px] text-cyan-400 bg-cyan-950/60 px-2.5 py-0.5 rounded-full border border-cyan-500/30 font-mono">
-              <span>Fundamentos (CNPI-P)</span> • <span>Técnico (CNPI-T)</span> • <span>Barreiras OI</span>
+              <span>Classificação Técnica</span> • <span>Crivo CNPI-P</span> • <span>Execução B3</span>
             </div>
           </div>
           <p className="text-xs text-gray-400 mt-1">
-            Motor de decisão em 3 camadas: Filtro de Solvência, Alinhamento de Médias e Alertas de Barreiras Institucionais de Opções.
+            Lista acionável filtrada por solvência, alinhamento estrito de médias móveis e liquidez real de derivativos.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
-          {/* Seletor de Quantidade de Ativos a Escanear */}
+          {/* Seletor de Quantidade de Ativos */}
           <div className="flex items-center gap-1 bg-[#111827] p-1 rounded-xl border border-gray-800 text-xs font-mono">
             <span className="text-[10px] text-gray-500 px-2 font-sans">Escanear:</span>
             {[
@@ -213,234 +145,274 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
         </div>
       </div>
 
-      {/* Cards de Filtro por Veredito Consolidado (6 Categorias Independentes) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <button
-          onClick={() => setFilterVerdict('ALL')}
-          className={`p-3.5 rounded-xl border text-left transition ${
-            filterVerdict === 'ALL'
-              ? 'bg-[#111827] border-cyan-500 ring-1 ring-cyan-500/50'
-              : 'bg-[#0f172a] border-gray-800 hover:border-gray-700'
-          }`}
-        >
-          <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-            <span>Todos os Ativos</span>
-          </div>
-          <div className="text-2xl font-bold font-mono text-white">{countAll}</div>
-        </button>
-
-        <button
-          onClick={() => setFilterVerdict('COMPRA')}
-          className={`p-3.5 rounded-xl border text-left transition ${
-            filterVerdict === 'COMPRA'
-              ? 'bg-[#111827] border-emerald-500 ring-1 ring-emerald-500/50'
-              : 'bg-[#0f172a] border-gray-800 hover:border-gray-700'
-          }`}
-        >
-          <div className="flex items-center justify-between text-xs text-emerald-400 mb-1">
-            <span>Compra Aprovada</span>
-            <TrendingUp className="w-3.5 h-3.5" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-emerald-400">{countCompra}</div>
-        </button>
-
-        <button
-          onClick={() => setFilterVerdict('IRON_CONDOR')}
-          className={`p-3.5 rounded-xl border text-left transition ${
-            filterVerdict === 'IRON_CONDOR'
-              ? 'bg-[#111827] border-purple-500 ring-1 ring-purple-500/50'
-              : 'bg-[#0f172a] border-gray-800 hover:border-gray-700'
-          }`}
-        >
-          <div className="flex items-center justify-between text-xs text-purple-400 mb-1">
-            <span>Iron Condor</span>
-            <Layers className="w-3.5 h-3.5" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-purple-400">{countIronCondor}</div>
-        </button>
-
-        <button
-          onClick={() => setFilterVerdict('AGUARDAR')}
-          className={`p-3.5 rounded-xl border text-left transition ${
-            filterVerdict === 'AGUARDAR'
-              ? 'bg-[#111827] border-amber-500 ring-1 ring-amber-500/50'
-              : 'bg-[#0f172a] border-gray-800 hover:border-gray-700'
-          }`}
-        >
-          <div className="flex items-center justify-between text-xs text-amber-400 mb-1">
-            <span>Lateral (Aguardar)</span>
-            <Minus className="w-3.5 h-3.5" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-amber-400">{countAguardar}</div>
-        </button>
-
-        <button
-          onClick={() => setFilterVerdict('VENDA')}
-          className={`p-3.5 rounded-xl border text-left transition ${
-            filterVerdict === 'VENDA'
-              ? 'bg-[#111827] border-red-500 ring-1 ring-red-500/50'
-              : 'bg-[#0f172a] border-gray-800 hover:border-gray-700'
-          }`}
-        >
-          <div className="flex items-center justify-between text-xs text-red-400 mb-1">
-            <span>Venda Técnica</span>
-            <TrendingDown className="w-3.5 h-3.5" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-red-400">{countVenda}</div>
-        </button>
-
-        <button
-          onClick={() => setFilterVerdict('BLOQUEADO')}
-          className={`p-3.5 rounded-xl border text-left transition ${
-            filterVerdict === 'BLOQUEADO'
-              ? 'bg-[#111827] border-gray-600 ring-1 ring-gray-600/50'
-              : 'bg-[#0f172a] border-gray-800 hover:border-gray-700'
-          }`}
-        >
-          <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-            <span>Bloqueado (Fundam.)</span>
-            <Ban className="w-3.5 h-3.5 text-gray-500" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-gray-400">{countBloqueado}</div>
-        </button>
+      {/* Barra de Busca Rápida */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Filtrar por ticker (ex: PETR4, WEGE3)..."
+            value={searchFilter}
+            onChange={(e) => setSearchFilter(e.target.value)}
+            className="w-full bg-[#111827] border border-gray-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 font-mono transition"
+          />
+        </div>
+        <div className="text-xs text-gray-500 font-mono">
+          Total de Ativos Analisados no Crivo: <strong className="text-gray-300">{totalAnalyzed}</strong>
+        </div>
       </div>
 
-      {/* Tabela de Rastreamento com os 3 Pilares e Veredito */}
-      <div className="bg-[#0f172a] rounded-2xl border border-gray-800 overflow-hidden shadow-xl">
-        {loading ? (
-          <div className="p-12 text-center text-gray-400 space-y-3">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto text-cyan-400" />
-            <p className="text-sm">Rastreando universo de ações da B3 e computando vereditos CNPI...</p>
+      {/* ========================================================================= */}
+      {/* SEÇÃO 1: 🟢 ALTA — COMPRA */}
+      {/* ========================================================================= */}
+      <div className="bg-[#0f172a] border border-emerald-500/30 rounded-2xl p-5 shadow-lg space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-800/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <h3 className="text-base font-bold text-emerald-400 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" /> ALTA — Oportunidades de Compra
+            </h3>
+            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">
+              {altaFiltered.length} {altaFiltered.length === 1 ? 'ativo' : 'ativos'}
+            </span>
           </div>
-        ) : filteredResults.length === 0 ? (
-          <div className="p-12 text-center text-gray-400">
-            Nenhum ativo encontrado para o filtro selecionado.
+          <span className="text-[11px] text-gray-400 font-sans hidden sm:inline">
+            Critério: Tendência de Alta ($MM20 &gt; MM50 &gt; MM200$) + Fundamentos Aprovados (CNPI-P)
+          </span>
+        </div>
+
+        {altaFiltered.length === 0 ? (
+          <div className="py-8 text-center text-gray-400 text-xs bg-[#111827]/50 rounded-xl border border-dashed border-gray-800">
+            Nenhuma operação autorizada nesta direção hoje.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#111827] text-gray-400 border-b border-gray-800 font-mono text-[11px]">
-                <tr>
-                  <th className="py-3 px-4">ATIVO B3</th>
-                  <th className="py-3 px-3">PREÇO ATUAL</th>
-                  <th className="py-3 px-3">1. FUNDAMENTOS (CNPI-P)</th>
-                  <th className="py-3 px-3">2. TÉCNICO (MM20/50/200)</th>
-                  <th className="py-3 px-3">3. BARREIRAS DE OPÇÕES</th>
-                  <th className="py-3 px-4 text-center">VEREDITO CONSOLIDADO</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800/60 font-mono">
-                {filteredResults.map((item) => {
-                  const fund = item.fundamentals;
-                  const barrier = item.verdict?.barrierAlert;
-
-                  return (
-                    <tr
-                      key={item.symbol}
-                      onClick={() => onSelectSymbol?.(item.symbol)}
-                      className="hover:bg-[#1e293b]/50 transition cursor-pointer group"
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {altaFiltered.map((item) => (
+              <div
+                key={item.symbol}
+                onClick={() => onSelectSymbol && onSelectSymbol(item.symbol)}
+                className="bg-[#111827] border border-gray-800 hover:border-emerald-500/50 p-4 rounded-xl transition cursor-pointer hover:shadow-md space-y-3 group"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-base font-bold text-white font-mono group-hover:text-emerald-400 transition flex items-center gap-1.5">
+                      {item.symbol}
+                      <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition" />
+                    </span>
+                    <span className="text-xs text-gray-400 truncate block max-w-[180px]">
+                      {item.shortName}
+                    </span>
+                  </div>
+                  <div className="text-right font-mono">
+                    <div className="text-sm font-bold text-white">
+                      R$ {item.currentPrice.toFixed(2)}
+                    </div>
+                    <div
+                      className={`text-xs font-semibold ${
+                        item.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}
                     >
-                      {/* Ativo */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-white group-hover:text-cyan-400 transition">
-                            {item.symbol}
-                          </span>
-                          <ExternalLink className="w-3 h-3 text-gray-500 opacity-0 group-hover:opacity-100 transition" />
-                        </div>
-                        <span className="text-[10px] text-gray-400 font-sans block truncate max-w-[140px]">
-                          {item.shortName || item.symbol}
-                        </span>
-                      </td>
+                      {item.changePercent >= 0 ? '+' : ''}
+                      {item.changePercent.toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
 
-                      {/* Preço & Variação */}
-                      <td className="py-3.5 px-3">
-                        <div className="text-white font-bold text-xs">
-                          R$ {item.currentPrice.toFixed(2)}
-                        </div>
-                        <span
-                          className={`text-[10px] font-semibold ${
-                            item.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'
-                          }`}
-                        >
-                          {item.changePercent >= 0 ? '+' : ''}
-                          {item.changePercent.toFixed(2)}%
-                        </span>
-                      </td>
+                {/* Resumo da Operação / Trade Plan */}
+                <div className="bg-[#0b1120] p-2.5 rounded-lg border border-gray-800/80 text-xs space-y-1.5 font-mono">
+                  {item.tradePlan ? (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px] text-gray-400">
+                        <span>Stop: <strong className="text-red-400">R$ {item.tradePlan.stop.toFixed(2)}</strong></span>
+                        <span>Alvo 1: <strong className="text-emerald-400">R$ {item.tradePlan.target1.toFixed(2)}</strong></span>
+                        <span>R:R: <strong className="text-cyan-400">{item.tradePlan.riskRewardRatio}:1</strong></span>
+                      </div>
+                      <div className="text-[10px] text-gray-500 truncate font-sans">
+                        {item.optionStructure ? item.optionStructure.title : 'Compra a mercado com plano de trade estrutural.'}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-gray-400">
+                      Operação direcional de alta autorizada pelo crivo CNPI-P.
+                    </div>
+                  )}
 
-                      {/* 1. Fundamentos */}
-                      <td className="py-3.5 px-3">
-                        {fund ? (
-                          <div className="space-y-0.5">
-                            <span
-                              className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                                fund.status === 'APROVADO'
-                                  ? 'bg-emerald-500/20 text-emerald-400'
-                                  : 'bg-red-500/20 text-red-400'
-                              }`}
-                            >
-                              {fund.status} {fund.score}/100
-                            </span>
-                            <div className="text-[10px] text-gray-400 font-sans truncate">
-                              ROE: {fund.metrics.roe.formatted} • Dív/EBITDA: {fund.metrics.debtToEbitda.formatted}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-gray-500 text-[10px]">Sem dados DRE</span>
-                        )}
-                      </td>
+                  {item.barrierAlert?.hasAlert && (
+                    <div className="text-[10px] text-amber-400 flex items-center gap-1 pt-1 border-t border-gray-800/60 font-sans">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      <span>Preço colado na Call Wall ({item.barrierAlert.topCallWall?.symbol})</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-                      {/* 2. Técnico */}
-                      <td className="py-3.5 px-3">
-                        <div className="space-y-0.5">
-                          <span
-                            className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                              item.trend === 'ALTA'
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : item.trend === 'BAIXA'
-                                ? 'bg-red-500/20 text-red-400'
-                                : 'bg-amber-500/20 text-amber-400'
-                            }`}
-                          >
-                            {item.trend}
-                          </span>
-                          <div className="text-[10px] text-gray-400 font-sans">
-                            MM20: {item.movingAverages.mm20 ? item.movingAverages.mm20.toFixed(2) : '-'} | MM200: {item.movingAverages.mm200 ? item.movingAverages.mm200.toFixed(2) : '-'}
-                          </div>
-                        </div>
-                      </td>
+      {/* ========================================================================= */}
+      {/* SEÇÃO 2: 🔴 BAIXA — VENDA */}
+      {/* ========================================================================= */}
+      <div className="bg-[#0f172a] border border-red-500/30 rounded-2xl p-5 shadow-lg space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-800/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+            <h3 className="text-base font-bold text-red-400 flex items-center gap-2">
+              <TrendingDown className="w-5 h-5" /> BAIXA — Oportunidades de Venda
+            </h3>
+            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-500/30 font-bold">
+              {baixaFiltered.length} {baixaFiltered.length === 1 ? 'ativo' : 'ativos'}
+            </span>
+          </div>
+          <span className="text-[11px] text-gray-400 font-sans hidden sm:inline">
+            Critério: Tendência de Baixa ($MM20 &lt; MM50 &lt; MM200$) + Deterioração Contábil
+          </span>
+        </div>
 
-                      {/* 3. Barreiras de Opções */}
-                      <td className="py-3.5 px-3">
-                        {barrier && (barrier.topCallWall || barrier.topPutWall) ? (
-                          <div className="text-[11px] space-y-0.5">
-                            {barrier.topCallWall && (
-                              <div className="text-emerald-400">
-                                Call Wall: <strong>R$ {barrier.topCallWall.strike.toFixed(2)}</strong>{' '}
-                                <span className="text-[10px] text-gray-400">({barrier.topCallWall.distSpot >= 0 ? '+' : ''}{barrier.topCallWall.distSpot}%)</span>
-                              </div>
-                            )}
-                            {barrier.topPutWall && (
-                              <div className="text-pink-400">
-                                Put Wall: <strong>R$ {barrier.topPutWall.strike.toFixed(2)}</strong>{' '}
-                                <span className="text-[10px] text-gray-400">({barrier.topPutWall.distSpot}%)</span>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-gray-500 text-[10px]">Sem posições EOD</span>
-                        )}
-                      </td>
+        {baixaFiltered.length === 0 ? (
+          <div className="py-8 text-center text-gray-400 text-xs bg-[#111827]/50 rounded-xl border border-dashed border-gray-800">
+            Nenhuma operação autorizada nesta direção hoje.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {baixaFiltered.map((item) => (
+              <div
+                key={item.symbol}
+                onClick={() => onSelectSymbol && onSelectSymbol(item.symbol)}
+                className="bg-[#111827] border border-gray-800 hover:border-red-500/50 p-4 rounded-xl transition cursor-pointer hover:shadow-md space-y-3 group"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-base font-bold text-white font-mono group-hover:text-red-400 transition flex items-center gap-1.5">
+                      {item.symbol}
+                      <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition" />
+                    </span>
+                    <span className="text-xs text-gray-400 truncate block max-w-[180px]">
+                      {item.shortName}
+                    </span>
+                  </div>
+                  <div className="text-right font-mono">
+                    <div className="text-sm font-bold text-white">
+                      R$ {item.currentPrice.toFixed(2)}
+                    </div>
+                    <div
+                      className={`text-xs font-semibold ${
+                        item.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}
+                    >
+                      {item.changePercent >= 0 ? '+' : ''}
+                      {item.changePercent.toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
 
-                      {/* Veredito Consolidado */}
-                      <td className="py-3.5 px-4 text-center">
-                        {renderVerdictBadge(item.verdict?.verdict)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                {/* Resumo da Operação / Opções de Baixa & Alerta de Aluguel */}
+                <div className="bg-[#0b1120] p-2.5 rounded-lg border border-gray-800/80 text-xs space-y-1.5 font-mono">
+                  {item.tradePlan ? (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px] text-gray-400">
+                        <span>Stop: <strong className="text-amber-400">R$ {item.tradePlan.stop.toFixed(2)}</strong></span>
+                        <span>Alvo 1: <strong className="text-red-400">R$ {item.tradePlan.target1.toFixed(2)}</strong></span>
+                        <span>R:R: <strong className="text-cyan-400">{item.tradePlan.riskRewardRatio}:1</strong></span>
+                      </div>
+                      <div className="text-[10px] text-gray-400 truncate font-sans">
+                        {item.optionStructure ? item.optionStructure.title : 'Trava de baixa com opções (Bear Spread).'}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-gray-400">
+                      Trava de baixa com opções (sem necessidade de aluguel).
+                    </div>
+                  )}
+
+                  <div className="text-[10px] text-amber-300/90 flex items-center gap-1 pt-1 border-t border-gray-800/60 font-sans">
+                    <ShieldAlert className="w-3 h-3 flex-shrink-0 text-amber-400" />
+                    <span className="truncate">Venda à vista exige aluguel (BTC). Prefira travas de opções.</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* SEÇÃO 3: 🟣 LATERAL — IRON CONDOR */}
+      {/* ========================================================================= */}
+      <div className="bg-[#0f172a] border border-purple-500/30 rounded-2xl p-5 shadow-lg space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-800/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500"></span>
+            </span>
+            <h3 className="text-base font-bold text-purple-400 flex items-center gap-2">
+              <Layers className="w-5 h-5" /> LATERAL — Renda com Opções (Iron Condor)
+            </h3>
+            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-500/30 font-bold">
+              {lateralFiltered.length} {lateralFiltered.length === 1 ? 'ativo' : 'ativos'}
+            </span>
+          </div>
+          <span className="text-[11px] text-gray-400 font-sans hidden sm:inline">
+            Critério: Mercado Lateral + Balanço Aprovado + IV ATM Real Favorável (DTE 12 a 35 DU)
+          </span>
+        </div>
+
+        {lateralFiltered.length === 0 ? (
+          <div className="py-8 text-center text-gray-400 text-xs bg-[#111827]/50 rounded-xl border border-dashed border-gray-800">
+            Nenhuma operação autorizada nesta direção hoje.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {lateralFiltered.map((item) => (
+              <div
+                key={item.symbol}
+                onClick={() => onSelectSymbol && onSelectSymbol(item.symbol)}
+                className="bg-[#111827] border border-gray-800 hover:border-purple-500/50 p-4 rounded-xl transition cursor-pointer hover:shadow-md space-y-3 group"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-base font-bold text-white font-mono group-hover:text-purple-400 transition flex items-center gap-1.5">
+                      {item.symbol}
+                      <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition" />
+                    </span>
+                    <span className="text-xs text-gray-400 truncate block max-w-[180px]">
+                      {item.shortName}
+                    </span>
+                  </div>
+                  <div className="text-right font-mono">
+                    <div className="text-sm font-bold text-white">
+                      R$ {item.currentPrice.toFixed(2)}
+                    </div>
+                    <div
+                      className={`text-xs font-semibold ${
+                        item.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}
+                    >
+                      {item.changePercent >= 0 ? '+' : ''}
+                      {item.changePercent.toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
+
+                {/* Resumo da Estrutura Iron Condor */}
+                <div className="bg-[#0b1120] p-2.5 rounded-lg border border-gray-800/80 text-xs space-y-1.5 font-mono">
+                  <div className="text-[11px] text-purple-300 font-semibold truncate">
+                    {item.optionStructure ? item.optionStructure.title : 'Iron Condor #20 a Crédito (4 Pernas)'}
+                  </div>
+                  <div className="text-[10px] text-gray-400 flex items-center justify-between">
+                    <span>IV Real ATM: ~{item.optionStructure?.dte || 14} DU</span>
+                    <span className="text-emerald-400 font-bold">Crédito Institucional</span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

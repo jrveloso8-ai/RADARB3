@@ -30,14 +30,18 @@ export async function GET(request: NextRequest) {
       underlyingPrice = 0;
     }
 
-    // 2. Chamar endpoint oficial de posições da BRAPI para Ações B3
-    const rawPositionsData = await brapiService.getOptionPositions(cleanSymbol, selectedExpiration);
+    // 2. Chamar endpoints oficiais de posições e analytics da BRAPI para Ações B3
+    const [rawPositionsData, analyticsData] = await Promise.all([
+      brapiService.getOptionPositions(cleanSymbol, selectedExpiration).catch(() => ({ positions: [] })),
+      brapiService.getOptionAnalytics(cleanSymbol, selectedExpiration).catch(() => ({ analytics: [] })),
+    ]);
 
     // 3. Processar análise e cálculo de barreiras, Max Pain, Top 5 Walls e Grade Straddle
     const analysis = analyzeOptionPositions(
       cleanSymbol,
       underlyingPrice,
       rawPositionsData.positions || [],
+      analyticsData?.analytics || [],
       selectedExpiration,
       availableExpirations
     );
