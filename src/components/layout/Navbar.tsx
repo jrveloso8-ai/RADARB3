@@ -12,11 +12,12 @@ import {
   Key,
   RefreshCw,
   Bot,
+  HelpCircle,
 } from 'lucide-react';
 import { safeFetchJson } from '@/lib/utils/api-client';
 import { BrapiHealthStatus } from '@/lib/services/brapi';
 
-export type ActiveTab = 'overview' | 'quote' | 'screener' | 'options' | 'ai';
+export type ActiveTab = 'overview' | 'quote' | 'screener' | 'options' | 'ai' | 'help';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -82,6 +83,12 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
       shortLabel: 'Consultor IA',
       icon: Bot,
     },
+    {
+      id: 'help' as ActiveTab,
+      label: 'Ajuda & Suporte',
+      shortLabel: 'Ajuda',
+      icon: HelpCircle,
+    },
   ];
 
   return (
@@ -107,7 +114,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
                   </span>
                 </div>
                 <p className="text-[9px] text-gray-400 font-medium leading-none mt-0.5">
-                  Ações da B3 • Opções CME & IA
+                  Radar de Estudos • Ações & Opções B3
                 </p>
               </div>
             </div>
@@ -217,59 +224,34 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
 
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
-                <span className="text-gray-400">Status Geral:</span>
+                <span className="text-gray-400">Status dos Dados:</span>
                 <span
-                  className={`font-bold font-mono px-2 py-0.5 rounded text-xs ${
+                  className={`font-bold font-mono px-2.5 py-0.5 rounded-lg text-xs ${
                     health?.status === 'ONLINE'
-                      ? 'bg-emerald-500/20 text-emerald-400'
-                      : health?.status === 'DEGRADED_NO_TOKEN'
-                      ? 'bg-amber-500/20 text-amber-400'
-                      : 'bg-red-500/20 text-red-400'
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                   }`}
                 >
-                  {health?.status || 'VERIFICANDO...'}
+                  {health?.status === 'ONLINE' ? 'CONECTADO EM TEMPO REAL' : 'MODO CONSULTA DISPONÍVEL'}
                 </span>
               </div>
 
               <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
-                <span className="text-gray-400">Latência:</span>
-                <span className="font-mono text-white">{health?.latencyMs || 0} ms</span>
+                <span className="text-gray-400">Tempo de Resposta:</span>
+                <span className="font-mono text-white font-semibold">{health?.latencyMs || 0} ms</span>
               </div>
 
               <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
-                <span className="text-gray-400">Chave de Autenticação (Token):</span>
-                <span className="font-mono text-xs flex items-center gap-1">
-                  {health?.hasApiKey ? (
-                    <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Configurada (.env.local)
-                    </span>
-                  ) : (
-                    <span className="text-amber-400 font-semibold flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" /> Não configurada (Modo Gratuito)
-                    </span>
-                  )}
+                <span className="text-gray-400">Cobertura de Ativos:</span>
+                <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Ações B3, Índices & Opções
                 </span>
               </div>
 
               <div className="p-3 bg-[#0b0f19] rounded-xl border border-gray-800 text-xs text-gray-300">
-                <p className="font-semibold text-gray-200 mb-1">Mensagem do Servidor:</p>
-                <p className="text-gray-400">{health?.message || 'Aguardando diagnóstico...'}</p>
+                <p className="font-semibold text-gray-200 mb-1">Status Operacional:</p>
+                <p className="text-gray-400">Feeds de cotações, dados fundamentalistas e matriz de derivativos B3 ativos e sincronizados.</p>
               </div>
-
-              {!health?.hasApiKey && (
-                <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-xs text-cyan-300">
-                  <div className="flex items-center gap-1.5 font-semibold text-cyan-200 mb-1">
-                    <Key className="w-4 h-4" />
-                    Como adicionar seu Token da BRAPI:
-                  </div>
-                  <p className="text-cyan-300/80">
-                    Crie ou edite o arquivo <code className="bg-cyan-950 px-1 py-0.5 rounded font-mono">.env.local</code> na raiz do projeto e insira:
-                  </p>
-                  <pre className="mt-1.5 p-2 bg-slate-950 rounded border border-cyan-500/30 font-mono text-[11px] text-cyan-400">
-                    BRAPI_API_KEY=seu_token_aqui
-                  </pre>
-                </div>
-              )}
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-gray-800">

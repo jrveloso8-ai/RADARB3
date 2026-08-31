@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
       volRegime
     );
 
-    // 7. Estrutura Genérica & Eleição da ÚNICA Melhor Estratégia CME Group
+    // 7. Estrutura Genérica & Eleição da ÚNICA Melhor Estratégia de Opções B3
     const suggestedStructure = buildSuggestedOptionStructure(
       cleanSymbol,
       quote.regularMarketPrice,

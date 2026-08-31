@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { CME_25_STRATEGIES } from '@/lib/domain/cme-strategies';
+import { OPTION_25_STRATEGIES } from '@/lib/domain/cme-strategies';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +24,7 @@ interface ConsultantRequestBody {
 export async function GET() {
   return NextResponse.json({
     status: 'ONLINE',
-    service: 'Consultor IA Financeiro B3 & CME Group',
+    service: 'Consultor IA de Estudos — Ações & Opções B3',
     timestamp: new Date().toISOString(),
   });
 }
@@ -54,7 +54,8 @@ export async function POST(request: NextRequest) {
         qLower.includes('decisão') ||
         qLower.includes('comprar') ||
         qLower.includes('vender') ||
-        qLower.includes('operar'))
+        qLower.includes('operar') ||
+        qLower.includes('estudo'))
     ) {
       const sym = context.symbol;
       const spot = context.spotPrice ? `R$ ${context.spotPrice.toFixed(2)}` : 'Preço atual';
@@ -69,41 +70,41 @@ export async function POST(request: NextRequest) {
         ? `R$ ${context.putWall.strike.toFixed(2)} (${context.putWall.distSpot}%)`
         : 'Não identificada';
 
-      let explanation = `### 📊 Diagnóstico do Consultor IA para **${sym}** (Spot: ${spot})\n\n`;
-      explanation += `O veredito consolidado atual é: **${verdict}**.\n\n`;
-      explanation += `Aqui está a decomposição analítica em **3 camadas (Padrão CNPI)**:\n\n`;
+      let explanation = `### 📊 Diagnóstico Educacional do Consultor IA para **${sym}** (Spot: ${spot})\n\n`;
+      explanation += `O veredito consolidado unificado atual é: **${verdict}**.\n\n`;
+      explanation += `Aqui está a decomposição analítica em **3 camadas de estudo (Padrão CNPI)**:\n\n`;
 
       explanation += `1. **🏢 Camada 1: Crivo Fundamentalista (CNPI-P / CG1)**\n`;
       if (fundStatus === 'APROVADO') {
         explanation += `   - **Status:** 🟢 **APROVADO** (Score: ${fundScore}/100).\n`;
-        explanation += `   - **Leitura:** A empresa apresenta balanço saudável, liquidez corrente equilibrada e não opera com margens negativas. Está apta a receber teses compradoras.\n\n`;
+        explanation += `   - **Leitura:** A empresa apresenta balanço financeiro saudável, liquidez corrente equilibrada e histórico operacional positivo. Está elegível para estudos direcionais altistas.\n\n`;
       } else {
         explanation += `   - **Status:** 🔴 **REPROVADO** (Score: ${fundScore}/100).\n`;
-        explanation += `   - **Leitura:** A empresa apresenta alto endividamento ou prejuízo líquido persistente. Por regra de preservação de capital, **qualquer compra é bloqueada** para evitar armadilhas de valor (*Value Traps*).\n\n`;
+        explanation += `   - **Leitura:** A empresa apresenta alto endividamento ou prejuízo líquido persistente. Por regra de preservação patrimonial, **qualquer estudo de compra é bloqueado** para mitigar o risco de *Value Trap* (armadilha de valor).\n\n`;
       }
 
-      explanation += `2. **📈 Camada 2: Análise Técnica (CNPI-T / CT1)**\n`;
+      explanation += `2. **📈 Camada 2: Análise Técnica Quantitativa (CNPI-T / CT1)**\n`;
       explanation += `   - **Tendência:** **${trend}** com base no alinhamento das Médias Móveis (MM20, MM50 e MM200).\n`;
       if (trend === 'ALTA') {
         explanation += `   - **Leitura:** Médias alinhadas positivamente (MM20 > MM50 > MM200), confirmando força compradora.\n\n`;
       } else if (trend === 'BAIXA') {
-        explanation += `   - **Leitura:** Preço operando abaixo das médias móveis. A recomendação de Venda Técnica é soberana para proteção de capital.\n\n`;
+        explanation += `   - **Leitura:** Preço operando abaixo das médias móveis de referência. A leitura técnica baixista prevalece para gerenciamento de risco.\n\n`;
       } else {
-        explanation += `   - **Leitura:** Médias emboladas em consolidação. Recomendável aguardar rompimento de pivô.\n\n`;
+        explanation += `   - **Leitura:** Médias móveis em consolidação lateral. Recomendado estudo de estruturas neutras com opções ou aguardar rompimento.\n\n`;
       }
 
       explanation += `3. **🛡️ Camada 3: Barreiras de Opções & Open Interest B3 (CNPI-D)**\n`;
       explanation += `   - **Call Wall (Resistência Institucional):** ${callWall}\n`;
       explanation += `   - **Put Wall (Suporte Institucional):** ${putWall}\n\n`;
 
-      explanation += `> 💡 **Como se posicionar:** Você pode optar por **comprar/vender a ação diretamente no mercado à vista** com Stop Técnico em R$ e alvos calculados, ou utilizar **Estratégias de Opções do CME Group** (como Trava de Alta / Bull Spread) para otimizar a relação Risco:Retorno.`;
+      explanation += `> 💡 **Diretriz de Estudo:** Na aba **"Recomendações de Estudo"**, você pode comparar a análise técnica direta do ativo à vista ou simular a montagem com derivativos da B3 para controle de risco.\n\n`;
+      explanation += `*Nota: Conteúdo de caráter estritamente educacional para fins de simulação e pesquisa.*`;
 
       return NextResponse.json({ answer: explanation });
     }
 
-    // 2. Respostas sobre o Manual das 25 Estratégias do CME Group
+    // 2. Respostas sobre o Catálogo das 25 Estratégias de Opções
     if (
-      qLower.includes('cme') ||
       qLower.includes('estratégia') ||
       qLower.includes('opções') ||
       qLower.includes('borboleta') ||
@@ -111,9 +112,10 @@ export async function POST(request: NextRequest) {
       qLower.includes('straddle') ||
       qLower.includes('strangle') ||
       qLower.includes('iron') ||
-      qLower.includes('box')
+      qLower.includes('box') ||
+      qLower.includes('cme')
     ) {
-      const found = CME_25_STRATEGIES.find(
+      const found = OPTION_25_STRATEGIES.find(
         (s) =>
           qLower.includes(s.name.toLowerCase()) ||
           qLower.includes(s.originalName.toLowerCase()) ||
@@ -122,32 +124,33 @@ export async function POST(request: NextRequest) {
           (qLower.includes('bear spread') && s.id === 12) ||
           (qLower.includes('iron butterfly') && s.id === 16) ||
           (qLower.includes('straddle') && s.id === 17) ||
-          (qLower.includes('strangle') && s.id === 19)
+          (qLower.includes('strangle') && s.id === 19) ||
+          (qLower.includes('iron condor') && s.id === 20)
       );
 
       if (found) {
-        let text = `### 📘 Manual CME Group — Estratégia #${found.id}: **${found.name}**\n\n`;
+        let text = `### 📘 Catálogo Oficial de Opções — Estratégia #${found.id}: **${found.name}**\n\n`;
         text += `* **Categoria:** ${found.category} | **Viés:** ${found.bias} | **Dificuldade:** ${found.difficulty}\n`;
         text += `* **Montagem de Pernas:** ${found.legsDescription}\n\n`;
-        text += `#### 🎯 Quando Usar:\n${found.whenToUse}\n\n`;
-        text += `#### 💰 Perfil de Lucro:\n${found.profitProfile}\n\n`;
-        text += `#### ⚠️ Perfil de Risco / Prejuízo:\n${found.lossProfile}\n\n`;
-        text += `#### ⏳ Impacto do Tempo (Theta / Depreciação):\n${found.timeDecayProfile}\n`;
+        text += `#### 🎯 Quando Estudar:\n${found.whenToUse}\n\n`;
+        text += `#### 💰 Perfil de Retorno:\n${found.profitProfile}\n\n`;
+        text += `#### ⚠️ Perfil de Risco:\n${found.lossProfile}\n\n`;
+        text += `#### ⏳ Impacto do Tempo (Theta):\n${found.timeDecayProfile}\n`;
         return NextResponse.json({ answer: text });
       }
 
-      let text = `### 📚 As 25 Estratégias Comprovadas de Opções do CME Group\n\n`;
-      text += `O manual oficial do CME Group divide as estratégias em 3 grandes categorias:\n\n`;
+      let text = `### 📚 Catálogo Oficial: 25 Estratégias Comprovadas de Opções (B3)\n\n`;
+      text += `O catálogo classifica as operações estruturadas em 3 grandes grupos:\n\n`;
       text += `1. **Estratégias Direcionais (#1 a #12):**\n`;
-      text += `   - *Altistas:* Long Stock (#1), Long Call (#7), Bull Spread / Trava de Alta (#11), Long Synthetic (#3).\n`;
-      text += `   - *Baixistas:* Short Stock (#2), Long Put (#9), Bear Spread / Trava de Baixa (#12), Short Synthetic (#4).\n`;
-      text += `   - *Renda / Neutro-Altista:* Short Put (#10), Short Call coberta (#8).\n\n`;
+      text += `   - *Altistas:* Posição em Ações (#1), Compra de Call (#7), Trava de Alta / Bull Spread (#11), Compra Sintética (#3).\n`;
+      text += `   - *Baixistas:* Venda de Ações (#2), Compra de Put (#8), Trava de Baixa / Bear Spread (#12), Venda Sintética (#4).\n`;
+      text += `   - *Renda / Neutro-Altista:* Venda de Put Coberta (#6), Venda Coberta de Call (#5).\n\n`;
       text += `2. **Estratégias de Precisão & Volatilidade (#13 a #24):**\n`;
-      text += `   - *Mercado Lateral:* Long Butterfly (#13), Short Iron Butterfly (#16), Short Straddle (#18), Short Strangle (#20).\n`;
-      text += `   - *Explosão de Volatilidade:* Long Straddle (#17), Long Strangle (#19), Call/Put Ratio Backspreads (#23, #24).\n\n`;
+      text += `   - *Mercado Lateral:* Borboleta Comprada (#13), Iron Butterfly (#16), Straddle Vendido (#18), Iron Condor a Crédito (#20).\n`;
+      text += `   - *Explosão de Volatilidade:* Straddle Comprado (#17), Strangle Comprado (#19), Backspreads de Volatilidade (#23, #24).\n\n`;
       text += `3. **Estratégias de Arbitragem / Travas (#25):**\n`;
-      text += `   - *Box Spread (#25):* Estrutura de 4 pontas para travamento total sintético.\n\n`;
-      text += `Você pode simular qualquer uma dessas estratégias diretamente no sistema navegando até a aba **"Execução (Ações vs Opções CME)"**!`;
+      text += `   - *Box Spread (#25):* Estrutura de 4 pontas 100% travada para replicação de taxa de juros sintética.\n\n`;
+      text += `Você pode estudar qualquer uma dessas estratégias navegando até a aba **"Recomendações de Estudo"**!`;
       return NextResponse.json({ answer: text });
     }
 
@@ -156,35 +159,35 @@ export async function POST(request: NextRequest) {
       qLower.includes('como funciona') ||
       qLower.includes('camadas') ||
       qLower.includes('cnpi') ||
-      qLower.includes('token') ||
+      qLower.includes('médias') ||
       qLower.includes('call wall') ||
       qLower.includes('max pain')
     ) {
-      let text = `### 🏛️ Como Funciona o Motor Institucional de 3 Camadas\n\n`;
-      text += `Nosso sistema opera sob rigoroso padrão técnico **CNPI (APIMEC/FGV)**:\n\n`;
-      text += `1. **🏢 Camada 1 — Filtro Fundamentalista (CNPI-P / CG1):**\n`;
-      text += `   Avalia ROE, Margem Líquida, Dívida Líq./EBITDA, Liquidez Corrente e múltiplos P/L e P/VP. Se a empresa estiver em prejuízo ou superendividada, o sistema **bloqueia compras** para evitar armadilhas de valor.\n\n`;
+      let text = `### 🏛️ Como Funciona o Motor de Estudos em 3 Camadas\n\n`;
+      text += `Nossa metodologia integra os 3 pilares da análise institucional de investimentos:\n\n`;
+      text += `1. **🏢 Camada 1 — Crivo Fundamentalista (CNPI-P / CG1):**\n`;
+      text += `   Analisa ROE, Margem Líquida, Dívida Líq./EBITDA e liquidez. Empresas com prejuízo ou superendividamento são **bloqueadas** para evitar armadilhas de valor (*Value Traps*).\n\n`;
       text += `2. **📈 Camada 2 — Análise Técnica Quantitativa (CNPI-T / CT1):**\n`;
-      text += `   Mapeia o alinhamento de Dow com $MM20, MM50, MM200$, momentum no $RSI(14)$, confirmação no $MACD$ e volume financeiro relativo. Vendas técnicas são soberanas para preservação de capital.\n\n`;
+      text += `   Avalia o alinhamento das médias móveis $MM20, MM50, MM200$, oscilador $RSI(14)$ e momentum no $MACD$. Se o gráfico indicar tendência de Baixa, a recomendação de Venda Técnica é soberana.\n\n`;
       text += `3. **🛡️ Camada 3 — Barreiras de Opções & Open Interest B3 (CNPI-D):**\n`;
-      text += `   Identifica as maiores concentrações de posições em aberto nos derivativos:\n`;
-      text += `   - **Call Wall:** Strike com maior volume de Calls lançadas (atua como forte resistência).\n`;
-      text += `   - **Put Wall:** Strike com maior volume de Puts (atua como forte suporte).\n`;
-      text += `   - **Max Pain:** Strike onde os compradores de opções têm o maior prejuízo acumulado no vencimento.\n\n`;
-      text += `> 🔑 **Chave da BRAPI:** Para escanear mais de 400 ativos da B3 em tempo real, configure seu token gratuito no arquivo \`.env.local\` (\`BRAPI_API_KEY=seu_token\`).`;
+      text += `   Mapeia o posicionamento dos grandes participantes institucionais:\n`;
+      text += `   - **Call Wall:** Strike com maior concentração de Calls (resistência institucional).\n`;
+      text += `   - **Put Wall:** Strike com maior concentração de Puts (suporte institucional).\n`;
+      text += `   - **Max Pain:** Nível de strike de menor pagamento no vencimento.\n\n`;
+      text += `> 💡 **Dica de Estudo:** Utilize o Rastreador de Tendências para filtrar ativos por setor e identificar as melhores oportunidades alinhadas às 3 camadas.`;
       return NextResponse.json({ answer: text });
     }
 
-    // Resposta padrão inteligente
-    let defaultResponse = `### 🤖 Olá! Sou o Consultor IA Especialista em Ações & Opções\n\n`;
-    defaultResponse += `Estou aqui para ajudar você a tomar as melhores decisões no mercado financeiro.\n\n`;
+    // Resposta padrão
+    let defaultResponse = `### 🤖 Olá! Sou o Consultor IA para Estudos de Ações & Opções B3\n\n`;
+    defaultResponse += `Estou aqui para esclarecer dúvidas conceituais, metodologias e estruturas quantitativas.\n\n`;
     defaultResponse += `Você pode me perguntar sobre:\n`;
-    defaultResponse += `- **"Por que este ativo recebeu recomendação de Compra / Venda / Lateral?"**\n`;
-    defaultResponse += `- **"Como montar uma Trava de Alta (Bull Spread) ou Borboleta?"**\n`;
-    defaultResponse += `- **"O que significa Call Wall e Put Wall?"**\n`;
+    defaultResponse += `- **"Por que este ativo está com status Bloqueado / Compra / Venda?"**\n`;
+    defaultResponse += `- **"Como funciona uma Trava de Alta (Bull Spread) ou Iron Condor?"**\n`;
+    defaultResponse += `- **"O que significa Call Wall, Put Wall e Max Pain na B3?"**\n`;
     defaultResponse += `- **"Como funciona o crivo fundamentalista CNPI-P?"**\n`;
-    defaultResponse += `- **"Quais são as 25 estratégias de opções do manual CME Group?"**\n\n`;
-    defaultResponse += `Como posso orientar sua análise hoje?`;
+    defaultResponse += `- **"Quais são as 25 estratégias do catálogo de opções?"**\n\n`;
+    defaultResponse += `Como posso apoiar seus estudos hoje?`;
 
     return NextResponse.json({ answer: defaultResponse });
   } catch (error: unknown) {

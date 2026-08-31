@@ -4,10 +4,15 @@ import {
   OptionPositionItem,
   StraddleRow,
 } from '../types/financial';
-import { CME_25_STRATEGIES, CMEStrategySpec } from './cme-strategies';
+import {
+  OPTION_25_STRATEGIES,
+  OptionStrategySpec,
+  CME_25_STRATEGIES,
+  CMEStrategySpec,
+} from './cme-strategies';
 import { classifyVolatilityRegime } from './volatility';
 
-export interface CMELegDetail {
+export interface OptionLegDetail {
   action: 'COMPRA' | 'VENDA';
   symbol: string;
   strike: number;
@@ -18,8 +23,10 @@ export interface CMELegDetail {
   openInterest: number;
 }
 
+export type CMELegDetail = OptionLegDetail;
+
 export interface ElectedOptionStrategy {
-  strategySpec: CMEStrategySpec;
+  strategySpec: OptionStrategySpec;
   title: string;
   bias: 'ALTA' | 'BAIXA' | 'LATERAL' | 'VOLATILIDADE' | 'NEUTRO';
   status: 'AUTORIZADA' | 'EM_ANALISE' | 'BLOQUEADA';
@@ -29,7 +36,7 @@ export interface ElectedOptionStrategy {
   underlyingPrice: number;
 
   // Detalhes da montagem financeira
-  legs: CMELegDetail[];
+  legs: OptionLegDetail[];
   netCostOrCredit: number; // Por cota
   isCredit: boolean;
   totalCostOrCreditForLot: number; // Para 1 lote padrão (1.000 cotas)
@@ -71,10 +78,10 @@ export interface ElectedOptionStrategy {
 }
 
 /**
- * Motor de Inteligência para Eleição da ÚNICA Melhor Estratégia CME Group
+ * Motor de Inteligência para Eleição da ÚNICA Melhor Estratégia de Opções B3
  * Analisa: Tendência CNPI-T, Fundamentos CNPI-P, RSI(14), Regime de Volatilidade (HV/IV), Barreiras OI e Max Pain.
  */
-export function electBestCMEStrategy(
+export function electBestOptionStrategy(
   symbol: string,
   spotPrice: number,
   verdict: string,
@@ -106,7 +113,7 @@ export function electBestCMEStrategy(
 
   if (isFundamentalReproved) {
     return {
-      strategySpec: CME_25_STRATEGIES[0],
+      strategySpec: OPTION_25_STRATEGIES[0],
       title: 'Estratégia Bloqueada: Ativo Reprovado nos Fundamentos (CNPI-P)',
       bias: 'NEUTRO',
       status: 'BLOQUEADA',
@@ -127,7 +134,7 @@ export function electBestCMEStrategy(
       returnOnRiskPct: 0,
       riskRewardRatio: '0 : 0',
       takeProfitRule: { targetPrice: '-', profitGoal: '-', description: '-' },
-      stopLossRule: { targetPrice: '-', lossLimit: '-', description: '-' } as any,
+      stopLossRule: { stopPrice: '-', lossLimit: '-', description: '-' },
       timeStopRule: { dteLimit: 0, description: '-' },
       electionRationale: [
         `Empresa reprovada no crivo fundamentalista (prejuízo líquido recorrente ou superendividamento).`,
@@ -179,8 +186,8 @@ export function electBestCMEStrategy(
         const returnPct = Number(((netCredit / width) * 100).toFixed(1));
 
         return {
-          strategySpec: CME_25_STRATEGIES[10], // #11 Bull Spread
-          title: `Estratégia CME #11: Trava de Alta com Put a Crédito (Bull Put Spread ${shortStrike.toFixed(2)} / ${longStrike.toFixed(2)})`,
+          strategySpec: OPTION_25_STRATEGIES[10], // #11 Bull Spread
+          title: `Estratégia de Opções #11: Trava de Alta com Put a Crédito (Bull Put Spread ${shortStrike.toFixed(2)} / ${longStrike.toFixed(2)})`,
           bias: 'ALTA',
           status: 'AUTORIZADA',
           expirationDate: expDate,
@@ -269,8 +276,8 @@ export function electBestCMEStrategy(
       const returnPct = Number(((maxProfit / netDebit) * 100).toFixed(1));
 
       return {
-        strategySpec: CME_25_STRATEGIES[10], // #11 Bull Spread
-        title: `Estratégia CME #11: Trava de Alta com Call (Bull Call Spread ${longStrike.toFixed(2)} / ${shortStrike.toFixed(2)})`,
+        strategySpec: OPTION_25_STRATEGIES[10], // #11 Bull Spread
+        title: `Estratégia de Opções #11: Trava de Alta com Call (Bull Call Spread ${longStrike.toFixed(2)} / ${shortStrike.toFixed(2)})`,
         bias: 'ALTA',
         status: 'AUTORIZADA',
         expirationDate: expDate,
@@ -363,8 +370,8 @@ export function electBestCMEStrategy(
       const returnPct = Number(((netCredit / width) * 100).toFixed(1));
 
       return {
-        strategySpec: CME_25_STRATEGIES[11], // #12 Bear Spread
-        title: `Estratégia CME #12: Trava de Baixa com Call a Crédito (Bear Call Spread ${shortStrike.toFixed(2)} / ${longStrike.toFixed(2)})`,
+        strategySpec: OPTION_25_STRATEGIES[11], // #12 Bear Spread
+        title: `Estratégia de Opções #12: Trava de Baixa com Call a Crédito (Bear Call Spread ${shortStrike.toFixed(2)} / ${longStrike.toFixed(2)})`,
         bias: 'BAIXA',
         status: 'AUTORIZADA',
         expirationDate: expDate,
@@ -441,7 +448,7 @@ export function electBestCMEStrategy(
     // Se a volatilidade for MUITO BAIXA (Squeeze), bloquear a venda de crédito do Iron Condor
     if (volRegime.regime === 'MUITO_BAIXA') {
       return {
-        strategySpec: CME_25_STRATEGIES[12], // #13 Long Butterfly ou Cautela
+        strategySpec: OPTION_25_STRATEGIES[12], // #13 Long Butterfly ou Cautela
         title: 'Alerta: Volatilidade Comprimida (Iron Condor Bloqueado)',
         bias: 'LATERAL',
         status: 'EM_ANALISE',
@@ -462,7 +469,7 @@ export function electBestCMEStrategy(
         returnOnRiskPct: 0,
         riskRewardRatio: '0 : 0',
         takeProfitRule: { targetPrice: '-', profitGoal: '-', description: '-' },
-        stopLossRule: { targetPrice: '-', lossLimit: '-', description: '-' } as any,
+        stopLossRule: { stopPrice: '-', lossLimit: '-', description: '-' },
         timeStopRule: { dteLimit: 0, description: '-' },
         electionRationale: [
           `Ativo em consolidação lateral, porém com Volatilidade Implícita muito baixa (IV ATM: ${ivAtm}%, ${volRegime.label}).`,
@@ -527,8 +534,8 @@ export function electBestCMEStrategy(
         const returnPct = Number(((netCredit / maxLoss) * 100).toFixed(1));
 
         return {
-          strategySpec: CME_25_STRATEGIES[19], // #20 Short Strangle Coberto (Iron Condor)
-          title: `Estratégia CME #20: Short Strangle Coberto / Iron Condor (${strikeA.toFixed(2)} / ${strikeB.toFixed(2)} / ${strikeC.toFixed(2)} / ${strikeD.toFixed(2)})`,
+          strategySpec: OPTION_25_STRATEGIES[19], // #20 Short Strangle Coberto (Iron Condor)
+          title: `Estratégia de Opções #20: Short Strangle Coberto / Iron Condor (${strikeA.toFixed(2)} / ${strikeB.toFixed(2)} / ${strikeC.toFixed(2)} / ${strikeD.toFixed(2)})`,
           bias: 'LATERAL',
           status: 'AUTORIZADA',
           expirationDate: expDate,
@@ -621,3 +628,5 @@ export function electBestCMEStrategy(
 
   return null;
 }
+
+export const electBestCMEStrategy = electBestOptionStrategy;

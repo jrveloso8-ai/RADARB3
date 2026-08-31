@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { electBestCMEStrategy } from './cme-election';
+import { electBestOptionStrategy } from './cme-election';
 import { OptionAnalysisResult, StraddleRow } from '../types/financial';
 
-describe('Motor de Eleição de Estratégias CME Group', () => {
+describe('Motor de Eleição de Estratégias de Opções B3', () => {
   const mockRows: StraddleRow[] = [
     {
       strike: 26.0,
@@ -57,7 +57,7 @@ describe('Motor de Eleição de Estratégias CME Group', () => {
   };
 
   it('deve eleger Bull Put Spread (#11 a Crédito) para COMPRA quando a Volatilidade Implícita está alta', () => {
-    const elected = electBestCMEStrategy(
+    const elected = electBestOptionStrategy(
       'PETR4',
       30.5,
       'COMPRA_FORTE',
@@ -78,7 +78,7 @@ describe('Motor de Eleição de Estratégias CME Group', () => {
   });
 
   it('deve eleger Bull Call Spread (#11 a Débito) para COMPRA quando a Volatilidade Implícita está baixa', () => {
-    const elected = electBestCMEStrategy(
+    const elected = electBestOptionStrategy(
       'PETR4',
       30.5,
       'COMPRA_FORTE',
@@ -96,7 +96,7 @@ describe('Motor de Eleição de Estratégias CME Group', () => {
   });
 
   it('deve eleger Bear Call Spread (#12 a Crédito) para VENDA', () => {
-    const elected = electBestCMEStrategy(
+    const elected = electBestOptionStrategy(
       'PETR4',
       30.5,
       'VENDA_FORTE',
@@ -113,7 +113,7 @@ describe('Motor de Eleição de Estratégias CME Group', () => {
   });
 
   it('deve eleger Short Strangle Coberto / Iron Condor (#20 com 4 pernas) para cenário LATERAL com IV moderada/alta', () => {
-    const elected = electBestCMEStrategy(
+    const elected = electBestOptionStrategy(
       'PETR4',
       30.5,
       'LATERAL_AGUARDAR',
@@ -139,7 +139,7 @@ describe('Motor de Eleição de Estratégias CME Group', () => {
       hv21: 22.0,
     };
 
-    const elected = electBestCMEStrategy(
+    const elected = electBestOptionStrategy(
       'PETR4',
       30.5,
       'LATERAL_AGUARDAR',
@@ -156,7 +156,7 @@ describe('Motor de Eleição de Estratégias CME Group', () => {
   });
 
   it('deve BLOQUEAR qualquer estratégia se a empresa for REPROVADA nos fundamentos', () => {
-    const elected = electBestCMEStrategy(
+    const elected = electBestOptionStrategy(
       'PETR4',
       30.5,
       'BLOQUEADO_POR_FUNDAMENTOS',

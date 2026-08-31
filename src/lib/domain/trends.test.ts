@@ -171,8 +171,8 @@ describe('Motor de Tendências e Veredito Integrado CNPI', () => {
       expect(verdict.rationale.some((r) => r.includes('Put Wall') || r.includes('suporte'))).toBe(true);
     });
 
-    it('deve emitir LATERAL_IRON_CONDOR quando vol não informada (undefined) — fallback para Iron Condor', () => {
-      // Sem volatilityRegime informado, o sistema não deve quebrar; deve cair no branch Iron Condor
+    it('deve emitir LATERAL_AGUARDAR quando vol não informada (undefined) — conservador por segurança', () => {
+      // Sem volatilityRegime informado, o sistema não deve recomendar Iron Condor às cegas; deve cair em AGUARDAR
       const verdict = generateConsolidatedVerdict(
         'WEGE3',
         38.0,
@@ -182,8 +182,8 @@ describe('Motor de Tendências e Veredito Integrado CNPI', () => {
         'WEG ON',
         undefined
       );
-      expect(verdict.verdict).toBe('LATERAL_IRON_CONDOR');
-      expect(verdict.actionRecommendation).toBe('IRON_CONDOR');
+      expect(verdict.verdict).toBe('LATERAL_AGUARDAR');
+      expect(verdict.actionRecommendation).toBe('AGUARDAR');
     });
 
     it('deve emitir VENDA_FORTE quando gráfico BAIXA mesmo com fundamentos REPROVADOS (baixa prevalece)', () => {

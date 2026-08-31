@@ -412,16 +412,20 @@ export const ScreenerView: React.FC<ScreenerViewProps> = ({ onSelectSymbol }) =>
 
                       {/* 3. Barreiras de Opções */}
                       <td className="py-3.5 px-3">
-                        {barrier ? (
+                        {barrier && (barrier.topCallWall || barrier.topPutWall) ? (
                           <div className="text-[11px] space-y-0.5">
-                            <div className="text-emerald-400">
-                              Call Wall: <strong>R$ {barrier.topCallWall.strike.toFixed(2)}</strong>{' '}
-                              <span className="text-[10px] text-gray-400">({barrier.topCallWall.distSpot >= 0 ? '+' : ''}{barrier.topCallWall.distSpot}%)</span>
-                            </div>
-                            <div className="text-pink-400">
-                              Put Wall: <strong>R$ {barrier.topPutWall.strike.toFixed(2)}</strong>{' '}
-                              <span className="text-[10px] text-gray-400">({barrier.topPutWall.distSpot}%)</span>
-                            </div>
+                            {barrier.topCallWall && (
+                              <div className="text-emerald-400">
+                                Call Wall: <strong>R$ {barrier.topCallWall.strike.toFixed(2)}</strong>{' '}
+                                <span className="text-[10px] text-gray-400">({barrier.topCallWall.distSpot >= 0 ? '+' : ''}{barrier.topCallWall.distSpot}%)</span>
+                              </div>
+                            )}
+                            {barrier.topPutWall && (
+                              <div className="text-pink-400">
+                                Put Wall: <strong>R$ {barrier.topPutWall.strike.toFixed(2)}</strong>{' '}
+                                <span className="text-[10px] text-gray-400">({barrier.topPutWall.distSpot}%)</span>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="text-gray-500 text-[10px]">Sem posições EOD</span>

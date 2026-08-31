@@ -193,20 +193,32 @@ export function generateConsolidatedVerdict(
       }
     } else {
       // Cenário Lateral com Fundamentos Aprovados:
-      // Se a volatilidade estiver comprimida (Squeeze), bloqueia o Iron Condor e sugere aguardar
-      if (volatilityRegime && volatilityRegime.regime === 'MUITO_BAIXA') {
-        verdict = 'LATERAL_AGUARDAR';
-        verdictLabel = 'LATERAL (AGUARDAR / VOL COMPRIMIDA)';
-        actionRecommendation = 'AGUARDAR';
-        rationale.push('Fundamentos de alta qualidade, porém preço em consolidação com volatilidade implícita comprimida (Squeeze).');
-        rationale.push('Risco de rompimento direcional violento (Volatility Breakout). Venda de crédito de Iron Condor bloqueada no momento.');
-      } else {
-        // Volatilidade moderada/alta ou com barreiras ativas: Eleger Iron Condor a Crédito
+      // Iron Condor SÓ é recomendado quando há dados REAIS de IV (volatilityRegime !== null)
+      // E o regime é favorável (MODERADA, ALTA ou EXTREMA — isCreditFavorable: true).
+      // Se não houver IV real (null) ou volatilidade estiver comprimida (MUITO_BAIXA), aguardar.
+      const hasRealIV = volatilityRegime !== null && volatilityRegime !== undefined;
+      const isCreditOk = hasRealIV && volatilityRegime!.isCreditFavorable === true;
+
+      if (isCreditOk) {
+        // Dados de IV reais confirmam regime favorável: eleger Iron Condor
         verdict = 'LATERAL_IRON_CONDOR';
         verdictLabel = 'LATERAL (IRON CONDOR / RENDA C/ OPÇÕES)';
         actionRecommendation = 'IRON_CONDOR';
         rationale.push('Empresa sólida e preço consolidando em faixa lateral delimitada.');
-        rationale.push('Cenário técnico e quantitativo ideal para a Estratégia CME #20: Iron Condor a Crédito (lucro com decaimento temporal Theta e estabilidade de preço).');
+        rationale.push('Cenário técnico e quantitativo ideal para a Estratégia de Opções #20: Iron Condor a Crédito (lucro com decaimento temporal Theta e estabilidade de preço).');
+      } else {
+        // Sem IV real (null) ou volatilidade comprimida (MUITO_BAIXA): conservador, aguardar
+        verdict = 'LATERAL_AGUARDAR';
+        verdictLabel = hasRealIV
+          ? 'LATERAL (AGUARDAR / VOL COMPRIMIDA)'
+          : 'LATERAL (AGUARDAR / SEM DADOS DE OPÇÕES)';
+        actionRecommendation = 'AGUARDAR';
+        rationale.push('Fundamentos de qualidade, porém preço em consolidação lateral.');
+        if (!hasRealIV) {
+          rationale.push('Dados de volatilidade implícita (IV) indisponíveis para este ativo. Iron Condor requer IV real da B3 para montagem segura.');
+        } else {
+          rationale.push('Volatilidade implícita comprimida (Squeeze). Risco de rompimento direcional violento. Venda de crédito de Iron Condor bloqueada no momento.');
+        }
       }
     }
   }

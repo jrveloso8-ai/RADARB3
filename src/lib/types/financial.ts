@@ -71,14 +71,14 @@ export interface OptionBarrierAlert {
   dte: number;
   spotPrice: number;
   maxPain: number;
-  topCallWall: {
+  topCallWall?: {
     strike: number;
     symbol: string;
     contracts: number;
     distSpot: number;
     isImminent: boolean;
   };
-  topPutWall: {
+  topPutWall?: {
     strike: number;
     symbol: string;
     contracts: number;
