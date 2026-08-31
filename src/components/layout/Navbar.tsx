@@ -17,7 +17,7 @@ import {
 import { safeFetchJson } from '@/lib/utils/api-client';
 import { BrapiHealthStatus } from '@/lib/services/brapi';
 
-export type ActiveTab = 'overview' | 'quote' | 'screener' | 'options' | 'ai' | 'help';
+export type ActiveTab = 'overview' | 'quote' | 'screener' | 'options' | 'help';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -78,15 +78,9 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
       icon: Layers,
     },
     {
-      id: 'ai' as ActiveTab,
-      label: 'Consultor IA',
-      shortLabel: 'Consultor IA',
-      icon: Bot,
-    },
-    {
       id: 'help' as ActiveTab,
-      label: 'Ajuda & Suporte',
-      shortLabel: 'Ajuda',
+      label: 'Manual & Ajuda IA',
+      shortLabel: 'Manual & Ajuda',
       icon: HelpCircle,
     },
   ];
@@ -130,8 +124,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
                     onClick={() => onTabChange(item.id)}
                     className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shrink-0 ${
                       isActive
-                        ? item.id === 'ai'
-                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50 shadow-sm'
+                        ? item.id === 'help'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
                           : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 shadow-sm'
                         : 'text-gray-300 hover:text-white hover:bg-gray-800/70 border border-transparent'
                     }`}
@@ -139,8 +133,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
                     <Icon
                       className={`w-4 h-4 shrink-0 ${
                         isActive
-                          ? item.id === 'ai'
-                            ? 'text-purple-400'
+                          ? item.id === 'help'
+                            ? 'text-cyan-400'
                             : 'text-emerald-400'
                           : 'text-gray-400'
                       }`}

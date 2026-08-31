@@ -6,7 +6,6 @@ import { TradingViewOverview } from '@/components/tradingview/TradingViewOvervie
 import { QuoteView } from '@/components/quote/QuoteView';
 import { ScreenerView } from '@/components/screener/ScreenerView';
 import { OptionsBarriersView } from '@/components/options/OptionsBarriersView';
-import { AIConsultantView } from '@/components/ai/AIConsultantView';
 import { HelpSupportView } from '@/components/help/HelpSupportView';
 
 export default function HomePage() {
@@ -31,7 +30,6 @@ export default function HomePage() {
           <ScreenerView onSelectSymbol={handleSelectSymbolFromScreener} />
         )}
         {activeTab === 'options' && <OptionsBarriersView />}
-        {activeTab === 'ai' && <AIConsultantView />}
         {activeTab === 'help' && <HelpSupportView />}
       </div>
     </div>
