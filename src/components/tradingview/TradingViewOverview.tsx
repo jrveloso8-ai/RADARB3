@@ -148,6 +148,49 @@ export const TradingViewOverview: React.FC = () => {
   const sentimentScore = 58;
   const needleRotation = -90 + (sentimentScore / 100) * 180;
 
+  // Lógica dinâmica de Horário e Ciclo de Atualização (Pré-Abertura diária às 08h45)
+  const [updateSchedule, setUpdateSchedule] = useState<{
+    lastUpdateLabel: string;
+    nextUpdateLabel: string;
+    badgeLabel: string;
+    isPreOpening: boolean;
+  }>({
+    lastUpdateLabel: 'Última consolidação: Ontem às 08h45',
+    nextUpdateLabel: 'Hoje às 08h45 (Pré-Abertura B3)',
+    badgeLabel: 'AGUARDANDO PRÉ-ABERTURA',
+    isPreOpening: true,
+  });
+
+  useEffect(() => {
+    const updateTimeState = () => {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const targetMinutes = 8 * 60 + 45; // 08h45
+
+      const isBefore845 = currentMinutes < targetMinutes;
+
+      if (isBefore845) {
+        setUpdateSchedule({
+          lastUpdateLabel: 'Última consolidação: Ontem às 08h45',
+          nextUpdateLabel: 'Hoje às 08h45 (Pré-Abertura B3)',
+          badgeLabel: 'AGUARDANDO PRÉ-ABERTURA',
+          isPreOpening: true,
+        });
+      } else {
+        setUpdateSchedule({
+          lastUpdateLabel: 'Última consolidação: Hoje às 08h45',
+          nextUpdateLabel: 'Próximo pregão às 08h45',
+          badgeLabel: 'EDIÇÃO DE HOJE CONCLUÍDA',
+          isPreOpening: false,
+        });
+      }
+    };
+
+    updateTimeState();
+    const timer = setInterval(updateTimeState, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Setores da B3
   const sectorData = [
     {
@@ -377,18 +420,32 @@ export const TradingViewOverview: React.FC = () => {
                 </div>
 
                 {/* Legenda de Atualização do Termômetro */}
-                <div className="w-full mt-3.5 pt-3 border-t border-gray-800/80 space-y-1.5 text-left bg-[#0c1220]/80 p-3 rounded-xl border border-cyan-500/20 shadow-inner">
-                  <div className="flex items-center justify-between gap-2">
+                <div className="w-full mt-3.5 pt-3 border-t border-gray-800/80 space-y-2 text-left bg-[#0c1220]/90 p-3.5 rounded-xl border border-cyan-500/20 shadow-inner">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-1.5 text-[11px] font-mono text-cyan-300 font-bold">
                       <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                      <span>Última atualização: Hoje às 08h45</span>
+                      <span>{updateSchedule.lastUpdateLabel}</span>
                     </div>
-                    <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold">
-                      PRÉ-ABERTURA
+                    <span
+                      className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold border ${
+                        updateSchedule.isPreOpening
+                          ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                      }`}
+                    >
+                      {updateSchedule.badgeLabel}
                     </span>
                   </div>
-                  <p className="text-[10.5px] text-gray-400 font-sans leading-relaxed">
-                    <strong className="text-gray-300">Quando é atualizado:</strong> Calculado e consolidado diariamente às <strong className="text-cyan-300">08h45</strong> (antes da abertura do pregão da B3) com base nas últimas 24h dos 5 pilares macroeconômicos e fluxo estrangeiro. Feeds de futuros e cotações continuam em tempo real.
+
+                  <div className="flex items-center gap-2 text-[10.5px] font-mono text-amber-300/95 bg-amber-500/10 px-2.5 py-1.5 rounded-lg border border-amber-500/25">
+                    <RefreshCw className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span>
+                      Próxima atualização: <strong>{updateSchedule.nextUpdateLabel}</strong>
+                    </span>
+                  </div>
+
+                  <p className="text-[10px] text-gray-400 font-sans leading-relaxed pt-0.5">
+                    <strong className="text-gray-300">Ciclo diário:</strong> O termômetro de sentimento é consolidado diariamente às <strong className="text-cyan-300">08h45</strong> (pré-mercado B3), ponderando o fechamento das últimas 24h dos 5 pilares macro e fluxo estrangeiro. Antes das 08h45, o painel exibe a leitura da sessão anterior. Cotações e gráficos de suporte permanecem ao vivo em tempo real.
                   </p>
                 </div>
               </div>
