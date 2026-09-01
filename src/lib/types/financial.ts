@@ -44,7 +44,7 @@ export interface FundamentalMetric {
   value: number | null;
   formatted: string;
   benchmark: string;
-  status: 'BOM' | 'NEUTRO' | 'RUIM';
+  status: 'BOM' | 'NEUTRO' | 'RUIM' | 'N/D';
   description: string;
   isAdjusted?: boolean;
   rawAccountingValue?: number | null;

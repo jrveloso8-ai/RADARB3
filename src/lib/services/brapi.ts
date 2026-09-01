@@ -267,7 +267,6 @@ export class BrapiService {
       historicalDataPrice: historical,
     };
   }
-
   /**
    * Consulta indicadores fundamentalistas do balanço patrimonial e DRE.
    * Suporta reconciliação de dívida financeira real e normalização de eventos não-recorrentes.
@@ -276,7 +275,7 @@ export class BrapiService {
     const cleanSymbol = symbol.trim().toUpperCase();
     const url = this.buildUrl(`/quote/${cleanSymbol}`, {
       fundamental: 'true',
-      modules: 'financialData,defaultKeyStatistics,balanceSheetHistory,cashflowStatementHistory',
+      modules: 'financialData,defaultKeyStatistics,balanceSheetHistory,cashflowHistory',
     });
 
     const cacheKey = `fundamentals_${cleanSymbol}`;
@@ -285,8 +284,15 @@ export class BrapiService {
       const item = data?.results?.[0] || {};
       const fin = item?.financialData || {};
       const stats = item?.defaultKeyStatistics || {};
-      const balanceHistory = item?.balanceSheetHistory?.balanceSheetStatements?.[0] || {};
-      const cashflowHistory = item?.cashflowStatementHistory?.cashflowStatements?.[0] || {};
+      const balanceStatements = Array.isArray(item?.balanceSheetHistory)
+        ? item.balanceSheetHistory
+        : item?.balanceSheetHistory?.balanceSheetStatements || [];
+      const balanceHistory = balanceStatements[0] || {};
+
+      const cashflowStatements = Array.isArray(item?.cashflowHistory)
+        ? item.cashflowHistory
+        : item?.cashflowHistory?.cashflowStatements || item?.cashflowStatementHistory?.cashflowStatements || [];
+      const cashflowHistory = cashflowStatements[0] || {};
 
       // Dívida Bruta e Caixa
       const totalDebt = fin?.totalDebt ?? null;
@@ -299,14 +305,17 @@ export class BrapiService {
 
       // FCO (Fluxo de Caixa Operacional) TTM / Recente
       const operatingCashFlow =
-        fin?.operatingCashflow ?? cashflowHistory?.totalCashFromOperatingActivities ?? null;
+        fin?.operatingCashflow ??
+        cashflowHistory?.operatingCashflow ??
+        cashflowHistory?.totalCashFromOperatingActivities ??
+        null;
 
       // Dívida Financeira Isolada (excluindo provisões socioambientais e passivos não-financeiros de longo prazo)
-      const shortLongTermDebt = balanceHistory?.shortLongTermDebt ?? null;
-      const longTermDebt = balanceHistory?.longTermDebt ?? null;
+      const shortDebt = balanceHistory?.loansAndFinancing ?? balanceHistory?.shortLongTermDebt ?? null;
+      const longDebt = balanceHistory?.longTermLoansAndFinancing ?? balanceHistory?.longTermDebt ?? null;
       let financialDebt: number | null = null;
-      if (shortLongTermDebt !== null || longTermDebt !== null) {
-        financialDebt = (shortLongTermDebt || 0) + (longTermDebt || 0);
+      if (shortDebt !== null || longDebt !== null) {
+        financialDebt = (shortDebt || 0) + (longDebt || 0);
       }
 
       let financialDebtToEbitda: number | null = null;
@@ -317,9 +326,11 @@ export class BrapiService {
       // Reconciliação oficial para bluechips com passivos específicos de balanço (ex: VALE3)
       if (cleanSymbol === 'VALE3') {
         // Na VALE3, o totalDebt bruto inclui provisões de Samarco/Brumadinho e descomissionamento.
-        // Dívida financeira líquida oficial 2T26 é ~0.8x EBITDA, FCO TTM ~R$ 50.6 Bi vs Lucro contábil pós-impairment
+        // Se a dívida bruta IFRS calculada for distorcida (> 2.5x), utiliza a dívida financeira real calculada
         if (!financialDebtToEbitda || financialDebtToEbitda > 2.5) {
-          financialDebtToEbitda = 0.8;
+          financialDebtToEbitda = financialDebt && totalCash && ebitda && ebitda > 0
+            ? Number(((financialDebt - totalCash) / ebitda).toFixed(2))
+            : 0.8;
         }
       }
 

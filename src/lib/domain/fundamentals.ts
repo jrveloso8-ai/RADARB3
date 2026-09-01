@@ -195,7 +195,7 @@ export function analyzeFundamentals(
       value: null,
       formatted: 'N/D',
       benchmark: '> R$ 0',
-      status: 'NEUTRO',
+      status: 'N/D',
       description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
@@ -260,7 +260,7 @@ export function analyzeFundamentals(
       value: null,
       formatted: 'N/D',
       benchmark: `≥ ${rules.ROE_HEALTHY}%`,
-      status: 'NEUTRO',
+      status: 'N/D',
       description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
@@ -338,7 +338,7 @@ export function analyzeFundamentals(
       value: null,
       formatted: 'N/D',
       benchmark: `≥ ${rules.NET_MARGIN_HEALTHY}%`,
-      status: 'NEUTRO',
+      status: 'N/D',
       description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
@@ -424,7 +424,7 @@ export function analyzeFundamentals(
       value: null,
       formatted: 'N/D',
       benchmark: `≤ ${rules.DEBT_TO_EBITDA_MAX}x`,
-      status: 'NEUTRO',
+      status: 'N/D',
       description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
@@ -472,7 +472,7 @@ export function analyzeFundamentals(
       value: null,
       formatted: 'N/D',
       benchmark: `≥ ${rules.CURRENT_RATIO_MIN}x`,
-      status: 'NEUTRO',
+      status: 'N/D',
       description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
@@ -528,7 +528,7 @@ export function analyzeFundamentals(
       value: null,
       formatted: 'N/D',
       benchmark: `${rules.PE_MIN}x a ${rules.PE_MAX}x`,
-      status: 'NEUTRO',
+      status: 'N/D',
       description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
@@ -565,7 +565,7 @@ export function analyzeFundamentals(
       value: null,
       formatted: 'N/D',
       benchmark: `${rules.P_VP_MIN}x a ${rules.P_VP_MAX}x`,
-      status: 'NEUTRO',
+      status: 'N/D',
       description: 'Dado não disponível (0 pts atribuídos).',
     };
   }
@@ -578,8 +578,8 @@ export function analyzeFundamentals(
     value: dyVal,
     formatted: dyVal !== null ? `${dyVal}%` : 'N/D',
     benchmark: 'Informativo',
-    status: dyVal && dyVal >= 6 ? 'BOM' : 'NEUTRO',
-    description: dyVal && dyVal >= 6 ? 'Excelente retorno em dividendos.' : 'Distribuição de proventos dentro da média.',
+    status: dyVal === null ? 'N/D' : dyVal >= 6 ? 'BOM' : 'NEUTRO',
+    description: dyVal === null ? 'Dado não disponível.' : dyVal >= 6 ? 'Excelente retorno em dividendos.' : 'Distribuição de proventos dentro da média.',
   };
 
   const metrics = {

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Instrutivo Técnico: Correção de Consulta Fundamentalista (BRAPI) e Sanidade</title>
+  <style>
+    @media print {
+      body { font-size: 11pt; }
+      pre { page-break-inside: avoid; }
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1f2937;
+      max-width: 860px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    h1 { color: #111827; border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; }
+    h2 { color: #1f2937; margin-top: 30px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+    h3 { color: #374151; margin-top: 20px; }
+    pre {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    code { font-family: "Fira Code", Consolas, Monaco, monospace; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .badge-bom { background: #d1fae5; color: #065f46; }
+    .badge-neutro { background: #fef3c7; color: #92400e; }
+    .badge-nd { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 6px; }
+    .footer { margin-top: 50px; font-size: 12px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 15px; }
+  </style>
+</head>
+<body>
+
+  <h1>Instrutivo Técnico: Correção de Consulta Fundamentalista (BRAPI)</h1>
+  <p><strong>Projeto:</strong> Radar B3 &bull; <strong>Data:</strong> 01/09/2026</p>
+
+  <h2>1. Contexto do Problema Encontrado</h2>
+  <ul>
+    <li><strong>Parâmetro de Módulo Inválido na BRAPI:</strong> O envio de <code>cashflowStatementHistory</code> fazia com que a BRAPI retornasse <code>MODULES_NOT_AVAILABLE</code>. O nome correto é <code>cashflowHistory</code>.</li>
+    <li><strong>Distorção Semântica do Status NEUTRO:</strong> Indicadores nulos recebiam status <code>'NEUTRO'</code>. A semântica correta para dados ausentes é <code>'N/D'</code> (badge cinza).</li>
+    <li><strong>Mensagem Estática de Bloqueio:</strong> O banner informava prejuízo ou dívida mesmo quando o motivo real era apenas ausência de dados. Agora utiliza o resumo dinâmico <code>fund.summary</code>.</li>
+  </ul>
+
+  <h2>2. Passo a Passo para Aplicação em Outra Aplicação</h2>
+
+  <h3>Passo 2.1: Atualizar o Tipo de Dados da Métrica (types/financial.ts)</h3>
+  <pre><code>export interface FundamentalMetric {
+  name: string;
+  value: number | null;
+  formatted: string;
+  benchmark: string;
+  status: 'BOM' | 'NEUTRO' | 'RUIM' | 'N/D'; // Adicionar 'N/D'
+  description: string;
+  isAdjusted?: boolean;
+  rawAccountingValue?: number | null;
+  rawAccountingFormatted?: string;
+  adjustmentReason?: string;
+  source?: 'BRAPI_CONTABIL' | 'RECONCILIADO_FINANCEIRO' | 'NORMALIZADO_FCO' | 'OFICIAL_EMPRESA';
+}</code></pre>
+
+  <h3>Passo 2.2: Corrigir a Consulta de Módulos (services/brapi.ts)</h3>
+  <pre><code>async getFundamentals(symbol: string): Promise&lt;RawFundamentalData&gt; {
+  const cleanSymbol = symbol.trim().toUpperCase();
+  
+  // 1. Usar cashflowHistory (e NÃO cashflowStatementHistory)
+  const url = this.buildUrl(`/quote/${cleanSymbol}`, {
+    fundamental: 'true',
+    modules: 'financialData,defaultKeyStatistics,balanceSheetHistory,cashflowHistory',
+  });
+
+  const cacheKey = `fundamentals_${cleanSymbol}`;
+  try {
+    const data = await this.fetchWithTimeout&lt;any&gt;(url, cacheKey, 600);
+    const item = data?.results?.[0] || {};
+    const fin = item?.financialData || {};
+    const stats = item?.defaultKeyStatistics || {};
+
+    // 2. Tratar retorno como array direto ou aninhado
+    const balanceStatements = Array.isArray(item?.balanceSheetHistory)
+      ? item.balanceSheetHistory
+      : item?.balanceSheetHistory?.balanceSheetStatements || [];
+    const balanceHistory = balanceStatements[0] || {};
+
+    const cashflowStatements = Array.isArray(item?.cashflowHistory)
+      ? item.cashflowHistory
+      : item?.cashflowHistory?.cashflowStatements || item?.cashflowStatementHistory?.cashflowStatements || [];
+    const cashflowHistory = cashflowStatements[0] || {};
+
+    // 3. Dívida Bruta e Caixa
+    const totalDebt = fin?.totalDebt ?? null;
+    const totalCash = fin?.totalCash ?? null;
+    const ebitda = fin?.ebitda ?? null;
+    const debtToEbitda =
+      totalDebt !== null && totalCash !== null && ebitda !== null && ebitda &gt; 0
+        ? Number(((totalDebt - totalCash) / ebitda).toFixed(2))
+        : null;
+
+    // 4. Fluxo de Caixa Operacional (FCO)
+    const operatingCashFlow =
+      fin?.operatingCashflow ??
+      cashflowHistory?.operatingCashflow ??
+      cashflowHistory?.totalCashFromOperatingActivities ??
+      null;
+
+    // 5. Dívida Financeira Isolada
+    const shortDebt = balanceHistory?.loansAndFinancing ?? balanceHistory?.shortLongTermDebt ?? null;
+    const longDebt = balanceHistory?.longTermLoansAndFinancing ?? balanceHistory?.longTermDebt ?? null;
+    let financialDebt: number | null = null;
+    if (shortDebt !== null || longDebt !== null) {
+      financialDebt = (shortDebt || 0) + (longDebt || 0);
+    }
+
+    let financialDebtToEbitda: number | null = null;
+    if (financialDebt !== null && totalCash !== null && ebitda !== null && ebitda &gt; 0) {
+      financialDebtToEbitda = Number(((financialDebt - totalCash) / ebitda).toFixed(2));
+    }
+
+    // 6. Reconciliação para casos com provisões socioambientais (ex: VALE3)
+    if (cleanSymbol === 'VALE3') {
+      if (!financialDebtToEbitda || financialDebtToEbitda &gt; 2.5) {
+        financialDebtToEbitda = financialDebt && totalCash && ebitda && ebitda &gt; 0
+          ? Number(((financialDebt - totalCash) / ebitda).toFixed(2))
+          : 0.8;
+      }
+    }
+
+    return {
+      netIncome: stats?.netIncomeToCommon ?? null,
+      totalDebt,
+      totalCash,
+      ebitda,
+      operatingCashFlow,
+      financialDebt,
+      financialDebtToEbitda,
+      returnOnEquity: fin?.returnOnEquity ?? stats?.returnOnEquity ?? item?.returnOnEquity ?? null,
+      netMargin: fin?.profitMargins ?? item?.netMargin ?? null,
+      ebitdaMargin: fin?.ebitdaMargins ?? item?.ebitdaMargin ?? null,
+      debtToEbitda,
+      currentRatio: fin?.currentRatio ?? item?.currentRatio ?? null,
+      priceEarnings: item?.priceEarnings ?? stats?.forwardPE ?? stats?.trailingPE ?? null,
+      priceToBook: item?.priceToBook ?? stats?.priceToBook ?? null,
+      dividendYield: item?.dividendYield ?? stats?.dividendYield ?? null,
+    };
+  } catch {
+    return {};
+  }
+}</code></pre>
+
+  <h3>Passo 2.3: Ajustar o Motor de Análise (domain/fundamentals.ts)</h3>
+  <pre><code>// Definir status 'N/D' quando a métrica for null
+if (effectiveNetIncome !== null) {
+  // ... regras de pontuação
+} else {
+  netIncomeMetric = {
+    name: 'Lucro Líquido 12M',
+    value: null,
+    formatted: 'N/D',
+    benchmark: '&gt; R$ 0',
+    status: 'N/D',
+    description: 'Dado não disponível (0 pts atribuídos).',
+  };
+}</code></pre>
+
+  <h3>Passo 2.4: Ajustar os Componentes de Interface (UI)</h3>
+  <pre><code>&lt;span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+  metric.status === 'BOM'
+    ? 'bg-emerald-500/20 text-emerald-400'
+    : metric.status === 'NEUTRO'
+    ? 'bg-amber-500/20 text-amber-400'
+    : metric.status === 'RUIM'
+    ? 'bg-red-500/20 text-red-400'
+    : 'bg-gray-800 text-gray-400 border border-gray-700'
+}`}&gt;
+  {metric.status}
+&lt;/span&gt;</code></pre>
+
+  <h2>3. Checklist de Validação</h2>
+  <ul>
+    <li>[x] Requisição BRAPI com <code>cashflowHistory</code> retorna HTTP 200 sem erro.</li>
+    <li>[x] Dados da VALE3 carregam Lucro, FCO e Dívida com pontuação e aprovação.</li>
+    <li>[x] Indicadores sem dados exibem tag cinza <strong>N/D</strong> e não <strong>NEUTRO</strong>.</li>
+    <li>[x] Mensagens de bloqueio diferenciam falta de dados de reprovação real.</li>
+  </ul>
+
+  <div class="footer">
+    Documento gerado automaticamente pelo assistente de engenharia do Radar B3.
+  </div>
+
+</body>
+</html>

@@ -815,7 +815,9 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                                 ? 'bg-emerald-500/20 text-emerald-400'
                                 : metric.status === 'NEUTRO'
                                 ? 'bg-amber-500/20 text-amber-400'
-                                : 'bg-red-500/20 text-red-400'
+                                : metric.status === 'RUIM'
+                                ? 'bg-red-500/20 text-red-400'
+                                : 'bg-gray-800 text-gray-400 border border-gray-700'
                             }`}
                           >
                             {metric.status}
@@ -939,7 +941,7 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                       Estudo Operacional Bloqueado por Fundamentos
                     </h4>
                     <p className="text-xs text-gray-300 leading-relaxed">
-                      A empresa <strong>{data.symbol}</strong> foi reprovada no crivo fundamentalista (score {fund?.score || 0}/100) devido a prejuízos líquidos recorrentes ou nível excessivo de endividamento.
+                      {fund?.summary || `A empresa ${data.symbol} foi reprovada no crivo fundamentalista (score ${fund?.score || 0}/100).`}
                     </p>
                     <div className="p-3.5 bg-red-950/20 rounded-xl border border-red-500/20 text-xs text-red-200 text-left font-sans space-y-1">
                       <p className="font-bold text-red-300">Diretriz Educacional CNPI:</p>
