@@ -29,9 +29,9 @@ describe('Especificação de Execução v3.0 / v3.1 — Suíte Completa de Valid
     ivAtm: {
       callIv: 26.5,
       putIv: 26.8,
-      diffPercent: 1.1,
-      status: 'CONFIALVEL',
+      percentile: 50,
     },
+    ivQuality: 'CONFIÁVEL',
     openInterestDate: '2026-08-28',
     maxPain: 39.5,
     hv21: 22.0,

@@ -28,6 +28,7 @@ import {
   Zap,
   Gauge,
   PieChart,
+  Clock,
 } from 'lucide-react';
 import { MarketOpeningSubscribeCard } from '../newsletter/MarketOpeningSubscribeCard';
 
@@ -373,6 +374,22 @@ export const TradingViewOverview: React.FC = () => {
                   <span className="text-red-400 font-bold">0 - Pessimista</span>
                   <span className="text-amber-400 font-bold">50 - Neutro</span>
                   <span className="text-emerald-400 font-bold">100 - Otimista</span>
+                </div>
+
+                {/* Legenda de Atualização do Termômetro */}
+                <div className="w-full mt-3.5 pt-3 border-t border-gray-800/80 space-y-1.5 text-left bg-[#0c1220]/80 p-3 rounded-xl border border-cyan-500/20 shadow-inner">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-cyan-300 font-bold">
+                      <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      <span>Última atualização: Hoje às 08h45</span>
+                    </div>
+                    <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold">
+                      PRÉ-ABERTURA
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-gray-400 font-sans leading-relaxed">
+                    <strong className="text-gray-300">Quando é atualizado:</strong> Calculado e consolidado diariamente às <strong className="text-cyan-300">08h45</strong> (antes da abertura do pregão da B3) com base nas últimas 24h dos 5 pilares macroeconômicos e fluxo estrangeiro. Feeds de futuros e cotações continuam em tempo real.
+                  </p>
                 </div>
               </div>
 
