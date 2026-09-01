@@ -1077,6 +1077,47 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                           </div>
                         ))}
                       </div>
+
+                      {/* RESUMO DO PREÇO TOTAL POR OPERAÇÃO & VALIDAÇÃO DE VIABILIDADE */}
+                      <div className="pt-3 border-t border-gray-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-xl bg-[#0b101b] border border-gray-800">
+                            <span className="text-[10px] text-gray-400 block font-sans uppercase">
+                              {elected.isCredit ? 'Crédito Líquido Total' : 'Custo Total da Operação (Débito)'}
+                            </span>
+                            <div className="flex items-baseline gap-2 mt-0.5">
+                              <span className={`text-base font-bold ${elected.isCredit ? 'text-emerald-400' : 'text-cyan-400'}`}>
+                                {elected.isCredit ? '+' : '−'}R$ {Math.abs(elected.netCostOrCredit).toFixed(2)} <span className="text-xs text-gray-400 font-normal">/ cota</span>
+                              </span>
+                              <span className="text-xs font-bold text-gray-300 font-sans">
+                                • R$ {Math.abs(elected.totalCostOrCreditForLot).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} <span className="text-[10px] text-gray-500 font-normal">no lote de 1.000</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Validação de Regra de Preço / Viabilidade */}
+                        {elected.pricingViability && (
+                          <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 text-xs font-sans ${
+                            elected.pricingViability.isAdequate
+                              ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                              : 'bg-amber-950/20 border-amber-500/30 text-amber-300'
+                          }`}>
+                            <Shield className={`w-4 h-4 shrink-0 ${elected.pricingViability.isAdequate ? 'text-emerald-400' : 'text-amber-400'}`} />
+                            <div>
+                              <div className="font-bold flex items-center gap-1.5">
+                                <span>{elected.pricingViability.statusLabel}</span>
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-gray-900 border border-gray-700 font-mono">
+                                  {elected.pricingViability.ratioToWidthPct}% da largura
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-gray-400">
+                                {elected.pricingViability.recommendationRule}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* GATILHOS DE SAÍDA DE ESTUDO */}

@@ -367,4 +367,37 @@ describe('Motor Único de Opções — Especificação Técnica v2.2 (CT-901 a C
 
     expect(() => assertDirection(invertedStrategy, 39.55)).toThrow(StructureDirectionError);
   });
+
+  // CT-919: Validação do Preço Total por Operação e Regra de Viabilidade (≤ 30% da largura)
+  it('CT-919: Estratégias eleitas devem conter pricingViability consistente e respeitar teto de débito ≤ 30%', () => {
+    const spot = 39.55;
+    const strategy = electBestOptionStrategy(
+      'ITUB4',
+      spot,
+      'COMPRA',
+      'ALTA',
+      55,
+      22.0,
+      itub4BaseOptionAnalysis,
+      'APROVADO',
+      itub4Analytics
+    );
+
+    expect(strategy.pricingViability).toBeDefined();
+    expect(strategy.pricingViability!.totalPerShare).toBe(strategy.netCostOrCredit);
+    expect(strategy.pricingViability!.totalPerLot).toBe(strategy.totalCostOrCreditForLot);
+    expect(strategy.pricingViability!.ratioToWidthPct).toBeGreaterThanOrEqual(12);
+    expect(strategy.pricingViability!.ratioToWidthPct).toBeLessThanOrEqual(45);
+    expect(strategy.pricingViability!.isAdequate).toBe(true);
+
+    // Se houver estrutura alternativa a débito, ela não deve pagar mais que 30% da largura
+    if (strategy.alternative) {
+      const alt = strategy.alternative.strategy;
+      expect(alt.pricingViability).toBeDefined();
+      expect(alt.pricingViability!.ratioToWidthPct).toBeLessThanOrEqual(30.0);
+      expect(alt.pricingViability!.isAdequate).toBe(true);
+      expect(alt.pricingViability!.totalPerShare).toBe(-alt.netCostOrCredit);
+      expect(alt.pricingViability!.totalPerLot).toBe(-alt.totalCostOrCreditForLot);
+    }
+  });
 });

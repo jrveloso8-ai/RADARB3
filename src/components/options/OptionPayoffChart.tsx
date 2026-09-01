@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ElectedOptionStrategy } from '@/lib/domain/cme-election';
-import { TrendingUp, TrendingDown, Target, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Target, Info, AlertTriangle, CheckCircle2, Shield } from 'lucide-react';
 
 interface OptionPayoffChartProps {
   electedStrategy: ElectedOptionStrategy;
@@ -21,6 +21,7 @@ export const OptionPayoffChart: React.FC<OptionPayoffChartProps> = ({ electedStr
     priceContext,
     tradeCheckGuide,
     netCostOrCredit,
+    pricingViability,
   } = electedStrategy;
 
   // Calcular Payoff unitário em R$ para um determinado preço S no vencimento
@@ -200,13 +201,21 @@ export const OptionPayoffChart: React.FC<OptionPayoffChartProps> = ({ electedStr
             ))}
           </div>
 
-          <div className="pt-2 border-t border-gray-800 flex justify-between text-xs text-cyan-300 font-bold">
-            <span>
-              {isCredit ? 'Crédito Líquido Recebido:' : 'Débito Líquido Pago:'} R$ {Math.abs(netCostOrCredit).toFixed(2)} / cota
-            </span>
-            <span>
-              Total no lote de 1.000: R$ {(Math.abs(netCostOrCredit) * 1000).toFixed(2)}
-            </span>
+          <div className="pt-2.5 border-t border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className={`font-bold ${isCredit ? 'text-emerald-400' : 'text-cyan-400'}`}>
+                {isCredit ? 'Crédito Líquido:' : 'Custo Líquido (Débito):'} {isCredit ? '+' : '−'}R$ {Math.abs(netCostOrCredit).toFixed(2)} / cota
+              </span>
+              <span className="text-gray-400 font-sans">
+                (Total: R$ {(Math.abs(netCostOrCredit) * 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} no lote)
+              </span>
+            </div>
+            {pricingViability && (
+              <div className="flex items-center gap-1.5 text-[11px] text-gray-300 font-sans">
+                <Shield className={`w-3.5 h-3.5 ${pricingViability.isAdequate ? 'text-emerald-400' : 'text-amber-400'}`} />
+                <span>{pricingViability.statusLabel}</span>
+              </div>
+            )}
           </div>
         </div>
       )}

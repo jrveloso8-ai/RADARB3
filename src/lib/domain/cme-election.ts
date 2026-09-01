@@ -42,6 +42,17 @@ export interface OptionLegDetail {
 
 export type CMELegDetail = OptionLegDetail;
 
+export interface PricingViability {
+  ratioToWidthPct: number; // Percentual do custo ou crédito em relação à largura das pernas/asa (ex: 24.5%)
+  maxAllowedRatioPct: number; // Teto máximo percentual permitido pela regra (ex: 30% para travas a débito, 45% para travas a crédito)
+  minRecommendedRatioPct?: number; // Piso mínimo percentual recomendado (ex: 12% para travas a crédito)
+  isAdequate: boolean; // Se está estritamente dentro da regra
+  statusLabel: string; // Ex: "✓ Preço Adequado (24% da largura ≤ 30%)"
+  recommendationRule: string; // Explicação da regra de viabilidade
+  totalPerShare: number; // Preço líquido unitário por cota (com sinal: + se crédito, - se débito)
+  totalPerLot: number; // Preço financeiro total para lote padrão de 1.000 cotas (com sinal: + se crédito, - se débito)
+}
+
 export interface ElectedOptionStrategy {
   strategySpec: OptionStrategySpec;
   title: string;
@@ -78,6 +89,9 @@ export interface ElectedOptionStrategy {
   maxLossLot: number;
   returnOnRiskPct: number;
   riskRewardRatio: string;
+
+  // Análise de viabilidade e preço total por operação (Spec v3.2)
+  pricingViability?: PricingViability;
 
   // Explicação didática de conferência antes da ordem
   tradeCheckGuide?: string;
@@ -670,6 +684,19 @@ export function electBestOptionStrategy(
     ];
 
     const diagnosticsSummary = `${putSeries.length} séries na cadeia · ${totalEligibleCount} elegíveis · ${validPairs.length} pares válidos`;
+    const creditRatioPct = Number(((netCredit / width) * 100).toFixed(1));
+    const pricingViability: PricingViability = {
+      ratioToWidthPct: creditRatioPct,
+      maxAllowedRatioPct: spreadRules.MAX_CREDIT_TO_WIDTH * 100,
+      minRecommendedRatioPct: spreadRules.MIN_CREDIT_TO_WIDTH * 100,
+      isAdequate: creditRatioPct >= spreadRules.MIN_CREDIT_TO_WIDTH * 100 && creditRatioPct <= spreadRules.MAX_CREDIT_TO_WIDTH * 100,
+      statusLabel: creditRatioPct >= 20 && creditRatioPct <= 35
+        ? `✓ Crédito Ideal (${creditRatioPct}% da largura)`
+        : `✓ Crédito Adequado (${creditRatioPct}% da largura)`,
+      recommendationRule: `Travas a Crédito: Capturar entre ${(spreadRules.MIN_CREDIT_TO_WIDTH * 100).toFixed(0)}% e ${(spreadRules.MAX_CREDIT_TO_WIDTH * 100).toFixed(0)}% da largura das pernas com segurança fora do dinheiro.`,
+      totalPerShare: netCredit,
+      totalPerLot: Number((netCredit * lotSize).toFixed(2)),
+    };
 
     const strategyResult: ElectedOptionStrategy = {
       strategySpec: OPTION_25_STRATEGIES[10], // #11 Bull Spread
@@ -694,6 +721,7 @@ export function electBestOptionStrategy(
       maxLossLot: Number((maxLoss * lotSize).toFixed(2)),
       returnOnRiskPct: returnPct,
       riskRewardRatio: `1 : ${(maxLoss / maxProfit).toFixed(1)}`,
+      pricingViability,
       tradeCheckGuide: `Nesta trava você vende a put de strike maior (${shortPut.strike.toFixed(2)}) e compra a de strike menor (${longPut.strike.toFixed(2)}). Se no home broker a estrutura aparecer como "trava de baixa", as pernas foram invertidas — confira antes de enviar.`,
       takeProfitRule: {
         targetPrice: `R$ ${shortPut.strike.toFixed(2)} (ou superior no vencimento)`,
@@ -736,6 +764,9 @@ export function electBestOptionStrategy(
         if (widthPct < spreadRules.MIN_WIDTH_PCT_OF_SPOT || widthPct > spreadRules.MAX_WIDTH_PCT_OF_SPOT) continue;
         const netDebit = Number((longCall.optionPrice! - shortCall.optionPrice!).toFixed(2));
         if (netDebit <= 0 || netDebit >= width) continue;
+        const debitRatio = netDebit / width;
+        // Regra de Ouro: não pagar mais que 30% da largura das pernas em travas a débito
+        if (debitRatio < spreadRules.MIN_DEBIT_TO_WIDTH || debitRatio > spreadRules.MAX_DEBIT_TO_WIDTH) continue;
         if (!bestDebitPair || netDebit < bestDebitPair.netDebit) {
           bestDebitPair = { longLeg: longCall, shortLeg: shortCall, width, netDebit };
         }
@@ -747,6 +778,19 @@ export function electBestOptionStrategy(
       const altMaxLoss = bestDebitPair.netDebit;
       const altBreakEven = Number((bestDebitPair.longLeg.strike + bestDebitPair.netDebit).toFixed(2));
       const altReturnPct = Number(((altMaxProfit / altMaxLoss) * 100).toFixed(1));
+      const altDebitRatioPct = Number(((bestDebitPair.netDebit / bestDebitPair.width) * 100).toFixed(1));
+      const altPricingViability: PricingViability = {
+        ratioToWidthPct: altDebitRatioPct,
+        maxAllowedRatioPct: spreadRules.MAX_DEBIT_TO_WIDTH * 100,
+        minRecommendedRatioPct: spreadRules.MIN_DEBIT_TO_WIDTH * 100,
+        isAdequate: altDebitRatioPct <= spreadRules.MAX_DEBIT_TO_WIDTH * 100,
+        statusLabel: altDebitRatioPct <= (spreadRules.TARGET_DEBIT_TO_WIDTH || 0.25) * 100
+          ? `✓ Custo Excelente (${altDebitRatioPct}% da largura ≤ 25%)`
+          : `✓ Custo Adequado (${altDebitRatioPct}% da largura ≤ 30%)`,
+        recommendationRule: `Travas a Débito: Nunca pagar mais que 25% a 30% da largura das pernas (teto: ${(spreadRules.MAX_DEBIT_TO_WIDTH * 100).toFixed(0)}%) para preservar assimetria de retorno.`,
+        totalPerShare: -bestDebitPair.netDebit,
+        totalPerLot: -Number((bestDebitPair.netDebit * lotSize).toFixed(2)),
+      };
 
       const altStrategy: ElectedOptionStrategy = {
         strategySpec: OPTION_25_STRATEGIES[0], // #1 Bull Call Spread
@@ -797,6 +841,7 @@ export function electBestOptionStrategy(
         maxLossLot: Number((altMaxLoss * lotSize).toFixed(2)),
         returnOnRiskPct: altReturnPct,
         riskRewardRatio: `1 : ${(altMaxLoss / altMaxProfit).toFixed(1)}`,
+        pricingViability: altPricingViability,
         takeProfitRule: {
           targetPrice: `R$ ${bestDebitPair.shortLeg.strike.toFixed(2)}`,
           profitGoal: `Capturar 70% a 80% do ganho máximo`,
@@ -1000,6 +1045,19 @@ export function electBestOptionStrategy(
     ];
 
     const diagnosticsSummary = `${callSeries.length} séries na cadeia · ${totalEligibleCount} elegíveis · ${validPairs.length} pares válidos`;
+    const creditRatioPct = Number(((netCredit / width) * 100).toFixed(1));
+    const pricingViability: PricingViability = {
+      ratioToWidthPct: creditRatioPct,
+      maxAllowedRatioPct: spreadRules.MAX_CREDIT_TO_WIDTH * 100,
+      minRecommendedRatioPct: spreadRules.MIN_CREDIT_TO_WIDTH * 100,
+      isAdequate: creditRatioPct >= spreadRules.MIN_CREDIT_TO_WIDTH * 100 && creditRatioPct <= spreadRules.MAX_CREDIT_TO_WIDTH * 100,
+      statusLabel: creditRatioPct >= 20 && creditRatioPct <= 35
+        ? `✓ Crédito Ideal (${creditRatioPct}% da largura)`
+        : `✓ Crédito Adequado (${creditRatioPct}% da largura)`,
+      recommendationRule: `Travas a Crédito: Capturar entre ${(spreadRules.MIN_CREDIT_TO_WIDTH * 100).toFixed(0)}% e ${(spreadRules.MAX_CREDIT_TO_WIDTH * 100).toFixed(0)}% da largura das pernas com segurança fora do dinheiro.`,
+      totalPerShare: netCredit,
+      totalPerLot: Number((netCredit * lotSize).toFixed(2)),
+    };
 
     const strategyResult: ElectedOptionStrategy = {
       strategySpec: OPTION_25_STRATEGIES[11], // #12 Bear Call Spread
@@ -1024,6 +1082,7 @@ export function electBestOptionStrategy(
       maxLossLot: Number((maxLoss * lotSize).toFixed(2)),
       returnOnRiskPct: returnPct,
       riskRewardRatio: `1 : ${(maxLoss / maxProfit).toFixed(1)}`,
+      pricingViability,
       tradeCheckGuide: `Nesta trava você vende a call de strike menor (${shortCall.strike.toFixed(2)}) e compra a de strike maior (${longCall.strike.toFixed(2)}). Se no home broker a estrutura aparecer como "trava de alta", as pernas foram invertidas.`,
       takeProfitRule: {
         targetPrice: `R$ ${shortCall.strike.toFixed(2)} (ou inferior no vencimento)`,
@@ -1066,6 +1125,9 @@ export function electBestOptionStrategy(
         if (widthPct < spreadRules.MIN_WIDTH_PCT_OF_SPOT || widthPct > spreadRules.MAX_WIDTH_PCT_OF_SPOT) continue;
         const netDebit = Number((longPut.optionPrice! - shortPut.optionPrice!).toFixed(2));
         if (netDebit <= 0 || netDebit >= width) continue;
+        const debitRatio = netDebit / width;
+        // Regra de Ouro: não pagar mais que 30% da largura das pernas em travas a débito
+        if (debitRatio < spreadRules.MIN_DEBIT_TO_WIDTH || debitRatio > spreadRules.MAX_DEBIT_TO_WIDTH) continue;
         if (!bestDebitPutPair || netDebit < bestDebitPutPair.netDebit) {
           bestDebitPutPair = { longLeg: longPut, shortLeg: shortPut, width, netDebit };
         }
@@ -1077,6 +1139,19 @@ export function electBestOptionStrategy(
       const altMaxLoss = bestDebitPutPair.netDebit;
       const altBreakEven = Number((bestDebitPutPair.longLeg.strike - bestDebitPutPair.netDebit).toFixed(2));
       const altReturnPct = Number(((altMaxProfit / altMaxLoss) * 100).toFixed(1));
+      const altDebitRatioPct = Number(((bestDebitPutPair.netDebit / bestDebitPutPair.width) * 100).toFixed(1));
+      const altPricingViability: PricingViability = {
+        ratioToWidthPct: altDebitRatioPct,
+        maxAllowedRatioPct: spreadRules.MAX_DEBIT_TO_WIDTH * 100,
+        minRecommendedRatioPct: spreadRules.MIN_DEBIT_TO_WIDTH * 100,
+        isAdequate: altDebitRatioPct <= spreadRules.MAX_DEBIT_TO_WIDTH * 100,
+        statusLabel: altDebitRatioPct <= (spreadRules.TARGET_DEBIT_TO_WIDTH || 0.25) * 100
+          ? `✓ Custo Excelente (${altDebitRatioPct}% da largura ≤ 25%)`
+          : `✓ Custo Adequado (${altDebitRatioPct}% da largura ≤ 30%)`,
+        recommendationRule: `Travas a Débito: Nunca pagar mais que 25% a 30% da largura das pernas (teto: ${(spreadRules.MAX_DEBIT_TO_WIDTH * 100).toFixed(0)}%) para preservar assimetria de retorno.`,
+        totalPerShare: -bestDebitPutPair.netDebit,
+        totalPerLot: -Number((bestDebitPutPair.netDebit * lotSize).toFixed(2)),
+      };
 
       const altStrategy: ElectedOptionStrategy = {
         strategySpec: OPTION_25_STRATEGIES[1], // #2 Bear Put Spread
@@ -1127,6 +1202,7 @@ export function electBestOptionStrategy(
         maxLossLot: Number((altMaxLoss * lotSize).toFixed(2)),
         returnOnRiskPct: altReturnPct,
         riskRewardRatio: `1 : ${(altMaxLoss / altMaxProfit).toFixed(1)}`,
+        pricingViability: altPricingViability,
         takeProfitRule: {
           targetPrice: `R$ ${bestDebitPutPair.shortLeg.strike.toFixed(2)}`,
           profitGoal: `Capturar 70% a 80% do ganho máximo`,
@@ -1369,6 +1445,18 @@ export function electBestOptionStrategy(
       },
     ];
 
+    const condorRatioPct = Number(((totalCredit / width) * 100).toFixed(1));
+    const pricingViability: PricingViability = {
+      ratioToWidthPct: condorRatioPct,
+      maxAllowedRatioPct: condorRules.MAX_CREDIT_TO_WIDTH * 100,
+      minRecommendedRatioPct: condorRules.MIN_CREDIT_TO_WIDTH * 100,
+      isAdequate: condorRatioPct >= condorRules.MIN_CREDIT_TO_WIDTH * 100 && condorRatioPct <= condorRules.MAX_CREDIT_TO_WIDTH * 100,
+      statusLabel: `✓ Crédito Balanceado (${condorRatioPct}% da asa)`,
+      recommendationRule: `Iron Condor: Capturar entre ${(condorRules.MIN_CREDIT_TO_WIDTH * 100).toFixed(0)}% e ${(condorRules.MAX_CREDIT_TO_WIDTH * 100).toFixed(0)}% da largura máxima das asas.`,
+      totalPerShare: totalCredit,
+      totalPerLot: Number((totalCredit * lotSize).toFixed(2)),
+    };
+
     const strategyResult: ElectedOptionStrategy = {
       strategySpec: OPTION_25_STRATEGIES[19], // #20 Iron Condor
       title: `Iron Condor a Crédito (Faixa R$ ${shortPut.strike.toFixed(2)} a R$ ${shortCall.strike.toFixed(2)})`,
@@ -1392,6 +1480,7 @@ export function electBestOptionStrategy(
       maxLossLot: Number((maxLoss * lotSize).toFixed(2)),
       returnOnRiskPct: Number(((totalCredit / maxLoss) * 100).toFixed(1)),
       riskRewardRatio: `1 : ${(maxLoss / totalCredit).toFixed(1)}`,
+      pricingViability,
       tradeCheckGuide: `Estrutura de 4 pernas vendendo as opções intermediárias (${shortPut.strike.toFixed(2)} PUT e ${shortCall.strike.toFixed(2)} CALL) e comprando as extremidades para limitar risco total.`,
       takeProfitRule: {
         targetPrice: `Preço oscilando entre R$ ${shortPut.strike.toFixed(2)} e R$ ${shortCall.strike.toFixed(2)}`,

@@ -104,6 +104,9 @@ export const CNPI_RULES = {
       MAX_CREDIT_TO_WIDTH: 0.45,      // crédito > 45% -> perna vendida ATM demais
       DEBIT_LONG_DELTA_TARGET: 0.55,  // |delta| perna comprada (débito)
       DEBIT_SHORT_DELTA_TARGET: 0.25, // |delta| perna vendida (débito)
+      MIN_DEBIT_TO_WIDTH: 0.05,       // débito mínimo 5% da largura
+      TARGET_DEBIT_TO_WIDTH: 0.25,    // débito alvo ideal: 25% da largura
+      MAX_DEBIT_TO_WIDTH: 0.30,       // teto regulatório/saudável: não pagar mais que 30% da largura em travas a débito
       SCORE_WEIGHTS: {
         SHORT_DELTA: 0.50, // Spec v3.0 Seção 14
         LONG_DELTA: 0.15,
@@ -118,6 +121,9 @@ export const CNPI_RULES = {
       MAX_DTE: 35,
       SHORT_LEG_DELTA_TARGET: 0.20, // menor que 0.28 das verticais
       SHORT_LEG_DELTA_MAX: 0.30,
+      MIN_CREDIT_TO_WIDTH: 0.15,
+      MAX_CREDIT_TO_WIDTH: 0.45,
+      TARGET_CREDIT_TO_WIDTH: 0.30,
       MAX_WING_ASYMMETRY: 0.50,
       SCORE_WEIGHTS: {
         SHORT_DELTA: 0.35,
@@ -125,6 +131,13 @@ export const CNPI_RULES = {
         WING_SYMMETRY: 0.20,
         LIQUIDITY: 0.20,
       },
+    },
+
+    // Parâmetros de Outras Estruturas (Borboletas e Coberturas)
+    OTHER_STRUCTURES: {
+      BUTTERFLY_MAX_DEBIT_TO_WIDTH: 0.20, // Borboleta: custo máx 20% da asa
+      COVERED_CALL_MIN_PREMIUM_PCT: 0.015, // Lançamento Coberto: mínimo 1.5% do spot ao mês
+      COLLAR_MAX_NET_DEBIT_PCT: 0.01,     // Collar: débito máx 1% do spot (preferência custo zero)
     },
 
     // Controle de defasagem de preço D-1 vs D+0 (Spec v2.1/v2.2)
