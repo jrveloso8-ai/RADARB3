@@ -84,4 +84,35 @@ describe('Contrato de Dado Externo e Parsing da BRAPI (Seção 4.5)', () => {
     expect(fundamentals.metrics.debtToEbitda.value).toBeNull();
     expect(fundamentals.metrics.debtToEbitda.formatted).toBe('N/D');
   });
+
+  it('deve aplicar reconciliação de dívida financeira líquida e FCO para VALE3', () => {
+    const rawData = {
+      netIncome: 11_800_000_000,
+      operatingCashFlow: 50_600_000_000,
+      totalDebt: 75_000_000_000,
+      totalCash: 15_000_000_000,
+      ebitda: 65_000_000_000,
+      debtToEbitda: 3.09, // bruto com provisões Samarco/Brumadinho
+      financialDebtToEbitda: 0.8, // reconciliado
+      returnOnEquity: 0.0442,
+      normalizedRoe: 0.18,
+      netMargin: 0.0399,
+      normalizedNetMargin: 0.16,
+      currentRatio: 1.19,
+      priceEarnings: 32.29,
+      normalizedPE: 9.5,
+      priceToBook: 1.76,
+      dividendYield: 0.07,
+    };
+
+    const res = analyzeFundamentals('VALE3', rawData);
+
+    expect(res.status).toBe('APROVADO');
+    expect(res.isNormalized).toBe(true);
+    expect(res.metrics.debtToEbitda.status).toBe('BOM');
+    expect(res.metrics.debtToEbitda.isAdjusted).toBe(true);
+    expect(res.metrics.debtToEbitda.value).toBe(0.8);
+    expect(res.distortionAlerts).toBeDefined();
+  });
 });
+

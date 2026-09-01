@@ -774,12 +774,19 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
           {/* ========================================================================= */}
           {activeTab === 'fundamentals' && fund && (
             <div className="space-y-4">
-              <div className="p-5 bg-[#0b101b] border border-gray-800 rounded-2xl space-y-4">
+              <div className="p-5 bg-[#0b101b] border border-gray-800 rounded-2xl space-y-4 shadow-xl">
                 <div className="flex items-center justify-between border-b border-gray-800 pb-3">
                   <div>
-                    <h3 className="text-base font-bold text-white">Raio-X Fundamentalista (CNPI-P / CG1)</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-white">Raio-X Fundamentalista (CNPI-P / CG1)</h3>
+                      {fund.isNormalized && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                          ⚡ Normalizado / Reconciliado
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      Rentabilidade, solvência e múltiplos reais do balanço patrimonial e DRE.
+                      Rentabilidade, solvência e múltiplos reais com cruzamento de sanidade DRE x DFC.
                     </p>
                   </div>
                   <span
@@ -797,27 +804,59 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                   {Object.values(fund.metrics).filter(Boolean).map((metric) => (
                     <div
                       key={metric.name}
-                      className="p-3.5 bg-[#111827] border border-gray-800 rounded-xl space-y-1 font-mono"
+                      className="p-3.5 bg-[#111827] border border-gray-800 rounded-xl space-y-1.5 font-mono flex flex-col justify-between"
                     >
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-gray-400 font-sans">{metric.name}</span>
-                        <span
-                          className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                            metric.status === 'BOM'
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : metric.status === 'NEUTRO'
-                              ? 'bg-amber-500/20 text-amber-400'
-                              : 'bg-red-500/20 text-red-400'
-                          }`}
-                        >
-                          {metric.status}
-                        </span>
+                      <div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-gray-400 font-sans">{metric.name}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              metric.status === 'BOM'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : metric.status === 'NEUTRO'
+                                ? 'bg-amber-500/20 text-amber-400'
+                                : 'bg-red-500/20 text-red-400'
+                            }`}
+                          >
+                            {metric.status}
+                          </span>
+                        </div>
+                        <div className="text-lg font-bold text-white mt-1 flex items-baseline gap-1.5 flex-wrap">
+                          <span>{metric.formatted}</span>
+                          {metric.isAdjusted && (
+                            <span className="text-[9px] px-1 py-0.2 bg-cyan-500/20 text-cyan-300 rounded border border-cyan-500/30">
+                              Ajustado
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-lg font-bold text-white">{metric.formatted}</div>
-                      <div className="text-[10px] text-gray-500 font-sans">Benchmark: {metric.benchmark}</div>
+
+                      <div className="pt-1 border-t border-gray-800/80 text-[10px] space-y-0.5 font-sans">
+                        {metric.rawAccountingFormatted && (
+                          <div className="text-gray-400">
+                            <span className="text-gray-500">Dado Bruto: </span>
+                            <span className="text-gray-300 font-mono">{metric.rawAccountingFormatted}</span>
+                          </div>
+                        )}
+                        <div className="text-gray-500">Benchmark: {metric.benchmark}</div>
+                      </div>
                     </div>
                   ))}
                 </div>
+
+                {/* Alertas de Distorção Contábil / Reconciliação */}
+                {fund.distortionAlerts && fund.distortionAlerts.length > 0 && (
+                  <div className="p-3.5 bg-cyan-950/30 rounded-xl border border-cyan-800/50 text-xs text-cyan-200 space-y-1.5">
+                    <div className="font-bold flex items-center gap-1.5 text-cyan-300">
+                      <span>⚡ Auditoria de Sanidade & Reconciliação Contábil:</span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-1 text-cyan-200/90 leading-relaxed">
+                      {fund.distortionAlerts.map((alert, idx) => (
+                        <li key={idx}>{alert}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 <div className="p-3.5 bg-[#111827] rounded-xl border border-gray-800 text-xs text-gray-300">
                   <p className="font-bold text-white mb-1">Diagnóstico Fundamentalista:</p>

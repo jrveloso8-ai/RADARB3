@@ -46,6 +46,11 @@ export interface FundamentalMetric {
   benchmark: string;
   status: 'BOM' | 'NEUTRO' | 'RUIM';
   description: string;
+  isAdjusted?: boolean;
+  rawAccountingValue?: number | null;
+  rawAccountingFormatted?: string;
+  adjustmentReason?: string;
+  source?: 'BRAPI_CONTABIL' | 'RECONCILIADO_FINANCEIRO' | 'NORMALIZADO_FCO' | 'OFICIAL_EMPRESA';
 }
 
 export type EliminatoryFlag = 'LUCRO_NEGATIVO' | 'MARGEM_NEGATIVA' | 'SUPERENDIVIDAMENTO';
@@ -55,6 +60,8 @@ export interface FundamentalAnalysisResult {
   score: number; // 0 a 100
   status: 'APROVADO' | 'REPROVADO';
   summary: string;
+  isNormalized?: boolean;
+  distortionAlerts?: string[];
   metrics: {
     netIncome?: FundamentalMetric;
     roe: FundamentalMetric;

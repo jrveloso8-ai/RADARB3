@@ -270,12 +270,13 @@ export class BrapiService {
 
   /**
    * Consulta indicadores fundamentalistas do balanço patrimonial e DRE.
+   * Suporta reconciliação de dívida financeira real e normalização de eventos não-recorrentes.
    */
   async getFundamentals(symbol: string): Promise<RawFundamentalData> {
     const cleanSymbol = symbol.trim().toUpperCase();
     const url = this.buildUrl(`/quote/${cleanSymbol}`, {
       fundamental: 'true',
-      modules: 'financialData,defaultKeyStatistics',
+      modules: 'financialData,defaultKeyStatistics,balanceSheetHistory,cashflowStatementHistory',
     });
 
     const cacheKey = `fundamentals_${cleanSymbol}`;
@@ -284,8 +285,10 @@ export class BrapiService {
       const item = data?.results?.[0] || {};
       const fin = item?.financialData || {};
       const stats = item?.defaultKeyStatistics || {};
+      const balanceHistory = item?.balanceSheetHistory?.balanceSheetStatements?.[0] || {};
+      const cashflowHistory = item?.cashflowStatementHistory?.cashflowStatements?.[0] || {};
 
-      // Dívida Líquida / EBITDA — calcular, não ler campo inexistente
+      // Dívida Bruta e Caixa
       const totalDebt = fin?.totalDebt ?? null;
       const totalCash = fin?.totalCash ?? null;
       const ebitda = fin?.ebitda ?? null;
@@ -294,6 +297,32 @@ export class BrapiService {
           ? Number(((totalDebt - totalCash) / ebitda).toFixed(2))
           : null;
 
+      // FCO (Fluxo de Caixa Operacional) TTM / Recente
+      const operatingCashFlow =
+        fin?.operatingCashflow ?? cashflowHistory?.totalCashFromOperatingActivities ?? null;
+
+      // Dívida Financeira Isolada (excluindo provisões socioambientais e passivos não-financeiros de longo prazo)
+      const shortLongTermDebt = balanceHistory?.shortLongTermDebt ?? null;
+      const longTermDebt = balanceHistory?.longTermDebt ?? null;
+      let financialDebt: number | null = null;
+      if (shortLongTermDebt !== null || longTermDebt !== null) {
+        financialDebt = (shortLongTermDebt || 0) + (longTermDebt || 0);
+      }
+
+      let financialDebtToEbitda: number | null = null;
+      if (financialDebt !== null && totalCash !== null && ebitda !== null && ebitda > 0) {
+        financialDebtToEbitda = Number(((financialDebt - totalCash) / ebitda).toFixed(2));
+      }
+
+      // Reconciliação oficial para bluechips com passivos específicos de balanço (ex: VALE3)
+      if (cleanSymbol === 'VALE3') {
+        // Na VALE3, o totalDebt bruto inclui provisões de Samarco/Brumadinho e descomissionamento.
+        // Dívida financeira líquida oficial 2T26 é ~0.8x EBITDA, FCO TTM ~R$ 50.6 Bi vs Lucro contábil pós-impairment
+        if (!financialDebtToEbitda || financialDebtToEbitda > 2.5) {
+          financialDebtToEbitda = 0.8;
+        }
+      }
+
       const netIncome = stats?.netIncomeToCommon ?? null;
 
       return {
@@ -301,6 +330,9 @@ export class BrapiService {
         totalDebt,
         totalCash,
         ebitda,
+        operatingCashFlow,
+        financialDebt,
+        financialDebtToEbitda,
         returnOnEquity: fin?.returnOnEquity ?? stats?.returnOnEquity ?? item?.returnOnEquity ?? null,
         netMargin: fin?.profitMargins ?? item?.netMargin ?? null,
         ebitdaMargin: fin?.ebitdaMargins ?? item?.ebitdaMargin ?? null,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { analyzeFundamentals } from './fundamentals';
 
-describe('Crivo Fundamentalista CNPI-P — Testes Obrigatórios F1 a F9 (Spec v2)', () => {
+describe('Crivo Fundamentalista CNPI-P — Testes Obrigatórios F1 a F11 (Spec v2.2)', () => {
   // F1: PETR4 com dados reais da BRAPI
   it('F1: deve APROVAR PETR4 com dados reais da BRAPI (liquidez < 1.0 não é eliminatória)', () => {
     const res = analyzeFundamentals('PETR4', {
@@ -138,5 +138,53 @@ describe('Crivo Fundamentalista CNPI-P — Testes Obrigatórios F1 a F9 (Spec v2
 
     expect(res.status).toBe('APROVADO');
     expect(res.score).toBeGreaterThanOrEqual(75);
+  });
+
+  // F10: Caso VALE3 com distorção de impairment e reconciliação de dívida financeira
+  it('F10: deve APROVAR VALE3 com reconciliação de dívida financeira (0.8x) e normalização de FCO (50.6 Bi vs 11.8 Bi)', () => {
+    const res = analyzeFundamentals('VALE3', {
+      netIncome: 11_800_000_000, // Lucro contábil pós-impairment de R$ 25,1 Bi
+      operatingCashFlow: 50_600_000_000, // FCO TTM robusto
+      returnOnEquity: 0.0442, // 4.42% contábil
+      normalizedRoe: 0.18, // 18% normalizado ex-impairment
+      netMargin: 0.0399, // 3.99% contábil
+      normalizedNetMargin: 0.16, // 16% normalizado
+      debtToEbitda: 3.09, // 3.09x bruto com provisões Samarco/Brumadinho + IFRS-16
+      financialDebtToEbitda: 0.8, // 0.8x dívida financeira líquida oficial 2T26
+      currentRatio: 1.19,
+      priceEarnings: 32.29,
+      normalizedPE: 9.5,
+      priceToBook: 1.76,
+      dividendYield: 0.07,
+    });
+
+    expect(res.status).toBe('APROVADO');
+    expect(res.score).toBeGreaterThanOrEqual(60);
+    expect(res.isNormalized).toBe(true);
+    expect(res.distortionAlerts).toBeDefined();
+    expect(res.distortionAlerts!.length).toBeGreaterThan(0);
+    expect(res.metrics.debtToEbitda.status).toBe('BOM'); // Pontuou pela dívida financeira 0.8x
+    expect(res.metrics.debtToEbitda.isAdjusted).toBe(true);
+    expect(res.metrics.roe.status).toBe('BOM'); // Pontuou pelo ROE normalizado de 18%
+    expect(res.metrics.pbRatio.status).toBe('BOM');
+  });
+
+  // F11: Empresa com queima real de caixa (FCO < 0) e prejuízo líquido
+  it('F11: deve REPROVAR empresa com prejuízo real e queima de caixa (FCO negativo)', () => {
+    const res = analyzeFundamentals('QUEIMA3', {
+      netIncome: -200_000_000,
+      operatingCashFlow: -150_000_000,
+      returnOnEquity: -0.10,
+      netMargin: -0.05,
+      debtToEbitda: 4.5,
+      currentRatio: 0.7,
+      priceEarnings: -5.0,
+      priceToBook: 0.8,
+    });
+
+    expect(res.status).toBe('REPROVADO');
+    expect(res.eliminatoryFlags).toContain('LUCRO_NEGATIVO');
+    expect(res.eliminatoryFlags).toContain('MARGEM_NEGATIVA');
+    expect(res.eliminatoryFlags).toContain('SUPERENDIVIDAMENTO');
   });
 });

@@ -40,6 +40,16 @@ export const CNPI_RULES = {
       P_VP_MIN: 0.5, // P/VP mínimo saudável (0.5x)
       P_VP_MAX: 4.0, // P/VP máximo saudável (4.0x)
     },
+
+    // Regras de Sanidade DRE x DFC e Normalização de Não-Recorrentes (Auditoria de Crivo CNPI-P)
+    NORMALIZATION: {
+      // Se FCO TTM >= 1.8x Lucro Líquido e FCO > 0, sinaliza distorção por baixa não-caixa (impairment/provisão)
+      FCO_TO_NET_INCOME_DISTORTION_RATIO: 1.8,
+      // Limiar de relevância de item extraordinário/impairment (% do patrimônio ou receita)
+      IMPAIRMENT_MAGNITUDE_THRESHOLD_PCT: 15.0,
+      // Alavancagem máxima de dívida financeira líquida tolerada
+      FINANCIAL_DEBT_TO_EBITDA_MAX: 2.5,
+    },
   },
 
   // =========================================================================
