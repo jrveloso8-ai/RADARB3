@@ -37,6 +37,8 @@ import { AIConsultantView } from '../ai/AIConsultantView';
 import { OptionsBarriersView } from '../options/OptionsBarriersView';
 import { OptionPayoffChart } from '../options/OptionPayoffChart';
 import { StockTradePlanChart } from './StockTradePlanChart';
+import { StudyAuditorCard } from './StudyAuditorCard';
+import { SentimentThermometer } from '../sentiment/SentimentThermometer';
 import { safeFetchJson } from '@/lib/utils/api-client';
 
 interface QuoteViewProps {
@@ -1422,6 +1424,14 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                   </div>
                 </div>
               )}
+
+              {/* PARECER DETALHADO DO AUDITOR (CNPI-T, CNPI-P, CME-25) — POSICIONADO ABAIXO DAS RECOMENDAÇÕES */}
+              <StudyAuditorCard quote={data} />
+
+              {/* TERMÔMETRO DE SENTIMENTO NO RODAPÉ DA PÁGINA DE RECOMENDAÇÃO DE ESTUDO */}
+              <div className="pt-2">
+                <SentimentThermometer variant="footer" />
+              </div>
             </div>
           )}
 

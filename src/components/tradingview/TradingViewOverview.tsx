@@ -29,8 +29,10 @@ import {
   Gauge,
   PieChart,
   Clock,
+  Thermometer,
 } from 'lucide-react';
 import { MarketOpeningSubscribeCard } from '../newsletter/MarketOpeningSubscribeCard';
+import { SentimentThermometer } from '../sentiment/SentimentThermometer';
 
 export type OverviewViewType = 'sentimento' | 'indices' | 'setores';
 
@@ -144,53 +146,6 @@ export const TradingViewOverview: React.FC = () => {
     container.appendChild(script);
   }, [activeView]);
 
-  // Dados Estruturados de Pré-Abertura Institucional
-  const sentimentScore = 58;
-  const needleRotation = -90 + (sentimentScore / 100) * 180;
-
-  // Lógica dinâmica de Horário e Ciclo de Atualização (Pré-Abertura diária às 08h45)
-  const [updateSchedule, setUpdateSchedule] = useState<{
-    lastUpdateLabel: string;
-    nextUpdateLabel: string;
-    badgeLabel: string;
-    isPreOpening: boolean;
-  }>({
-    lastUpdateLabel: 'Última consolidação: Ontem às 08h45',
-    nextUpdateLabel: 'Hoje às 08h45 (Pré-Abertura B3)',
-    badgeLabel: 'AGUARDANDO PRÉ-ABERTURA',
-    isPreOpening: true,
-  });
-
-  useEffect(() => {
-    const updateTimeState = () => {
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      const targetMinutes = 8 * 60 + 45; // 08h45
-
-      const isBefore845 = currentMinutes < targetMinutes;
-
-      if (isBefore845) {
-        setUpdateSchedule({
-          lastUpdateLabel: 'Última consolidação: Ontem às 08h45',
-          nextUpdateLabel: 'Hoje às 08h45 (Pré-Abertura B3)',
-          badgeLabel: 'AGUARDANDO PRÉ-ABERTURA',
-          isPreOpening: true,
-        });
-      } else {
-        setUpdateSchedule({
-          lastUpdateLabel: 'Última consolidação: Hoje às 08h45',
-          nextUpdateLabel: 'Próximo pregão às 08h45',
-          badgeLabel: 'EDIÇÃO DE HOJE CONCLUÍDA',
-          isPreOpening: false,
-        });
-      }
-    };
-
-    updateTimeState();
-    const timer = setInterval(updateTimeState, 30000);
-    return () => clearInterval(timer);
-  }, []);
-
   // Setores da B3
   const sectorData = [
     {
@@ -277,7 +232,7 @@ export const TradingViewOverview: React.FC = () => {
                 : 'bg-[#111827] text-gray-400 border-gray-800 hover:text-white'
             }`}
           >
-            <Gauge className="w-3.5 h-3.5 text-emerald-400" />
+            <Thermometer className="w-3.5 h-3.5 text-emerald-400" />
             <span>1. Sentimento & Termômetro</span>
           </button>
 
@@ -314,217 +269,11 @@ export const TradingViewOverview: React.FC = () => {
       </div>
 
       {/* ========================================================================= */}
-      {/* VISÃO 1: SENTIMENTO & TERMÔMETRO */}
+      {/* VISÃO 1: SENTIMENTO & TERMÔMETRO 24H */}
       {/* ========================================================================= */}
       {activeView === 'sentimento' && (
         <div className="space-y-6">
-          <div className="p-6 bg-gradient-to-br from-[#0b101b] via-[#111827] to-[#0f172a] rounded-3xl border-2 border-emerald-500/40 shadow-2xl space-y-6">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-gray-800/80 pb-4">
-              <div className="flex items-start gap-3.5">
-                <div className="p-3 bg-gradient-to-tr from-amber-500 via-emerald-500 to-teal-400 rounded-2xl text-slate-950 shadow-lg shadow-emerald-500/20 mt-0.5">
-                  <Gauge className="w-7 h-7 font-black" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="px-2.5 py-0.5 rounded-md text-[11px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 tracking-wider font-mono">
-                      DESTAQUE DO DIA
-                    </span>
-                    <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                      Termômetro de Sentimento & Apetite a Risco
-                    </h2>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
-                      ÚLTIMAS 24H
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm text-gray-300 mt-1">
-                    Score consolidado ponderando Bolsas Globais, Commodities, Câmbio, Risco Fiscal Brasileiro e Fluxo Estrangeiro.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 self-start lg:self-auto">
-                <div className="px-4 py-2 bg-[#070b14] rounded-2xl border border-gray-800 font-mono text-right">
-                  <span className="text-[10px] text-gray-400 block font-sans">STATUS CONSOLIDADO</span>
-                  <span className="text-sm font-black text-amber-400">
-                    MODERADAMENTE OTIMISTA ({sentimentScore}/100)
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-              <div className="lg:col-span-5 flex flex-col items-center justify-center p-5 bg-[#070b14]/80 rounded-2xl border border-gray-800 shadow-inner">
-                <div className="relative w-64 h-36 flex items-center justify-center">
-                  <svg viewBox="0 0 200 115" className="w-full h-full overflow-visible">
-                    <path
-                      d="M 20 100 A 80 80 0 0 1 180 100"
-                      fill="none"
-                      stroke="#1e293b"
-                      strokeWidth="20"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M 20 100 A 80 80 0 0 1 65 38"
-                      fill="none"
-                      stroke="#ef4444"
-                      strokeWidth="20"
-                      strokeLinecap="round"
-                      opacity="0.9"
-                    />
-                    <path
-                      d="M 65 38 A 80 80 0 0 1 135 38"
-                      fill="none"
-                      stroke="#f59e0b"
-                      strokeWidth="20"
-                      opacity="0.9"
-                    />
-                    <path
-                      d="M 135 38 A 80 80 0 0 1 180 100"
-                      fill="none"
-                      stroke="#10b981"
-                      strokeWidth="20"
-                      strokeLinecap="round"
-                      opacity="0.9"
-                    />
-                    <g transform={`translate(100, 100) rotate(${needleRotation})`}>
-                      <line
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="-74"
-                        stroke="#ffffff"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                      />
-                      <circle cx="0" cy="0" r="8" fill="#10b981" stroke="#ffffff" strokeWidth="2.5" />
-                    </g>
-                    <text x="100" y="85" textAnchor="middle" fill="#f8fafc" fontSize="16" fontWeight="bold" fontFamily="monospace">
-                      {sentimentScore}
-                    </text>
-                  </svg>
-                </div>
-
-                <div className="text-center mt-2 space-y-1 font-sans">
-                  <span className="text-xs font-black text-amber-400 tracking-wider uppercase">
-                    ZONA NEUTRO-ALTISTA (APETITE CONTROLADO)
-                  </span>
-                  <p className="text-[11px] text-gray-400">
-                    Mercado externo favorável com freio de mão fiscal doméstico.
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between w-full text-[10px] font-mono text-gray-400 px-3 pt-3 border-t border-gray-800/80 mt-3">
-                  <span className="text-red-400 font-bold">0 - Pessimista</span>
-                  <span className="text-amber-400 font-bold">50 - Neutro</span>
-                  <span className="text-emerald-400 font-bold">100 - Otimista</span>
-                </div>
-
-                {/* Legenda de Atualização do Termômetro */}
-                <div className="w-full mt-3.5 pt-3 border-t border-gray-800/80 space-y-2 text-left bg-[#0c1220]/90 p-3.5 rounded-xl border border-cyan-500/20 shadow-inner">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-cyan-300 font-bold">
-                      <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                      <span>{updateSchedule.lastUpdateLabel}</span>
-                    </div>
-                    <span
-                      className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold border ${
-                        updateSchedule.isPreOpening
-                          ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                      }`}
-                    >
-                      {updateSchedule.badgeLabel}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-[10.5px] font-mono text-amber-300/95 bg-amber-500/10 px-2.5 py-1.5 rounded-lg border border-amber-500/25">
-                    <RefreshCw className="w-3 h-3 text-amber-400 shrink-0" />
-                    <span>
-                      Próxima atualização: <strong>{updateSchedule.nextUpdateLabel}</strong>
-                    </span>
-                  </div>
-
-                  <p className="text-[10px] text-gray-400 font-sans leading-relaxed pt-0.5">
-                    <strong className="text-gray-300">Ciclo diário:</strong> O termômetro de sentimento é consolidado diariamente às <strong className="text-cyan-300">08h45</strong> (pré-mercado B3), ponderando o fechamento das últimas 24h dos 5 pilares macro e fluxo estrangeiro. Antes das 08h45, o painel exibe a leitura da sessão anterior. Cotações e gráficos de suporte permanecem ao vivo em tempo real.
-                  </p>
-                </div>
-              </div>
-
-              <div className="lg:col-span-7 space-y-2.5 text-xs font-mono">
-                <div className="text-xs font-sans font-bold text-gray-300 mb-1 flex items-center justify-between">
-                  <span>Decomposição dos 5 Pilares Quantitativos:</span>
-                  <span className="text-gray-500 text-[11px]">Score Final: {sentimentScore}/100</span>
-                </div>
-
-                <div className="p-2.5 bg-[#070b14] rounded-xl border border-gray-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span className="font-sans text-gray-300 font-semibold">1. Bolsas Globais & Futuros EUA (Peso 20%)</span>
-                  </div>
-                  <span className="text-emerald-400 font-bold">+15 pts (Altista)</span>
-                </div>
-
-                <div className="p-2.5 bg-[#070b14] rounded-xl border border-gray-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span className="font-sans text-gray-300 font-semibold">2. Commodities: Minério & Petróleo (Peso 20%)</span>
-                  </div>
-                  <span className="text-emerald-400 font-bold">+12 pts (Positivo)</span>
-                </div>
-
-                <div className="p-2.5 bg-[#070b14] rounded-xl border border-gray-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span className="font-sans text-gray-300 font-semibold">3. Câmbio & Carry Trade (Peso 15%)</span>
-                  </div>
-                  <span className="text-emerald-400 font-bold">+10 pts (Estável)</span>
-                </div>
-
-                <div className="p-2.5 bg-[#070b14] rounded-xl border border-gray-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-red-400"></span>
-                    <span className="font-sans text-gray-300 font-semibold">4. Curva de Juros & Risco Fiscal Brasil (Peso 25%)</span>
-                  </div>
-                  <span className="text-red-400 font-bold">-12 pts (Cautela)</span>
-                </div>
-
-                <div className="p-2.5 bg-[#070b14] rounded-xl border border-gray-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span className="font-sans text-gray-300 font-semibold">5. Fluxo Estrangeiro na B3 (Peso 20%)</span>
-                  </div>
-                  <span className="text-emerald-400 font-bold">+13 pts (Entrada Líquida)</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-            <div className="p-3 bg-[#111827] rounded-xl border border-gray-800">
-              <span className="text-[10px] text-gray-400 block font-sans">FUTUROS S&P 500</span>
-              <span className="text-sm font-bold text-emerald-400 mt-0.5 block">+0.28% (5.920 pts)</span>
-              <span className="text-[10px] text-gray-500 font-sans">Tom positivo / Techs</span>
-            </div>
-
-            <div className="p-3 bg-[#111827] rounded-xl border border-gray-800">
-              <span className="text-[10px] text-gray-400 block font-sans">PETRÓLEO BRENT</span>
-              <span className="text-sm font-bold text-amber-400 mt-0.5 block">US$ 78.40 / barril</span>
-              <span className="text-[10px] text-gray-500 font-sans">Estabilidade / Geopolítica</span>
-            </div>
-
-            <div className="p-3 bg-[#111827] rounded-xl border border-gray-800">
-              <span className="text-[10px] text-gray-400 block font-sans">DÓLAR / DXY</span>
-              <span className="text-sm font-bold text-white mt-0.5 block">R$ 5.48 • DXY 103.8</span>
-              <span className="text-[10px] text-gray-500 font-sans">Carry trade ativo</span>
-            </div>
-
-            <div className="p-3 bg-[#111827] rounded-xl border border-gray-800">
-              <span className="text-[10px] text-gray-400 block font-sans">FLUXO ESTRANGEIRO B3</span>
-              <span className="text-sm font-bold text-emerald-400 mt-0.5 block">+R$ 480 mi (D-1)</span>
-              <span className="text-[10px] text-gray-500 font-sans">Entrada em blue chips</span>
-            </div>
-          </div>
-
+          <SentimentThermometer variant="full" />
           {/* Card de Inscrição no Resumo da Abertura do Mercado */}
           <MarketOpeningSubscribeCard />
         </div>

@@ -1,5 +1,7 @@
 import { OperationalRiskReward, TechnicalChecklistItem } from '../domain/indicators';
+export type { OperationalRiskReward, TechnicalChecklistItem };
 import { ElectedOptionStrategy } from '../domain/cme-election';
+export type { ElectedOptionStrategy };
 
 export type TrendType = 'ALTA' | 'BAIXA' | 'LATERAL';
 

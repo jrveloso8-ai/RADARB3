@@ -1,0 +1,122 @@
+================================================================================
+WALKTHROUGH COMPLETO — RADAR B3 PRO IA
+RELATÓRIO DE IMPLEMENTAÇÕES E MIGRAÇÃO
+Data: 02 de Setembro de 2026
+================================================================================
+
+1. 🛡️ OPÇÃO DE "AUDITOR" NA RECOMENDAÇÃO DE ESTUDOS
+--------------------------------------------------------------------------------
+- Componente: src/components/quote/StudyAuditorCard.tsx
+- Motor de Domínio: src/lib/domain/study-auditor.ts
+- Testes Unitários: src/lib/domain/study-auditor.test.ts
+- Posicionamento: Abaixo das recomendações de estudo (estratégia de opções e
+  plano de trade à vista) e acima do termômetro no rodapé em QuoteView.tsx.
+
+Principais Recursos do Auditor:
+1. Selo Oficial de Auditoria 3 Camadas:
+   - Certificado: AUD-[TICKER]-YYYYMM
+   - Status: CERTIFICADO_CONFORME, BLOQUEADO_RISCO ou ALERTA_MONITORAMENTO.
+   - Modelo: Radar B3 PRO IA / Especificação Técnica v3.1 CNPI.
+
+2. Auditoria Técnica Detalhada (5 Itens CNPI-T):
+   - Médias Móveis: MM20, MM50 e MM200 com alinhamento do Spot.
+   - RSI(14) Momentum: Faixa saudável de 40 a 65 sem sobrecompra.
+   - MACD Histograma: Cruzamento e pressão direcional.
+   - Volume vs Média 20d: Confirmação de liquidez e volume financeiro.
+   - Assimetria Suporte vs Resistência: Margem segura para Stop Loss (0,5x ATR).
+
+3. Auditoria Fundamentalista (4 Itens CNPI-P):
+   - Margem Líquida, ROE, Dívida Líquida / EBITDA, Liquidez Corrente e blindagem
+     contra Value Trap.
+
+4. Auditoria de Barreiras & Derivativos:
+   - Distância para Call Wall e Put Wall mais próximas, cálculo do Max Pain e
+     validação de caminho livre.
+
+5. Justificativa da Estratégia de Opções Eleita:
+   - Explicação detalhada de por que a estrutura foi eleita (viés direcional +
+     regime de volatilidade IV/HV), escolha de strikes, deltas, captura de
+     Theta e retorno sobre risco.
+
+6. Justificativa da Compra à Vista (Plano de Trade):
+   - Justificativa do Ponto de Entrada, Stop Loss Técnico (0,5x ATR de folga),
+     Alvo 1 (Breakeven 1:1) e Alvo 2 (relação risco/retorno >= 1,5 : 1).
+
+7. Ação Rápida: Botão para copiar o relatório formatado da auditoria com 1 clique.
+
+
+2. 🌡️ TERMÔMETRO DE SENTIMENTO 24H (ATUALIZAÇÃO DE HORA EM HORA)
+--------------------------------------------------------------------------------
+- Motor de Domínio: src/lib/domain/sentiment.ts
+- Serviço de Cotações: src/lib/services/market-quotes.ts
+- API Route: src/app/api/sentiment/route.ts
+- Testes Unitários: src/lib/domain/sentiment.test.ts
+
+Principais Recursos:
+- Ciclo Contínuo 24h: Atualizado a cada hora fechada (HH:00), capturando
+  Ásia/Overnight, Madrugada Europeia, Pré-Mercado NY, Pregão B3 e Pós-Mercado.
+- Ponderação dos 5 Pilares Macroeconômicos:
+  1. Bolsas Globais & Futuros EUA (Peso 20%) — SPY e VIX
+  2. Commodities: Minério de Ferro & Petróleo (Peso 20%) — FEF1!, UKOIL, USOIL
+  3. Câmbio, DXY & Carry Trade (Peso 15%) — DXY e USD/BRL
+  4. Curva de Juros & Risco Fiscal Brasil (Peso 25%) — DI Futuro e EWZ
+  5. Fluxo Institucional & Estrangeiro (Peso 20%) — Saldo B3
+
+
+3. 🌐 SINCRONIZAÇÃO EM TEMPO REAL COM O TRADINGVIEW
+--------------------------------------------------------------------------------
+- O termômetro conecta diretamente com feeds de mercado globais e calcula
+  os scores matematicamente a partir da cesta real de ativos:
+  * Minério de Ferro Futuro (FEF1! / SGX): US$ 97,90 (-1,61%) [Negativo 🔴]
+  * Petróleo Brent (UKOIL / BZ=F): US$ 94,37 (-0,87%) [Negativo 🔴]
+  * Petróleo WTI (USOIL / CL=F): US$ 89,68 (-1,11%) [Negativo 🔴]
+  * S&P 500 ETF Trust (SPY): US$ 761,78 (-0,69%) [Negativo 🔴]
+  * Brasil ETF NYSE (EWZ): US$ 36,57 (+1,50%) [Positivo 🟢]
+  * Índice Dólar Global (DXY): 99,79 (+0,14%) [Positivo 🟢]
+  * Índice de Volatilidade (VIX): 16,43 (+0,61%)
+  * Ouro Spot (GOLD): US$ 4.321,59 (-0,16%) [Negativo 🔴]
+
+- Diagnóstico Coerente: Com Minério (-1,61%) e Petróleo (-0,87%) em queda,
+  o Pilar 2 de Commodities e o score do termômetro refletem fielmente a zona
+  de Cautela & Aversão a Risco / Clima Frio (~44 pts / 23.2°C).
+
+
+4. 🎨 REDESIGN DO TERMÔMETRO & INTEGRAÇÃO NO RODAPÉ
+--------------------------------------------------------------------------------
+- Componente: src/components/sentiment/SentimentThermometer.tsx
+- Visual em Tubo de Vidro (Glassmorphism) com coluna de mercúrio animada.
+- Bulbo inferior iluminado com exibição unificada e explícita:
+  * Temperatura: 23.2°C
+  * Score: 44 pts
+- Barra de Cesta de Ativos do TradingView em tempo real.
+- Botão "Atualizar" para recarregar cotações sob demanda.
+- Termômetro inserido no rodapé da página de Recomendações de Estudo
+  (QuoteView.tsx) para orientar o investidor durante a montagem das operações.
+
+
+5. 🗂️ LISTA DE ARQUIVOS CRIADOS E MODIFICADOS
+--------------------------------------------------------------------------------
+Arquivos Criados:
+- src/lib/services/market-quotes.ts
+- src/lib/domain/study-auditor.ts
+- src/lib/domain/study-auditor.test.ts
+- src/lib/domain/sentiment.ts
+- src/lib/domain/sentiment.test.ts
+- src/app/api/sentiment/route.ts
+- src/components/sentiment/SentimentThermometer.tsx
+- src/components/quote/StudyAuditorCard.tsx
+- DOCUMENTO_MUDANCAS_HOJE.md
+- WALKTHROUGH.txt
+
+Arquivos Modificados:
+- src/components/quote/QuoteView.tsx
+- src/components/tradingview/TradingViewOverview.tsx
+- src/lib/types/financial.ts
+
+
+6. ✅ RESULTADO DOS TESTES E COMPILAÇÃO
+--------------------------------------------------------------------------------
+- Testes Unitários: 16 arquivos, 110 testes aprovados (100% sucesso no Vitest).
+- Build de Produção: Next.js 14 compilado com 0 erros de tipagem TypeScript.
+
+================================================================================
