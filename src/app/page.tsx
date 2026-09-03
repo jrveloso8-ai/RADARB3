@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar, ActiveTab } from '@/components/layout/Navbar';
 import { TradingViewOverview } from '@/components/tradingview/TradingViewOverview';
+import { OpportunityRadarView } from '@/components/opportunities/OpportunityRadarView';
 import { QuoteView } from '@/components/quote/QuoteView';
 import { ScreenerView } from '@/components/screener/ScreenerView';
 import { OptionsBarriersView } from '@/components/options/OptionsBarriersView';
@@ -12,7 +13,7 @@ import { Shield, Sparkles, TrendingUp, Users } from 'lucide-react';
 import { safeFetchJson } from '@/lib/utils/api-client';
 
 export default function HomePage() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('opportunities');
   const [selectedSymbol, setSelectedSymbol] = useState<string>('PETR4');
   const [uniqueVisitors, setUniqueVisitors] = useState<number | null>(null);
 
@@ -50,6 +51,17 @@ export default function HomePage() {
           className={activeTab === 'overview' ? 'block' : 'hidden'}
         >
           {activeTab === 'overview' && <TradingViewOverview />}
+        </div>
+
+        <div
+          id="panel-opportunities"
+          role="tabpanel"
+          aria-labelledby="nav-tab-opportunities"
+          className={activeTab === 'opportunities' ? 'block' : 'hidden'}
+        >
+          {activeTab === 'opportunities' && (
+            <OpportunityRadarView onSelectSymbol={handleSelectSymbolFromScreener} />
+          )}
         </div>
 
         <div

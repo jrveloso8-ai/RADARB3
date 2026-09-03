@@ -19,7 +19,7 @@ import { safeFetchJson } from '@/lib/utils/api-client';
 import { BrapiHealthStatus } from '@/lib/services/brapi';
 import { SYSTEM_VERSION } from '@/lib/config/version';
 
-export type ActiveTab = 'overview' | 'quote' | 'screener' | 'options' | 'help';
+export type ActiveTab = 'overview' | 'opportunities' | 'quote' | 'screener' | 'options' | 'help';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -73,6 +73,12 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
       icon: LayoutDashboard,
     },
     {
+      id: 'opportunities' as ActiveTab,
+      label: 'Radar de Oportunidades',
+      shortLabel: 'Radar Oportunidades',
+      icon: Target,
+    },
+    {
       id: 'quote' as ActiveTab,
       label: 'Consulta & Gráfico 12M',
       shortLabel: 'Gráfico 12M',
@@ -88,7 +94,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
       id: 'options' as ActiveTab,
       label: 'Barreiras de Opções',
       shortLabel: 'Opções',
-      icon: Target,
+      icon: Zap,
     },
     {
       id: 'help' as ActiveTab,

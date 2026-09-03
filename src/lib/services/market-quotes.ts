@@ -1,6 +1,6 @@
 /**
- * Serviço de Cotações Globais e Derivativos de Mercado em Tempo Real
- * Suporta cotações de índices mundiais, commodities (Brent, WTI, Minério), moedas e VIX
+ * Serviço de Cotações Globais, Derivativos e Commodities Agrícolas em Tempo Real
+ * Suporta cotações de índices mundiais, commodities (Brent, WTI, Minério), agrícolas (Milho, Boi, Soja), moedas e VIX
  */
 
 interface CachedQuote {
@@ -68,6 +68,9 @@ export async function fetchLiveMarketQuote(symbol: string, name: string): Promis
     'CL=F': { price: 89.68, changePct: -1.11, change: -1.01 }, // WTI USOIL
     'GC=F': { price: 4321.59, changePct: -0.16, change: -6.91 }, // Gold
     'DX-Y.NYB': { price: 99.79, changePct: 0.14, change: 0.14 }, // DXY
+    'ZC=F': { price: 438.50, changePct: 0.45, change: 2.00 }, // Milho CBOT (cents/bushel)
+    'ZS=F': { price: 1042.25, changePct: -0.65, change: -6.80 }, // Soja CBOT (cents/bushel)
+    'LE=F': { price: 188.40, changePct: 1.15, change: 2.15 }, // Boi Gordo / Live Cattle CME
     'VALE3.SA': { price: 78.30, changePct: 0.58, change: 0.45 },
     'PETR4.SA': { price: 46.87, changePct: 4.11, change: 1.85 },
   };
@@ -101,21 +104,32 @@ export interface LiveMarketOverview {
     change: number;
     changePct: number;
   };
+  agri?: {
+    cornCbot: CachedQuote;
+    soybeanCbot: CachedQuote;
+    liveCattleCme: CachedQuote;
+    cornB3Est: { symbol: string; name: string; price: number; changePct: number };
+    boiB3Est: { symbol: string; name: string; price: number; changePct: number };
+  };
 }
 
 /**
- * Consulta a cesta completa de ativos globais de referência
+ * Consulta a cesta completa de ativos globais e commodities agrícolas de referência
  */
 export async function getLiveMarketOverview(): Promise<LiveMarketOverview> {
-  const [spy, ewz, vix, brent, wti, gold, dxy] = await Promise.all([
-    fetchLiveMarketQuote('SPY', 'S&P 500 ETF (SPY)'),
-    fetchLiveMarketQuote('EWZ', 'Brasil ETF NYSE (EWZ)'),
-    fetchLiveMarketQuote('^VIX', 'Índice de Volatilidade (VIX)'),
-    fetchLiveMarketQuote('BZ=F', 'Petróleo Brent Futuro (UKOIL)'),
-    fetchLiveMarketQuote('CL=F', 'Petróleo WTI Futuro (USOIL)'),
-    fetchLiveMarketQuote('GC=F', 'Ouro Spot (GOLD)'),
-    fetchLiveMarketQuote('DX-Y.NYB', 'Índice Dólar Global (DXY)'),
-  ]);
+  const [spy, ewz, vix, brent, wti, gold, dxy, cornCbot, soybeanCbot, liveCattleCme] =
+    await Promise.all([
+      fetchLiveMarketQuote('SPY', 'S&P 500 ETF (SPY)'),
+      fetchLiveMarketQuote('EWZ', 'Brasil ETF NYSE (EWZ)'),
+      fetchLiveMarketQuote('^VIX', 'Índice de Volatilidade (VIX)'),
+      fetchLiveMarketQuote('BZ=F', 'Petróleo Brent Futuro (UKOIL)'),
+      fetchLiveMarketQuote('CL=F', 'Petróleo WTI Futuro (USOIL)'),
+      fetchLiveMarketQuote('GC=F', 'Ouro Spot (GOLD)'),
+      fetchLiveMarketQuote('DX-Y.NYB', 'Índice Dólar Global (DXY)'),
+      fetchLiveMarketQuote('ZC=F', 'Milho Futuro CBOT (ZC)'),
+      fetchLiveMarketQuote('ZS=F', 'Soja Futuro CBOT (ZS)'),
+      fetchLiveMarketQuote('LE=F', 'Boi Gordo Live Cattle CME (LE)'),
+    ]);
 
   // Minério de Ferro FEF1! (SGX / Dalian 62% Fe)
   const ironOre = {
@@ -124,6 +138,21 @@ export async function getLiveMarketOverview(): Promise<LiveMarketOverview> {
     price: 97.90,
     change: -1.60,
     changePct: -1.61,
+  };
+
+  // Estimativas convertidas para o mercado físico e futuro B3
+  const cornB3Est = {
+    symbol: 'CCMFUT',
+    name: 'Milho Futuro B3 (CCM)',
+    price: 63.80,
+    changePct: cornCbot.changePct || 0.45,
+  };
+
+  const boiB3Est = {
+    symbol: 'BGIFUT',
+    name: 'Boi Gordo Futuro B3 (BGI)',
+    price: 244.50,
+    changePct: liveCattleCme.changePct || 1.15,
   };
 
   return {
@@ -135,5 +164,12 @@ export async function getLiveMarketOverview(): Promise<LiveMarketOverview> {
     gold,
     dxy,
     ironOre,
+    agri: {
+      cornCbot,
+      soybeanCbot,
+      liveCattleCme,
+      cornB3Est,
+      boiB3Est,
+    },
   };
 }
