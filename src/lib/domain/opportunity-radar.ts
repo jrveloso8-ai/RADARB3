@@ -756,8 +756,8 @@ export function buildMasterOpportunityList(params: {
   // 3. Escanear Commodities Agrícolas (Milho, Boi, Soja)
   const agriOverview = analyzeAgriCommodities(params.agriQuotes || {});
   for (const agri of agriOverview) {
-    if (agri.tradeOpportunity && agri.tradeOpportunity.bias !== 'AGUARDAR') {
-      const opp = agri.tradeOpportunity;
+    const opp = agri.tradeOpportunity;
+    if (opp && (opp.bias === 'COMPRA' || opp.bias === 'VENDA')) {
       opportunities.push({
         id: `agri-${agri.id}`,
         symbol: agri.tickerB3,

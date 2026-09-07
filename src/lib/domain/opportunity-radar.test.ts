@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   matchBestOptionStrategyFrom25,
   detectRsiDivergences,
-  detectVolatilityOpportunities,
-  detectTheWheelOpportunity,
   detectIntermarketOpportunities,
   buildMasterOpportunityList,
 } from './opportunity-radar';

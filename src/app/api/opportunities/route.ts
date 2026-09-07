@@ -93,9 +93,8 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    const quotesResults = (await Promise.all(quotesPromises)).filter((q) => q !== null) as NonNullable<
-      Awaited<ReturnType<typeof quotesPromises[0]>>
-    >[];
+    const rawQuotes = await Promise.all(quotesPromises);
+    const quotesResults = rawQuotes.filter((q): q is NonNullable<typeof q> => q !== null);
 
     // 3. Processar Master Opportunity List
     const masterResult = buildMasterOpportunityList({
