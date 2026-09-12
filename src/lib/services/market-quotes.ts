@@ -132,27 +132,42 @@ export async function getLiveMarketOverview(): Promise<LiveMarketOverview> {
     ]);
 
   // Minério de Ferro FEF1! (SGX / Dalian 62% Fe)
+  // PROVENANCE: Referência de mercado de minério de ferro SGX quando feed oficial offline
   const ironOre = {
     symbol: 'FEF1!',
     name: 'Minério de Ferro Futuro 62% (SGX)',
     price: 97.90,
     change: -1.60,
     changePct: -1.61,
+    isEstimated: true,
+    provenance: 'ESTIMADO' as const,
   };
 
   // Estimativas convertidas para o mercado físico e futuro B3
+  // PROVENANCE: Preço estimado do Milho B3 (CCM) derivado do fechamento de referência (R$ 63.80) + variação do proxy CBOT
+  const cornBasePrice = 63.80;
+  const cornChangePct = cornCbot.changePct;
+  const cornEstimatedPrice = Number((cornBasePrice * (1 + cornChangePct / 100)).toFixed(2));
   const cornB3Est = {
     symbol: 'CCMFUT',
     name: 'Milho Futuro B3 (CCM)',
-    price: 63.80,
-    changePct: cornCbot.changePct || 0.45,
+    price: cornEstimatedPrice,
+    changePct: cornChangePct,
+    isEstimated: true,
+    provenance: 'ESTIMADO' as const,
   };
 
+  // PROVENANCE: Preço estimado do Boi Gordo B3 (BGI) derivado do fechamento de referência (R$ 244.50) + variação do proxy CME
+  const boiBasePrice = 244.50;
+  const boiChangePct = liveCattleCme.changePct;
+  const boiEstimatedPrice = Number((boiBasePrice * (1 + boiChangePct / 100)).toFixed(2));
   const boiB3Est = {
     symbol: 'BGIFUT',
     name: 'Boi Gordo Futuro B3 (BGI)',
-    price: 244.50,
-    changePct: liveCattleCme.changePct || 1.15,
+    price: boiEstimatedPrice,
+    changePct: boiChangePct,
+    isEstimated: true,
+    provenance: 'ESTIMADO' as const,
   };
 
   return {

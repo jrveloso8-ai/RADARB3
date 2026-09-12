@@ -5,7 +5,7 @@ import { analyzeFundamentals } from '@/lib/domain/fundamentals';
 import { buildMasterOpportunityList, OpportunityCategory } from '@/lib/domain/opportunity-radar';
 import { calculateHistoricalVolatility } from '@/lib/domain/volatility';
 import { calculateSupportResistance } from '@/lib/domain/indicators';
-
+import { getMostLiquidB3Expiration } from '@/lib/domain/options-barriers';
 import { analyzeAssetTrend } from '@/lib/domain/trends';
 
 export const dynamic = 'force-dynamic';
@@ -26,19 +26,25 @@ export async function GET(request: NextRequest) {
       dxyChange: liveOverview.dxy.changePct || 0,
     };
 
+    // PROVENANCE: Cotação de referência da Soja Paranaguá base R$ 134.50 indexada ao contrato CBOT
+    const sojaBase = 134.50;
+    const sojaChange = liveOverview.agri?.soybeanCbot.changePct ?? 0;
+    const sojaPrice = Number((sojaBase * (1 + sojaChange / 100)).toFixed(2));
+
     const agriQuotes = {
-      ccmPrice: liveOverview.agri?.cornB3Est.price || 63.80,
-      ccmChange: liveOverview.agri?.cornB3Est.changePct || 0.45,
-      bgiPrice: liveOverview.agri?.boiB3Est.price || 244.50,
-      bgiChange: liveOverview.agri?.boiB3Est.changePct || 1.15,
-      sojaPrice: 134.50,
-      sojaChange: liveOverview.agri?.soybeanCbot.changePct || -0.65,
+      ccmPrice: liveOverview.agri?.cornB3Est.price,
+      ccmChange: liveOverview.agri?.cornB3Est.changePct,
+      bgiPrice: liveOverview.agri?.boiB3Est.price,
+      bgiChange: liveOverview.agri?.boiB3Est.changePct,
+      sojaPrice,
+      sojaChange,
     };
 
     // 2. Obter lista de ações líquidas da B3 + Ações do Agronegócio
     const baseStocks = await brapiService.getAvailableStocks(limit);
     const agriStocks = ['SLCE3', 'AGRO3', 'SMTO3', 'BEEF3', 'JBSS3', 'BRFS3', 'RAIZ4'];
     const uniqueSymbols = Array.from(new Set([...baseStocks.slice(0, 25), ...agriStocks]));
+    const mostLiquidExp = getMostLiquidB3Expiration();
 
     const quotesPromises = uniqueSymbols.map(async (symbol) => {
       try {
@@ -56,8 +62,9 @@ export async function GET(request: NextRequest) {
           quote.shortName
         );
 
-        let fundamentalStatus: 'APROVADO' | 'REPROVADO' = 'APROVADO';
-        let fundamentalScore = 75;
+        // Postura conservadora: ausência de fundamentos ou erro = REPROVADO (score 0)
+        let fundamentalStatus: 'APROVADO' | 'REPROVADO' = 'REPROVADO';
+        let fundamentalScore = 0;
 
         try {
           const rawFundamentals = await brapiService.getFundamentals(cleanSymbol);
@@ -67,11 +74,31 @@ export async function GET(request: NextRequest) {
             fundamentalScore = fResult.score;
           }
         } catch {
-          // Manter defaults seguros em caso de timeout
+          // Conservador: mantém REPROVADO e score 0
+          fundamentalStatus = 'REPROVADO';
+          fundamentalScore = 0;
         }
 
-        const hv21 = calculateHistoricalVolatility(closes, 21) ?? 24.0;
+        const hv21 = calculateHistoricalVolatility(closes, 21);
         const sr = calculateSupportResistance(history, quote.regularMarketPrice);
+
+        // Consulta de opções para buscar IV ATM real quando disponível
+        let realIvAtm: number | null = null;
+        try {
+          const analytics = await brapiService.getOptionAnalytics(cleanSymbol);
+          if (analytics && analytics.length > 0) {
+            const validIvs = analytics
+              .filter((a) => typeof a.impliedVolatility === 'number' && a.impliedVolatility > 0)
+              .map((a) => a.impliedVolatility as number)
+              .sort((a, b) => a - b);
+            if (validIvs.length >= 3) {
+              const mid = Math.floor(validIvs.length / 2);
+              realIvAtm = validIvs.length % 2 !== 0 ? validIvs[mid] : (validIvs[mid - 1] + validIvs[mid]) / 2;
+            }
+          }
+        } catch {
+          realIvAtm = null;
+        }
 
         return {
           symbol: cleanSymbol,
@@ -82,10 +109,10 @@ export async function GET(request: NextRequest) {
           trend: trendAnalysis.trend,
           fundamentalStatus,
           fundamentalScore,
-          ivAtm: hv21 * 1.05, // Estimativa de IV ATM
+          ivAtm: realIvAtm, // IV real ou null quando indisponível
           hv21,
-          dte: 14,
-          maxPain: quote.regularMarketPrice,
+          dte: mostLiquidExp.dte,
+          maxPain: undefined, // Sem open interest completo do book na rota rápida, não fabrica valor
           supports: sr.supports,
         };
       } catch {

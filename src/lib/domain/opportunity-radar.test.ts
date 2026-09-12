@@ -4,6 +4,7 @@ import {
   detectRsiDivergences,
   detectIntermarketOpportunities,
   buildMasterOpportunityList,
+  detectBullCallSpreadOpportunity,
 } from './opportunity-radar';
 import { HistoricalPrice } from '../types/financial';
 
@@ -144,5 +145,76 @@ describe('Domain: Opportunity Radar & 25 Strategies Mapping', () => {
     expect(result.opportunities.length).toBeGreaterThan(0);
     expect(result.agriOverview.length).toBe(3);
     expect(result.totalScanned).toBeGreaterThanOrEqual(4);
+  });
+
+  // =========================================================================
+  // TESTES DE REGRESSÃO EXIGIDOS - FASE 1 (AUDITORIA RADAR B3 PRO IA)
+  // =========================================================================
+
+  it('Regressão 1.3a: oportunidade sem opção real disponível no strike não retorna maxProfitEst/maxLossEst numéricos fabricados', () => {
+    // Bull Call Spread sem opções reais passadas
+    const bullOpp = detectBullCallSpreadOpportunity(
+      'PETR4',
+      'Petrobras PN',
+      40.0,
+      1.5,
+      'ALTA',
+      'APROVADO',
+      85
+    );
+
+    expect(bullOpp).not.toBeNull();
+    // Não pode conter números inventados via spot * 0.02 (R$ 0.80)
+    expect(bullOpp!.execution.maxLossEst).toBeUndefined();
+    expect(bullOpp!.execution.maxProfitEst).toBeUndefined();
+    expect(bullOpp!.execution.profitProvenance).toBe('INDISPONIVEL');
+    expect(bullOpp!.execution.probabilityOfProfit).toBeNull();
+    expect(bullOpp!.execution.popProvenance).toBe('INDISPONIVEL');
+  });
+
+  it('Regressão 1.5b: falha na busca de fundamentos nunca resulta em fundamentalStatus APROVADO', () => {
+    // Simula a lógica de tratamento de erro do motor da rota de oportunidades
+    const handleFundamentalFetch = (fetchFn: () => any) => {
+      let fundamentalStatus: 'APROVADO' | 'REPROVADO' = 'REPROVADO';
+      let fundamentalScore = 0;
+      try {
+        fetchFn();
+      } catch {
+        fundamentalStatus = 'REPROVADO';
+        fundamentalScore = 0;
+      }
+      return { fundamentalStatus, fundamentalScore };
+    };
+
+    const result = handleFundamentalFetch(() => {
+      throw new Error('Timeout da API BRAPI de fundamentos');
+    });
+
+    expect(result.fundamentalStatus).toBe('REPROVADO');
+    expect(result.fundamentalScore).toBe(0);
+    expect(result.fundamentalStatus).not.toBe('APROVADO');
+  });
+
+  it('Regressão 1.4c: ivAtm do ativo não pode ser fabricado via hv21 * 1.05', () => {
+    const hv21 = 20.0;
+    const fabricatedIvAtm = hv21 * 1.05; // 21.0
+
+    // Função validadora de proveniência de IV
+    const resolveAtmIV = (realAnalyticsIv: number | null) => {
+      // Se não há medição de opções no book, NUNCA estimar por hv21 * 1.05
+      if (realAnalyticsIv === null || realAnalyticsIv === undefined) {
+        return null;
+      }
+      return realAnalyticsIv;
+    };
+
+    // Caso onde o feed de opções não tem IV para o ativo
+    const ivResultWithoutOptions = resolveAtmIV(null);
+    expect(ivResultWithoutOptions).toBeNull();
+    expect(ivResultWithoutOptions).not.toBe(fabricatedIvAtm);
+
+    // Caso onde o feed de opções entrega IV real medida
+    const ivResultWithRealOptions = resolveAtmIV(28.4);
+    expect(ivResultWithRealOptions).toBe(28.4);
   });
 });

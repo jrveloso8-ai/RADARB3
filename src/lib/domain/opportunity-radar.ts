@@ -18,6 +18,8 @@ import { OPTION_25_STRATEGIES, OptionStrategySpec } from './cme-strategies';
 import { classifyVolatilityRegime, VolatilityRegime } from './volatility';
 import { analyzeAgriCommodities, AgriCommodityAnalysis } from './agri-commodities';
 
+import { DataProvenance } from '../types/provenance';
+
 export type OpportunityCategory =
   | 'DIVERGENCIA_TECNICA'
   | 'VOLATILIDADE_OPCOES'
@@ -34,11 +36,13 @@ export interface OpportunityExecutionDetails {
   target2: number;
   riskRewardRatio: number;
   timeframe: string;
-  probabilityOfProfit?: number; // PoP estimado (0 a 100%)
+  probabilityOfProfit?: number | null; // PoP real baseado no Delta (ou null/undefined se indisponível)
+  popProvenance?: DataProvenance;
   electedStrategy?: OptionStrategySpec;
   strategyLegsFormatted?: string;
   maxProfitEst?: string;
   maxLossEst?: string;
+  profitProvenance?: DataProvenance;
 }
 
 export interface TradeOpportunityItem {
@@ -49,7 +53,8 @@ export interface TradeOpportunityItem {
   category: OpportunityCategory;
   title: string;
   bias: 'COMPRA' | 'VENDA' | 'LATERAL' | 'VOLATILIDADE';
-  convictionScore: number; // 0 a 100
+  convictionScore: number; // 0 a 100 calculado deterministicamente por força do sinal técnico
+  scoreProvenance: DataProvenance;
   confidenceBadge: 'ALTA CONVICÇÃO' | 'OPORTUNIDADE ASSIMÉTRICA' | 'RENDA RECORRENTE' | 'ALERTA DE CAUDA';
   rationale: string;
   triggerCondition: string;
@@ -251,6 +256,9 @@ export function detectRsiDivergences(
       rsi: rsiCurrent,
     });
 
+    const rsiDelta = Math.abs(rsiCurrent - rsi20Ago);
+    const convictionScore = Math.min(96, Math.max(65, Math.round(70 + rsiDelta * 2.5)));
+
     return {
       id: `div-bull-${symbol}`,
       symbol,
@@ -259,7 +267,8 @@ export function detectRsiDivergences(
       category: 'DIVERGENCIA_TECNICA',
       title: `Divergência Altista de RSI(14) (${symbol})`,
       bias: 'COMPRA',
-      convictionScore: 88,
+      convictionScore,
+      scoreProvenance: 'DERIVADO',
       confidenceBadge: 'OPORTUNIDADE ASSIMÉTRICA',
       rationale: `Preço em fundo (R$ ${pCurrent.toFixed(2)}) com alta no RSI(14) (subiu de ${rsi20Ago} para ${rsiCurrent}), sinalizando exaustão vendedora e reversão altista.`,
       triggerCondition: `Entrada na superação da máxima anterior com Stop em R$ ${stopLoss.toFixed(2)}.`,
@@ -270,11 +279,13 @@ export function detectRsiDivergences(
         target2,
         riskRewardRatio: 2.0,
         timeframe: 'Swing Trade (5 a 15 pregões)',
-        probabilityOfProfit: 68,
+        probabilityOfProfit: null,
+        popProvenance: 'INDISPONIVEL',
         electedStrategy: matched.strategy,
         strategyLegsFormatted: matched.strategyLegsFormatted,
-        maxProfitEst: `R$ ${(target1 - pCurrent).toFixed(2)} por ação`,
-        maxLossEst: `R$ ${risk.toFixed(2)} por ação`,
+        maxProfitEst: `R$ ${(target1 - pCurrent).toFixed(2)} por ação (alvo técnico)`,
+        maxLossEst: `R$ ${risk.toFixed(2)} por ação (stop técnico)`,
+        profitProvenance: 'DERIVADO',
       },
       matchedStrategyId: matched.strategy.id,
       matchedStrategyName: matched.strategy.name,
@@ -297,6 +308,9 @@ export function detectRsiDivergences(
       rsi: rsiCurrent,
     });
 
+    const rsiDelta = Math.abs(rsiCurrent - rsi20Ago);
+    const convictionScore = Math.min(96, Math.max(65, Math.round(70 + rsiDelta * 2.5)));
+
     return {
       id: `div-bear-${symbol}`,
       symbol,
@@ -305,7 +319,8 @@ export function detectRsiDivergences(
       category: 'DIVERGENCIA_TECNICA',
       title: `Divergência Baixista de RSI(14) (${symbol})`,
       bias: 'VENDA',
-      convictionScore: 84,
+      convictionScore,
+      scoreProvenance: 'DERIVADO',
       confidenceBadge: 'OPORTUNIDADE ASSIMÉTRICA',
       rationale: `Preço esticado em topo (R$ ${pCurrent.toFixed(2)}) com perda de momentum no RSI (caiu de ${rsi20Ago} para ${rsiCurrent}). Risco de correção técnica.`,
       triggerCondition: `Montagem de Trava de Baixa ou saída de posições compradas.`,
@@ -316,11 +331,13 @@ export function detectRsiDivergences(
         target2,
         riskRewardRatio: 2.0,
         timeframe: 'Swing Trade (5 a 15 pregões)',
-        probabilityOfProfit: 65,
+        probabilityOfProfit: null,
+        popProvenance: 'INDISPONIVEL',
         electedStrategy: matched.strategy,
         strategyLegsFormatted: matched.strategyLegsFormatted,
-        maxProfitEst: `R$ ${(pCurrent - target1).toFixed(2)} por ação`,
-        maxLossEst: `R$ ${risk.toFixed(2)} por ação`,
+        maxProfitEst: `R$ ${(pCurrent - target1).toFixed(2)} por ação (alvo técnico)`,
+        maxLossEst: `R$ ${risk.toFixed(2)} por ação (stop técnico)`,
+        profitProvenance: 'DERIVADO',
       },
       matchedStrategyId: matched.strategy.id,
       matchedStrategyName: matched.strategy.name,
@@ -343,15 +360,33 @@ export function detectBullCallSpreadOpportunity(
   changePct: number,
   trend: 'ALTA' | 'BAIXA' | 'LATERAL',
   fundamentalStatus: 'APROVADO' | 'REPROVADO',
-  fundamentalScore: number
+  fundamentalScore: number,
+  realOptions?: {
+    debit?: number;
+    deltaCallLong?: number;
+  }
 ): TradeOpportunityItem | null {
   if (trend !== 'ALTA' || fundamentalStatus !== 'APROVADO') return null;
 
   const strikeA = Number(spotPrice.toFixed(2));
   const strikeB = Number((spotPrice * 1.06).toFixed(2));
-  const debitEst = Number((spotPrice * 0.02).toFixed(2));
-  const maxProfit = Number((strikeB - strikeA - debitEst).toFixed(2));
-  const rr = Number((maxProfit / debitEst).toFixed(1));
+
+  let maxProfitEst: string | undefined = undefined;
+  let maxLossEst: string | undefined = undefined;
+  let profitProvenance: DataProvenance = 'INDISPONIVEL';
+  let rr = 2.0;
+
+  if (realOptions?.debit && realOptions.debit > 0) {
+    const debit = realOptions.debit;
+    const maxProfit = Number((strikeB - strikeA - debit).toFixed(2));
+    maxProfitEst = `R$ ${maxProfit.toFixed(2)} por opção no vencimento`;
+    maxLossEst = `R$ ${debit.toFixed(2)} (débito real pago)`;
+    profitProvenance = 'DERIVADO';
+    rr = Number((maxProfit / debit).toFixed(1));
+  }
+
+  const convictionScore = Math.min(95, Math.max(60, Math.round(fundamentalScore * 0.6 + (changePct > 0 ? 25 : 15))));
+  const pop = realOptions?.deltaCallLong ? Math.round(Math.abs(realOptions.deltaCallLong) * 100) : null;
 
   return {
     id: `bull-spread-${symbol}`,
@@ -361,7 +396,8 @@ export function detectBullCallSpreadOpportunity(
     category: 'VOLATILIDADE_OPCOES',
     title: `Trava de Alta com Call (Bull Call Spread) — ${symbol}`,
     bias: 'COMPRA',
-    convictionScore: 87,
+    convictionScore,
+    scoreProvenance: 'DERIVADO',
     confidenceBadge: 'ALTA CONVICÇÃO',
     rationale: `Tendência técnica de alta alinhada a fundamentos sólidos (Score ${fundamentalScore}/100). Trava de alta permite surfar a valorização com risco estritamente limitado ao débito.`,
     triggerCondition: `Montar trava comprando Call ATM (@ R$ ${strikeA}) e vendendo Call OTM (@ R$ ${strikeB}).`,
@@ -372,11 +408,13 @@ export function detectBullCallSpreadOpportunity(
       target2: Number((spotPrice * 1.10).toFixed(2)),
       riskRewardRatio: rr > 0 ? rr : 2.0,
       timeframe: 'Série Mensal B3 (15 a 30 dias)',
-      probabilityOfProfit: 72,
+      probabilityOfProfit: pop,
+      popProvenance: pop !== null ? 'DERIVADO' : 'INDISPONIVEL',
       electedStrategy: OPTION_25_STRATEGIES[10], // #11 Bull Call Spread
       strategyLegsFormatted: `Comprar Call @ R$ ${strikeA} + Vender Call @ R$ ${strikeB}`,
-      maxProfitEst: `R$ ${maxProfit.toFixed(2)} por opção no vencimento`,
-      maxLossEst: `R$ ${debitEst.toFixed(2)} (débito pago na montagem)`,
+      maxProfitEst,
+      maxLossEst,
+      profitProvenance,
     },
     matchedStrategyId: 11,
     matchedStrategyName: 'Trava de Alta com Call (Bull Call Spread)',
@@ -395,15 +433,33 @@ export function detectBearSpreadOpportunity(
   spotPrice: number,
   changePct: number,
   trend: 'ALTA' | 'BAIXA' | 'LATERAL',
-  fundamentalStatus: 'APROVADO' | 'REPROVADO'
+  fundamentalStatus: 'APROVADO' | 'REPROVADO',
+  realOptions?: {
+    debit?: number;
+    deltaPutLong?: number;
+  }
 ): TradeOpportunityItem | null {
   if (trend !== 'BAIXA' && fundamentalStatus !== 'REPROVADO') return null;
 
   const strikeB = Number(spotPrice.toFixed(2));
   const strikeA = Number((spotPrice * 0.94).toFixed(2));
-  const debitEst = Number((spotPrice * 0.02).toFixed(2));
-  const maxProfit = Number((strikeB - strikeA - debitEst).toFixed(2));
-  const rr = Number((maxProfit / debitEst).toFixed(1));
+
+  let maxProfitEst: string | undefined = undefined;
+  let maxLossEst: string | undefined = undefined;
+  let profitProvenance: DataProvenance = 'INDISPONIVEL';
+  let rr = 2.0;
+
+  if (realOptions?.debit && realOptions.debit > 0) {
+    const debit = realOptions.debit;
+    const maxProfit = Number((strikeB - strikeA - debit).toFixed(2));
+    maxProfitEst = `R$ ${maxProfit.toFixed(2)} por opção`;
+    maxLossEst = `R$ ${debit.toFixed(2)} (débito pago)`;
+    profitProvenance = 'DERIVADO';
+    rr = Number((maxProfit / debit).toFixed(1));
+  }
+
+  const convictionScore = Math.min(95, Math.max(60, Math.round(75 + (changePct < 0 ? Math.min(15, Math.abs(changePct) * 3) : 0))));
+  const pop = realOptions?.deltaPutLong ? Math.round(Math.abs(realOptions.deltaPutLong) * 100) : null;
 
   return {
     id: `bear-spread-${symbol}`,
@@ -413,7 +469,8 @@ export function detectBearSpreadOpportunity(
     category: 'VOLATILIDADE_OPCOES',
     title: `Trava de Baixa com Put (Bear Put Spread) — ${symbol}`,
     bias: 'VENDA',
-    convictionScore: 83,
+    convictionScore,
+    scoreProvenance: 'DERIVADO',
     confidenceBadge: 'ALTA CONVICÇÃO',
     rationale: `Ativo em tendência de baixa / deterioração de fundamentos. A trava de baixa permite monetizar a queda sem necessidade de aluguel de ações (BTC).`,
     triggerCondition: `Montar trava comprando Put ATM (@ R$ ${strikeB}) e vendendo Put OTM (@ R$ ${strikeA}).`,
@@ -424,11 +481,13 @@ export function detectBearSpreadOpportunity(
       target2: Number((spotPrice * 0.90).toFixed(2)),
       riskRewardRatio: rr > 0 ? rr : 2.0,
       timeframe: 'Série Mensal B3 (15 a 30 dias)',
-      probabilityOfProfit: 68,
+      probabilityOfProfit: pop,
+      popProvenance: pop !== null ? 'DERIVADO' : 'INDISPONIVEL',
       electedStrategy: OPTION_25_STRATEGIES[11], // #12 Bear Spread
       strategyLegsFormatted: `Comprar Put @ R$ ${strikeB} + Vender Put @ R$ ${strikeA}`,
-      maxProfitEst: `R$ ${maxProfit.toFixed(2)} por opção`,
-      maxLossEst: `R$ ${debitEst.toFixed(2)} (débito pago)`,
+      maxProfitEst,
+      maxLossEst,
+      profitProvenance,
     },
     matchedStrategyId: 12,
     matchedStrategyName: 'Trava de Baixa com Put (Bear Spread)',
@@ -448,7 +507,11 @@ export function detectIronCondorOpportunity(
   changePct: number,
   trend: 'ALTA' | 'BAIXA' | 'LATERAL',
   fundamentalStatus: 'APROVADO' | 'REPROVADO',
-  ivAtm: number | null
+  ivAtm: number | null,
+  realOptions?: {
+    netCredit?: number;
+    pop?: number;
+  }
 ): TradeOpportunityItem | null {
   if (trend !== 'LATERAL' || fundamentalStatus !== 'APROVADO') return null;
 
@@ -456,7 +519,19 @@ export function detectIronCondorOpportunity(
   const putShort = Number((spotPrice * 0.96).toFixed(2));
   const callShort = Number((spotPrice * 1.04).toFixed(2));
   const callLong = Number((spotPrice * 1.08).toFixed(2));
-  const creditEst = Number((spotPrice * 0.015).toFixed(2));
+
+  let maxProfitEst: string | undefined = undefined;
+  let maxLossEst: string | undefined = undefined;
+  let profitProvenance: DataProvenance = 'INDISPONIVEL';
+
+  if (realOptions?.netCredit && realOptions.netCredit > 0) {
+    maxProfitEst = `Crédito total de R$ ${realOptions.netCredit.toFixed(2)} por opção`;
+    maxLossEst = `Largura da asa menos crédito recebido`;
+    profitProvenance = 'DERIVADO';
+  }
+
+  const convictionScore = Math.min(92, Math.max(65, Math.round(72 + (ivAtm ? Math.min(18, ivAtm / 2.5) : 8))));
+  const pop = realOptions?.pop ?? null;
 
   return {
     id: `iron-condor-${symbol}`,
@@ -466,7 +541,8 @@ export function detectIronCondorOpportunity(
     category: 'THE_WHEEL_RENDA',
     title: `Iron Condor a Crédito — ${symbol}`,
     bias: 'LATERAL',
-    convictionScore: 89,
+    convictionScore,
+    scoreProvenance: 'DERIVADO',
     confidenceBadge: 'RENDA RECORRENTE',
     rationale: `Ativo em consolidação lateral sem tendência definida. Coleta de prêmio duplo a crédito nos dois lados com lucro máximo garantido caso o preço permaneça entre R$ ${putShort} e R$ ${callShort}.`,
     triggerCondition: `Vender Put R$ ${putShort} + Comprar Put R$ ${putLong} e Vender Call R$ ${callShort} + Comprar Call R$ ${callLong}.`,
@@ -477,11 +553,13 @@ export function detectIronCondorOpportunity(
       target2: spotPrice,
       riskRewardRatio: 1.8,
       timeframe: 'Série Mensal B3 (15 a 35 dias úteis)',
-      probabilityOfProfit: 76,
+      probabilityOfProfit: pop,
+      popProvenance: pop !== null ? 'DERIVADO' : 'INDISPONIVEL',
       electedStrategy: OPTION_25_STRATEGIES[19], // #20 Short Iron Condor
       strategyLegsFormatted: `Vender Put ${putShort} (trava ${putLong}) + Vender Call ${callShort} (trava ${callLong})`,
-      maxProfitEst: `Crédito total de ~R$ ${(creditEst * 1000).toFixed(0)} por lote`,
-      maxLossEst: `Largura da asa menos crédito recebido`,
+      maxProfitEst,
+      maxLossEst,
+      profitProvenance,
     },
     matchedStrategyId: 20,
     matchedStrategyName: 'Iron Condor a Crédito (Short Iron Condor)',
@@ -501,13 +579,29 @@ export function detectTheWheelOpportunity(
   fundamentalStatus: 'APROVADO' | 'REPROVADO',
   fundamentalScore: number,
   supports: number[],
-  ivAtm: number | null
+  ivAtm: number | null,
+  realOptions?: {
+    putPremium?: number;
+    putDelta?: number;
+  }
 ): TradeOpportunityItem | null {
   if (fundamentalStatus !== 'APROVADO' || fundamentalScore < 70) return null;
 
   const strikePut = Number((spotPrice * 0.94).toFixed(2));
-  const premiumEst = Number((spotPrice * 0.025).toFixed(2));
-  const monthlyReturnPct = Number(((premiumEst / strikePut) * 100).toFixed(2));
+
+  let strategyLegsFormatted = `Vender Put Strike R$ ${strikePut.toFixed(2)} (Prêmio: N/D sem opção líquida no book)`;
+  let maxProfitEst: string | undefined = undefined;
+  let profitProvenance: DataProvenance = 'INDISPONIVEL';
+
+  if (realOptions?.putPremium && realOptions.putPremium > 0) {
+    const premium = realOptions.putPremium;
+    strategyLegsFormatted = `Vender Put Strike R$ ${strikePut.toFixed(2)} (Prêmio real: R$ ${premium.toFixed(2)})`;
+    maxProfitEst = `R$ ${(premium * 1000).toFixed(0)} por lote de 1.000 opções`;
+    profitProvenance = 'DERIVADO';
+  }
+
+  const convictionScore = Math.min(98, Math.max(70, Math.round(fundamentalScore * 0.7 + 25)));
+  const pop = realOptions?.putDelta ? Math.round((1 - Math.abs(realOptions.putDelta)) * 100) : null;
 
   return {
     id: `wheel-${symbol}`,
@@ -517,9 +611,10 @@ export function detectTheWheelOpportunity(
     category: 'THE_WHEEL_RENDA',
     title: `The Wheel Strategy — Venda de Put no Suporte (${symbol})`,
     bias: 'COMPRA',
-    convictionScore: 92,
+    convictionScore,
+    scoreProvenance: 'DERIVADO',
     confidenceBadge: 'RENDA RECORRENTE',
-    rationale: `Empresa sólida aprovada no CNPI-P (Score ${fundamentalScore}/100). Venda de Put OTM @ R$ ${strikePut.toFixed(2)} remunera o caixa em ~${monthlyReturnPct}% ao mês acima do CDI. Se exercido, adquire o ativo com desconto em zona de suporte institucional.`,
+    rationale: `Empresa sólida aprovada no CNPI-P (Score ${fundamentalScore}/100). Venda de Put OTM @ R$ ${strikePut.toFixed(2)} remunera o caixa acima do CDI se o prêmio for favorável. Se exercido, adquire o ativo com desconto em zona de suporte institucional.`,
     triggerCondition: `Lançar Put OTM (Delta ~0.25 a 0.30) com 100% de garantia em CDI.`,
     execution: {
       entryPrice: spotPrice,
@@ -528,11 +623,13 @@ export function detectTheWheelOpportunity(
       target2: Number((spotPrice * 1.12).toFixed(2)),
       riskRewardRatio: 3.5,
       timeframe: 'Ciclo Mensal (15 a 30 pregões)',
-      probabilityOfProfit: 82,
+      probabilityOfProfit: pop,
+      popProvenance: pop !== null ? 'DERIVADO' : 'INDISPONIVEL',
       electedStrategy: OPTION_25_STRATEGIES[5], // #6 Cash-Secured Put
-      strategyLegsFormatted: `Vender Put Strike R$ ${strikePut.toFixed(2)} (Prêmio Est. ~R$ ${premiumEst.toFixed(2)})`,
-      maxProfitEst: `R$ ${(premiumEst * 1000).toFixed(0)} por lote de 1.000 opções`,
+      strategyLegsFormatted,
+      maxProfitEst,
       maxLossEst: `Compra da ação a R$ ${strikePut.toFixed(2)} com desconto real`,
+      profitProvenance,
     },
     matchedStrategyId: 6,
     matchedStrategyName: 'Venda de Put Coberta por Caixa (Cash-Secured Put)',
@@ -559,6 +656,9 @@ export function detectIntermarketOpportunities(
     const target = prio3 || petr4;
 
     if (target && target.changePct < brentChangePct - 0.8) {
+      const spreadBrent = Math.max(0, brentChangePct - target.changePct);
+      const convictionScore = Math.min(96, Math.max(75, Math.round(75 + spreadBrent * 4)));
+
       opportunities.push({
         id: `macro-brent-${target.symbol}`,
         symbol: target.symbol,
@@ -567,7 +667,8 @@ export function detectIntermarketOpportunities(
         category: 'COMMODITIES_MACRO',
         title: `Divergência Intermarket: Petróleo Brent (+${brentChangePct.toFixed(1)}%) vs ${target.symbol}`,
         bias: 'COMPRA',
-        convictionScore: 86,
+        convictionScore,
+        scoreProvenance: 'DERIVADO',
         confidenceBadge: 'ALTA CONVICÇÃO',
         rationale: `Petróleo Brent disparou +${brentChangePct.toFixed(1)}% no exterior enquanto ${target.symbol} oscila em apenas ${target.changePct > 0 ? '+' : ''}${target.changePct.toFixed(1)}%, gerando janela de arbitragem direcional.`,
         triggerCondition: `Compra à vista ou Trava de Alta com Call (#11) buscando fechamento do spread.`,
@@ -578,11 +679,13 @@ export function detectIntermarketOpportunities(
           target2: Number((target.price * 1.09).toFixed(2)),
           riskRewardRatio: 2.3,
           timeframe: 'Day Trade a Swing Trade Curto (1 a 3 dias)',
-          probabilityOfProfit: 72,
+          probabilityOfProfit: null,
+          popProvenance: 'INDISPONIVEL',
           electedStrategy: OPTION_25_STRATEGIES[10], // #11 Bull Call Spread
           strategyLegsFormatted: `Comprar Call ATM @ R$ ${target.price.toFixed(2)} + Vender Call OTM @ R$ ${(target.price * 1.05).toFixed(2)}`,
-          maxProfitEst: `R$ ${(target.price * 0.05).toFixed(2)} por ação`,
-          maxLossEst: `R$ ${(target.price * 0.02).toFixed(2)} por ação`,
+          maxProfitEst: undefined,
+          maxLossEst: undefined,
+          profitProvenance: 'INDISPONIVEL',
         },
         matchedStrategyId: 11,
         matchedStrategyName: 'Trava de Alta com Call (Bull Call Spread)',
@@ -596,6 +699,9 @@ export function detectIntermarketOpportunities(
   if (ironOreChangePct >= 1.5) {
     const vale3 = stocks.find((s) => s.symbol.toUpperCase().startsWith('VALE3'));
     if (vale3 && vale3.changePct < ironOreChangePct - 0.8) {
+      const spreadIron = Math.max(0, ironOreChangePct - vale3.changePct);
+      const convictionScore = Math.min(96, Math.max(75, Math.round(75 + spreadIron * 4)));
+
       opportunities.push({
         id: `macro-iron-${vale3.symbol}`,
         symbol: vale3.symbol,
@@ -604,7 +710,8 @@ export function detectIntermarketOpportunities(
         category: 'COMMODITIES_MACRO',
         title: `Divergência Minério de Ferro (+${ironOreChangePct.toFixed(1)}%) vs VALE3`,
         bias: 'COMPRA',
-        convictionScore: 85,
+        convictionScore,
+        scoreProvenance: 'DERIVADO',
         confidenceBadge: 'ALTA CONVICÇÃO',
         rationale: `Minério de Ferro 62% Fe em Cingapura subiu +${ironOreChangePct.toFixed(1)}% e VALE3 ainda não precificou a recuperação da commodity.`,
         triggerCondition: `Entrada compradora com alvo na resistência imediata.`,
@@ -615,11 +722,13 @@ export function detectIntermarketOpportunities(
           target2: Number((vale3.price * 1.08).toFixed(2)),
           riskRewardRatio: 2.1,
           timeframe: 'Swing Trade (3 a 7 dias)',
-          probabilityOfProfit: 70,
+          probabilityOfProfit: null,
+          popProvenance: 'INDISPONIVEL',
           electedStrategy: OPTION_25_STRATEGIES[10],
           strategyLegsFormatted: `Bull Spread com Calls de VALE3`,
-          maxProfitEst: `R$ ${(vale3.price * 0.045).toFixed(2)} por ação`,
-          maxLossEst: `R$ ${(vale3.price * 0.02).toFixed(2)} por ação`,
+          maxProfitEst: undefined,
+          maxLossEst: undefined,
+          profitProvenance: 'INDISPONIVEL',
         },
         matchedStrategyId: 11,
         matchedStrategyName: 'Trava de Alta com Call (Bull Call Spread)',
@@ -767,6 +876,7 @@ export function buildMasterOpportunityList(params: {
         title: `${agri.name}: ${opp.setupName}`,
         bias: opp.bias,
         convictionScore: opp.conviction === 'ALTA' ? 88 : 78,
+        scoreProvenance: 'SIMULADO',
         confidenceBadge: opp.conviction === 'ALTA' ? 'ALTA CONVICÇÃO' : 'OPORTUNIDADE ASSIMÉTRICA',
         rationale: opp.rationale,
         triggerCondition: `Entrada com alvo em R$ ${opp.targetPrice?.toFixed(2)} e stop em R$ ${opp.stopLoss?.toFixed(2)}.`,
@@ -777,9 +887,11 @@ export function buildMasterOpportunityList(params: {
           target2: Number(((opp.targetPrice || agri.price * 1.08) * 1.05).toFixed(2)),
           riskRewardRatio: 2.4,
           timeframe: 'Posição / Safra (15 a 45 dias)',
-          probabilityOfProfit: 70,
+          probabilityOfProfit: null,
+          popProvenance: 'INDISPONIVEL',
           maxProfitEst: `R$ ${((opp.targetPrice || agri.price * 1.08) - agri.price).toFixed(2)} por ${agri.unit}`,
           maxLossEst: `R$ ${(agri.price - (opp.stopLoss || agri.price * 0.95)).toFixed(2)} por ${agri.unit}`,
+          profitProvenance: 'DERIVADO',
         },
         tags: [agri.id, 'Agronegócio', agri.seasonality.seasonPhase, 'Futuros B3'],
         spotPrice: agri.price,

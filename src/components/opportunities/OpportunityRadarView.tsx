@@ -23,6 +23,7 @@ import {
 import { safeFetchJson } from '@/lib/utils/api-client';
 import { TradeOpportunityItem } from '@/lib/domain/opportunity-radar';
 import { AgriCommodityAnalysis } from '@/lib/domain/agri-commodities';
+import { DataValue } from '@/components/shared/DataValue';
 
 interface OpportunityApiResponse {
   success: boolean;
@@ -307,8 +308,8 @@ export const OpportunityRadarView: React.FC<OpportunityRadarViewProps> = ({ onSe
           {macro.agri && (
             <div className="flex items-center gap-4 bg-slate-900/60 border border-yellow-500/20 px-3 py-1.5 rounded-lg whitespace-nowrap">
               <span className="text-yellow-400 text-[11px] flex items-center gap-1"><Wheat className="w-3 h-3" /> Agro:</span>
-              <span>Milho B3: <strong className="text-white">R$ {macro.agri.cornB3Est.price.toFixed(2)}</strong></span>
-              <span>Boi B3: <strong className="text-white">R$ {macro.agri.boiB3Est.price.toFixed(2)}</strong></span>
+              <span>Milho B3: <strong className="text-white">R$ {macro.agri.cornB3Est.price.toFixed(2)}</strong> <span className="text-[10px] font-semibold text-amber-400 font-mono">(est.)</span></span>
+              <span>Boi B3: <strong className="text-white">R$ {macro.agri.boiB3Est.price.toFixed(2)}</strong> <span className="text-[10px] font-semibold text-amber-400 font-mono">(est.)</span></span>
             </div>
           )}
         </div>
@@ -502,7 +503,11 @@ export const OpportunityRadarView: React.FC<OpportunityRadarViewProps> = ({ onSe
                         {/* 4. Score & Ação */}
                         <div className="flex items-center justify-between lg:justify-end gap-3 shrink-0">
                           <div className="px-2 py-1 rounded bg-slate-950 border border-cyan-500/20 text-cyan-300 font-mono text-xs font-semibold">
-                            Score {item.convictionScore}
+                            <DataValue
+                              value={item.convictionScore}
+                              provenance={item.scoreProvenance || 'DERIVADO'}
+                              prefix={item.scoreProvenance === 'SIMULADO' ? 'Prioridade ' : 'Score '}
+                            />
                           </div>
 
                           <button
