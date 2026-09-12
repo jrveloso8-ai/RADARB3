@@ -137,7 +137,7 @@ describe('Auditor de Estudos & Justificativas do Veredito', () => {
     expect(audit.symbol).toBe('PETR4');
     expect(audit.isBlocked).toBe(false);
     expect(audit.isActionable).toBe(true);
-    expect(audit.auditSeal.status).toBe('CERTIFICADO_CONFORME');
+    expect(audit.auditSeal.status).toBe('REGISTRO_CONFORME');
 
     // Checagem Técnica
     expect(audit.technicalAudit.items).toHaveLength(5);

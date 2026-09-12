@@ -86,7 +86,7 @@ ${audit.barrierAudit.items.map(i => `• [${i.status}] ${i.title}: ${i.metricVal
 
   return (
     <div className="bg-[#0b101b] border-2 border-cyan-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5 font-sans">
-      {/* 1. CABEÇALHO DO AUDITOR COM SELO DE CERTIFICAÇÃO */}
+      {/* 1. CABEÇALHO DO AUDITOR COM REGISTRO DE CONFORMIDADE TÉCNICA */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-gray-800 pb-4">
         <div className="flex items-start gap-3.5">
           <div className="p-3 bg-gradient-to-tr from-cyan-600 via-teal-500 to-emerald-400 rounded-2xl text-slate-950 shadow-lg shadow-cyan-500/20 mt-0.5 shrink-0">
@@ -105,7 +105,7 @@ ${audit.barrierAudit.items.map(i => `• [${i.status}] ${i.title}: ${i.metricVal
               </span>
             </div>
             <p className="text-xs text-gray-300 mt-1">
-              Justificativa rigorosa e transparente do veredito pelas 3 camadas regulatórias (CNPI-T, CNPI-P e CME-25).
+              Justificativa rigorosa e transparente do veredito pelas 3 camadas de regras do sistema (CNPI-T, CNPI-P e CME-25).
             </p>
           </div>
         </div>
@@ -138,7 +138,7 @@ ${audit.barrierAudit.items.map(i => `• [${i.status}] ${i.title}: ${i.metricVal
             <div className="flex items-center justify-between text-xs font-mono">
               <span className="text-gray-400 flex items-center gap-1.5">
                 <Award className="w-4 h-4 text-cyan-400" />
-                <span>Registro de Análise: <strong>{audit.auditSeal.certificateNumber}</strong></span>
+                <span>Registro Técnico: <strong>{audit.auditSeal.registrationCode || audit.auditSeal.certificateNumber}</strong></span>
               </span>
               <span className="text-gray-400">Modelo: {audit.auditSeal.model}</span>
             </div>

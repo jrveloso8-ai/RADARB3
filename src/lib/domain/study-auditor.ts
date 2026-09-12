@@ -21,9 +21,10 @@ export interface StudyAuditReport {
   isActionable: boolean;
   isBlocked: boolean;
   auditSeal: {
-    status: 'CERTIFICADO_CONFORME' | 'BLOQUEADO_RISCO' | 'ALERTA_MONITORAMENTO';
+    status: 'REGISTRO_CONFORME' | 'BLOQUEADO_RISCO' | 'ALERTA_MONITORAMENTO';
     label: string;
     certificateNumber: string;
+    registrationCode: string;
     evaluatedAt: string;
     model: string;
   };
@@ -334,25 +335,27 @@ export function generateStudyAudit(quote: QuoteDetails): StudyAuditReport {
       : 'Plano em elaboração.',
   };
 
-  // Veredito Geral e Registro de Análise Quantitativa (Identificador interno de rastreabilidade)
+  // Veredito Geral e Registro Técnico de Análise Quantitativa (Identificador interno de rastreabilidade)
+  const regCode = `REG-${quote.symbol}-${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}`;
   const auditSeal = {
     status: isBlocked
       ? ('BLOQUEADO_RISCO' as const)
       : hasBarrierAlert
       ? ('ALERTA_MONITORAMENTO' as const)
-      : ('CERTIFICADO_CONFORME' as const),
+      : ('REGISTRO_CONFORME' as const),
     label: isBlocked
       ? 'REGISTRO DE ANÁLISE: BLOQUEADO (RISCO FUNDAMENTALISTA)'
       : hasBarrierAlert
       ? 'REGISTRO DE ANÁLISE: APROVADO COM ALERTA DE BARREIRA'
-      : 'REGISTRO DE ANÁLISE: 100% CONFORME (REGRAS DO SISTEMA)',
-    certificateNumber: `REG-${quote.symbol}-${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}`,
+      : 'REGISTRO DE ANÁLISE: CONFORME COM AS REGRAS DO SISTEMA',
+    certificateNumber: regCode,
+    registrationCode: regCode,
     evaluatedAt: new Date().toISOString(),
     model: 'Radar B3 PRO IA / Mapeamento de Regras do Sistema',
   };
 
   const overallVerdictRationale = {
-    title: `Parecer Oficial do Auditor para ${quote.symbol}: ${verdict?.verdictLabel || 'EM_ANALISE'}`,
+    title: `Parecer Técnico do Auditor para ${quote.symbol}: ${verdict?.verdictLabel || 'EM_ANALISE'}`,
     summary: isBlocked
       ? `O ativo ${quote.symbol} foi REPROVADO no Crivo Fundamentalista (Score ${fund?.score || 0}/100). Estudos de compra à vista ou travas de alta são terminantemente desaconselhados para mitigar o risco de Value Trap.`
       : isCompra
