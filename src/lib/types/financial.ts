@@ -29,8 +29,8 @@ export interface TechnicalIndicatorsResult {
     signalLine: number | null;
     histogram: number | null;
   };
-  atr: number;
-  volumeRatio: number;
+  atr: number | null;
+  volumeRatio: number | null;
   checklist: {
     items: TechnicalChecklistItem[];
     score: number;
@@ -280,10 +280,10 @@ export interface WallItem {
   contracts: number;
   uncovered: number;
   covered: number;
-  iv: number;
-  delta: number;
+  iv: number | null;
+  delta: number | null;
   distSpot: number;
-  lastPrice: number;
+  lastPrice: number | null;
 }
 
 export interface StraddleRow {

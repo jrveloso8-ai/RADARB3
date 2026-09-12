@@ -107,14 +107,14 @@ export function generateStudyAudit(quote: QuoteDetails): StudyAuditReport {
   const mm200 = quote.trendAnalysis?.movingAverages.mm200 ?? null;
   const rsi = ind?.rsi ?? null;
   const macdHist = ind?.macd.histogram ?? null;
-  const atr = ind?.atr || 0.5;
-  const volRatio = ind?.volumeRatio || 100;
+  const atr = ind?.atr ?? null;
+  const volRatio = ind?.volumeRatio ?? null;
 
   const isMaOk = mm20 !== null && spot >= mm20;
   const isRsiOk = rsi !== null && rsi >= 40 && rsi <= 65;
   const isMacdOk = macdHist !== null && macdHist >= 0;
-  const isVolOk = volRatio >= 90;
-  const isAsymOk = isMaOk && isMacdOk;
+  const isVolOk = volRatio !== null && volRatio >= 90;
+  const isAsymOk = isMaOk && isMacdOk && atr !== null;
 
   const technicalItems: AuditCheckItem[] = [
     {
@@ -163,12 +163,14 @@ export function generateStudyAudit(quote: QuoteDetails): StudyAuditReport {
       category: 'TECNICA',
       title: 'Confirmação de Volume Institucional vs Média 20d',
       status: isVolOk ? 'APROVADO' : 'NEUTRO',
-      badgeLabel: isVolOk ? 'Volume Confirmado' : 'Abaixo da Média',
-      metricValue: `${volRatio}% da média de 20 pregões`,
+      badgeLabel: isVolOk ? 'Volume Confirmado' : volRatio !== null ? 'Abaixo da Média' : 'Volume N/D',
+      metricValue: volRatio !== null ? `${volRatio}% da média de 20 pregões` : 'Volume N/D (histórico insuficiente)',
       benchmark: 'Volume Relativo >= 90%',
       justification: isVolOk
         ? `Volume em ${volRatio}% da média dos últimos 20 dias atesta liquidez saudável para execução de ordens com baixo slippage.`
-        : `Volume em ${volRatio}% aponta liquidez abaixo do padrão habitual, exigindo atenção na execução de lotes maiores.`,
+        : volRatio !== null
+        ? `Volume em ${volRatio}% aponta liquidez abaixo do padrão habitual, exigindo atenção na execução de lotes maiores.`
+        : 'Volume relativo indisponível por ausência de histórico consolidado de negociação.',
       regulatoryStandard: 'Validação de Liquidez B3',
     },
     {
@@ -176,12 +178,14 @@ export function generateStudyAudit(quote: QuoteDetails): StudyAuditReport {
       category: 'TECNICA',
       title: 'Assimetria Suporte vs Resistência (R:R >= 1.4)',
       status: isAsymOk ? 'APROVADO' : 'ALERTA',
-      badgeLabel: isAsymOk ? 'Espaço Livre / Boa Assimetria' : 'Resistência Próxima',
-      metricValue: `ATR diário = R$ ${atr.toFixed(2)}`,
+      badgeLabel: isAsymOk ? 'Espaço Livre / Boa Assimetria' : 'Resistência Próxima ou Sem ATR',
+      metricValue: atr !== null ? `ATR diário = R$ ${atr.toFixed(2)}` : 'ATR diário = N/D',
       benchmark: 'Distância ao Alvo >= 1.4x o Risco de Stop',
       justification: isAsymOk
         ? `Níveis de suporte estrutural fornecem proteção contra oscilações normais de mercado (buffer de 0,5x ATR).`
-        : `Assimetria gráfica restrita. Alvos técnicos limitados pela proximidade de resistências intermediárias.`,
+        : atr !== null
+        ? `Assimetria gráfica restrita. Alvos técnicos limitados pela proximidade de resistências intermediárias.`
+        : 'Cálculo de assimetria pendente por ausência de volatilidade média diária (ATR).',
       regulatoryStandard: 'Métrica de Assimetria de Risco CNPI-T',
     },
   ];
@@ -315,7 +319,7 @@ export function generateStudyAudit(quote: QuoteDetails): StudyAuditReport {
       ? `Entrada em R$ ${plan.entry.toFixed(2)} selecionada com base em confluência técnica de ${plan.method || 'suporte estrutural e médias móveis'}.`
       : `Preço de referência em R$ ${spot.toFixed(2)}.`,
     stopLossRationale: plan
-      ? `Stop Loss técnico posicionado em R$ ${plan.stop.toFixed(2)}, correspondendo ao rompimento do suporte estrutural acrescido de uma folga técnica de 0,5x ATR (R$ ${(atr * 0.5).toFixed(2)}) para evitar violinadas.`
+      ? `Stop Loss técnico posicionado em R$ ${plan.stop.toFixed(2)}, correspondendo ao rompimento do suporte estrutural${atr !== null ? ` acrescido de folga técnica de 0,5x ATR (R$ ${(atr * 0.5).toFixed(2)}) para evitar violinadas` : ''}.`
       : 'Stop calculado no suporte estrutural.',
     target1Rationale: plan
       ? `Alvo 1 em R$ ${plan.target1.toFixed(2)} (1ª Resistência Técnica / Relação 1:1) planejado para realização parcial e subida do Stop para o Breakeven (Preço de Entrada).`
@@ -330,7 +334,7 @@ export function generateStudyAudit(quote: QuoteDetails): StudyAuditReport {
       : 'Plano em elaboração.',
   };
 
-  // Veredito Geral e Selo de Auditoria
+  // Veredito Geral e Registro de Análise Quantitativa (Identificador interno de rastreabilidade)
   const auditSeal = {
     status: isBlocked
       ? ('BLOQUEADO_RISCO' as const)
@@ -338,13 +342,13 @@ export function generateStudyAudit(quote: QuoteDetails): StudyAuditReport {
       ? ('ALERTA_MONITORAMENTO' as const)
       : ('CERTIFICADO_CONFORME' as const),
     label: isBlocked
-      ? 'AUDITORIA: BLOQUEADO (RISCO FUNDAMENTALISTA)'
+      ? 'REGISTRO DE ANÁLISE: BLOQUEADO (RISCO FUNDAMENTALISTA)'
       : hasBarrierAlert
-      ? 'AUDITORIA: APROVADO COM ALERTA DE BARREIRA'
-      : 'AUDITORIA: 100% CONFORME (3 CAMADAS CNPI)',
-    certificateNumber: `AUD-${quote.symbol}-${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}`,
+      ? 'REGISTRO DE ANÁLISE: APROVADO COM ALERTA DE BARREIRA'
+      : 'REGISTRO DE ANÁLISE: 100% CONFORME (REGRAS DO SISTEMA)',
+    certificateNumber: `REG-${quote.symbol}-${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}`,
     evaluatedAt: new Date().toISOString(),
-    model: 'Radar B3 PRO IA / Especificação v3.1 CNPI',
+    model: 'Radar B3 PRO IA / Mapeamento de Regras do Sistema',
   };
 
   const overallVerdictRationale = {

@@ -40,6 +40,9 @@ import { StockTradePlanChart } from './StockTradePlanChart';
 import { StudyAuditorCard } from './StudyAuditorCard';
 import { SentimentThermometer } from '../sentiment/SentimentThermometer';
 import { safeFetchJson } from '@/lib/utils/api-client';
+import { DataValue } from '../shared/DataValue';
+import { MACRO_CONFIG } from '@/lib/config/macro';
+import { calculateHistoricalRSI, calculateHistoricalMACD } from '@/lib/domain/indicators';
 
 interface QuoteViewProps {
   initialSymbol?: string;
@@ -113,6 +116,36 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
   };
 
   const visibleHistory = history.slice(Math.max(0, history.length - chartPeriod));
+
+  // Faixa de 52 semanas real a partir dos últimos 252 pregões (Fase 3 - Item 3.1)
+  const last252Candles = history.slice(Math.max(0, history.length - 252));
+  const candleCount52w = last252Candles.length;
+  let min52w: number | null = null;
+  let max52w: number | null = null;
+  if (candleCount52w > 0) {
+    const validLows = last252Candles
+      .map((c) => c.low ?? c.close)
+      .filter((v): v is number => typeof v === 'number' && v > 0);
+    const validHighs = last252Candles
+      .map((c) => c.high ?? c.close)
+      .filter((v): v is number => typeof v === 'number' && v > 0);
+    if (validLows.length > 0) min52w = Math.min(...validLows);
+    if (validHighs.length > 0) max52w = Math.max(...validHighs);
+  }
+  const range52wLabel =
+    candleCount52w >= 252
+      ? `52w: ${min52w ? min52w.toFixed(2) : 'N/D'} - ${max52w ? max52w.toFixed(2) : 'N/D'}`
+      : candleCount52w > 0
+      ? `Mín/Máx (${candleCount52w} pregões): ${min52w ? min52w.toFixed(2) : 'N/D'} - ${max52w ? max52w.toFixed(2) : 'N/D'}`
+      : '52w: N/D';
+
+  // Séries históricas de RSI e MACD por candle (Fase 3 - Item 3.2)
+  const historyCloses = history.map((h) => h.close);
+  const allHistoricalRSI = calculateHistoricalRSI(historyCloses);
+  const allHistoricalMACD = calculateHistoricalMACD(historyCloses);
+  const historyStartIndex = Math.max(0, history.length - chartPeriod);
+  const visibleRSI = allHistoricalRSI.slice(historyStartIndex);
+  const visibleMACD = allHistoricalMACD.slice(historyStartIndex);
 
   const filteredOptionStrategies = OPTION_25_STRATEGIES.filter((s) => {
     if (optionCategoryFilter === 'ALL') return true;
@@ -262,13 +295,13 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                   1. SPOT: <strong>REAL</strong>
                 </span>
                 <span className={`px-2 py-0.5 rounded border ${fund?.status === 'APROVADO' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'}`}>
-                  2. FUNDAM: <strong>{fund?.status || 'CNPI-P'}</strong>
+                  2. FUNDAM: <strong>{fund?.status || 'N/D'}</strong>
                 </span>
                 <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                   3. OPÇÕES: <strong>B3 OI</strong>
                 </span>
-                <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  4. MACRO: <strong>SELIC 10.75%</strong>
+                <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" title={MACRO_CONFIG.copomReference}>
+                  4. MACRO: <strong>{MACRO_CONFIG.riskFreeRateLabel}</strong>
                 </span>
               </div>
             </div>
@@ -399,7 +432,7 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                     R$ {data.regularMarketPrice ? data.regularMarketPrice.toFixed(2) : '0.00'}
                   </span>
                   <span className="text-[9px] text-gray-500 block truncate">
-                    52w: {((data.regularMarketPrice || 10) * 0.85).toFixed(2)} - {((data.regularMarketPrice || 10) * 1.15).toFixed(2)}
+                    {range52wLabel}
                   </span>
                 </div>
 
@@ -431,7 +464,9 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
 
                 <div className="p-3 bg-[#0b101b] border border-gray-800 rounded-xl space-y-1">
                   <span className="text-[10px] text-gray-400 block font-sans">RSI(14)</span>
-                  <span className="text-base font-bold text-white block">{ind?.rsi ?? 'N/D'}</span>
+                  <span className="text-base font-bold text-white block">
+                    <DataValue value={ind?.rsi !== null && ind?.rsi !== undefined ? ind.rsi.toFixed(1) : null} provenance={ind?.rsi !== null && ind?.rsi !== undefined ? 'DERIVADO' : 'INDISPONIVEL'} />
+                  </span>
                   <span className="text-[9px] text-cyan-400 block">Momentum</span>
                 </div>
 
@@ -439,22 +474,26 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                   <span className="text-[10px] text-gray-400 block font-sans">MACD HIST</span>
                   <span className="text-base font-bold text-white block">
                     {ind?.macd.histogram !== null && (ind?.macd.histogram || 0) >= 0 ? '+' : ''}
-                    {ind?.macd.histogram !== null ? ind?.macd.histogram : '+0.00'}
+                    {ind?.macd.histogram !== null && ind?.macd.histogram !== undefined ? ind.macd.histogram.toFixed(2) : 'N/D'}
                   </span>
                   <span className="text-[9px] text-gray-400 block truncate">
-                    Sinal: {ind?.macd.signalLine || 0.00}
+                    Sinal: <DataValue value={ind?.macd.signalLine !== null && ind?.macd.signalLine !== undefined ? ind.macd.signalLine.toFixed(2) : null} provenance={ind?.macd.signalLine !== null && ind?.macd.signalLine !== undefined ? 'DERIVADO' : 'INDISPONIVEL'} />
                   </span>
                 </div>
 
                 <div className="p-3 bg-[#0b101b] border border-gray-800 rounded-xl space-y-1">
                   <span className="text-[10px] text-gray-400 block font-sans">ATR(14)</span>
-                  <span className="text-base font-bold text-white block">R$ {ind?.atr || 0.14}</span>
+                  <span className="text-base font-bold text-white block">
+                    <DataValue value={ind?.atr !== null && ind?.atr !== undefined ? `R$ ${ind.atr.toFixed(2)}` : null} provenance={ind?.atr !== null && ind?.atr !== undefined ? 'DERIVADO' : 'INDISPONIVEL'} />
+                  </span>
                   <span className="text-[9px] text-gray-400 block truncate">Volatilidade Diária</span>
                 </div>
 
                 <div className="p-3 bg-[#0b101b] border border-gray-800 rounded-xl space-y-1">
                   <span className="text-[10px] text-gray-400 block font-sans">VOL VS MÉDIA20</span>
-                  <span className="text-base font-bold text-emerald-400 block">{ind?.volumeRatio || 100}%</span>
+                  <span className="text-base font-bold text-emerald-400 block">
+                    <DataValue value={ind?.volumeRatio !== null && ind?.volumeRatio !== undefined ? `${ind.volumeRatio}%` : null} provenance={ind?.volumeRatio !== null && ind?.volumeRatio !== undefined ? 'MEDIDO' : 'INDISPONIVEL'} />
+                  </span>
                   <span className="text-[9px] text-gray-400 block">Liquidez</span>
                 </div>
               </div>
@@ -616,8 +655,9 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                           <line x1={paddingLeft} y1={rsiH - (30 / 100) * rsiH} x2={width - paddingRight} y2={rsiH - (30 / 100) * rsiH} stroke="#10b981" strokeDasharray="2 2" opacity="0.5" />
                           {(() => {
                             let d = '';
-                            visibleHistory.forEach((h: any, idx) => {
-                              const val = h.rsi || 50;
+                            visibleHistory.forEach((_, idx) => {
+                              const rsiPoint = visibleRSI[idx];
+                              const val = rsiPoint !== null && rsiPoint !== undefined ? rsiPoint : 50;
                               const x = paddingLeft + idx * candleStep + candleStep / 2;
                               const y = rsiH - (val / 100) * rsiH;
                               d += d === '' ? `M ${x} ${y}` : ` L ${x} ${y}`;
@@ -630,17 +670,19 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                         <g transform="translate(0, 390)">
                           <line x1={paddingLeft} y1="0" x2={width - paddingRight} y2="0" stroke="#1e293b" />
                           <text x={paddingLeft} y="10" fill="#f59e0b" fontSize="8" fontFamily="monospace">
-                            MACD (12, 26, 9) & HISTOGRAMA
+                            MACD (12, 26, 9) & HISTOGRAMA HISTÓRICO
                           </text>
                           <line x1={paddingLeft} y1={macdH / 2} x2={width - paddingRight} y2={macdH / 2} stroke="#475569" strokeDasharray="2 2" />
                           {visibleHistory.map((_, idx) => {
                             const xCenter = paddingLeft + idx * candleStep + candleStep / 2;
-                            const hist = ind?.macd.histogram || 0.05;
+                            const macdPoint = visibleMACD[idx];
+                            const hist = macdPoint?.histogram;
+                            if (hist === null || hist === undefined) return null;
                             const isPos = hist >= 0;
-                            const barH = Math.min(20, Math.abs(hist) * 100);
+                            const barH = Math.min(20, Math.max(1, Math.abs(hist) * 20));
                             const y = isPos ? macdH / 2 - barH : macdH / 2;
                             return (
-                              <rect key={idx} x={xCenter - candleWidth / 2} y={y} width={candleWidth} height={Math.max(1, barH)} fill={isPos ? '#10b981' : '#ef4444'} />
+                              <rect key={idx} x={xCenter - candleWidth / 2} y={y} width={candleWidth} height={barH} fill={isPos ? '#10b981' : '#ef4444'} />
                             );
                           })}
                         </g>
@@ -661,7 +703,7 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                       </h4>
                     </div>
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-cyan-950 text-cyan-400 border border-cyan-500/30 font-mono">
-                      {ind?.checklist.statusLabel || '3/5'}
+                      {ind?.checklist ? ind.checklist.statusLabel : 'N/D'}
                     </span>
                   </div>
 

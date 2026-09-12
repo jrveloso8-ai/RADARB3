@@ -30,12 +30,14 @@ export interface GreeksResult {
   theoreticalPrice: number;
 }
 
+import { MACRO_CONFIG } from '@/lib/config/macro';
+
 /**
- * Calcula Gregas e Preço Teórico via Black-Scholes (Merton 1973 com Dividend Yield)
+ * Cálculo das Gregas via Modelo Black-Scholes (Merton 1973 com Dividend Yield)
  * @param S Preço à vista (Spot)
  * @param K Strike
  * @param T Tempo até vencimento em anos (DTE / 252)
- * @param r Taxa livre de risco (Selic ~ 10.75% = 0.1075)
+ * @param r Taxa livre de risco (Selic via MACRO_CONFIG)
  * @param sigma Volatilidade anualizada (ex: 0.32 = 32%)
  * @param type 'call' | 'put'
  * @param q Dividend Yield anualizado (ex: 0.03 = 3%)
@@ -44,7 +46,7 @@ export function calculateBlackScholes(
   S: number,
   K: number,
   T: number,
-  r = 0.1075,
+  r = MACRO_CONFIG.riskFreeRate,
   sigma = 0.32,
   type: 'call' | 'put' = 'call',
   q = 0.03
@@ -107,7 +109,7 @@ export function calculateImpliedVolatility(
   S: number,
   K: number,
   T: number,
-  r = 0.1075,
+  r = MACRO_CONFIG.riskFreeRate,
   type: 'call' | 'put' = 'call',
   q = 0.03
 ): number | null {

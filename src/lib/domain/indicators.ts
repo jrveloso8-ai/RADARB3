@@ -109,11 +109,100 @@ export function calculateMACD(
   };
 }
 
+export interface HistoricalMACDPoint {
+  macdLine: number | null;
+  signalLine: number | null;
+  histogram: number | null;
+}
+
+/**
+ * Cálculo das séries históricas de MACD e Histograma para cada candle
+ */
+export function calculateHistoricalMACD(
+  prices: number[],
+  fastPeriod = 12,
+  slowPeriod = 26,
+  signalPeriod = 9
+): HistoricalMACDPoint[] {
+  const result: HistoricalMACDPoint[] = [];
+  if (!prices || prices.length === 0) return result;
+
+  const kFast = 2 / (fastPeriod + 1);
+  const kSlow = 2 / (slowPeriod + 1);
+  const kSignal = 2 / (signalPeriod + 1);
+
+  let fastEMA: number | null = null;
+  let slowEMA: number | null = null;
+  let signalEMA: number | null = null;
+
+  let sumFast = 0;
+  let sumSlow = 0;
+  const macdHistory: number[] = [];
+
+  for (let i = 0; i < prices.length; i++) {
+    const p = prices[i];
+
+    // Fast EMA
+    if (i < fastPeriod - 1) {
+      sumFast += p;
+    } else if (i === fastPeriod - 1) {
+      sumFast += p;
+      fastEMA = sumFast / fastPeriod;
+    } else if (fastEMA !== null) {
+      fastEMA = p * kFast + fastEMA * (1 - kFast);
+    }
+
+    // Slow EMA
+    if (i < slowPeriod - 1) {
+      sumSlow += p;
+    } else if (i === slowPeriod - 1) {
+      sumSlow += p;
+      slowEMA = sumSlow / slowPeriod;
+    } else if (slowEMA !== null) {
+      slowEMA = p * kSlow + slowEMA * (1 - kSlow);
+    }
+
+    if (fastEMA !== null && slowEMA !== null) {
+      const macdVal = fastEMA - slowEMA;
+      macdHistory.push(macdVal);
+
+      if (macdHistory.length < signalPeriod) {
+        result.push({
+          macdLine: Number(macdVal.toFixed(2)),
+          signalLine: null,
+          histogram: null,
+        });
+      } else if (macdHistory.length === signalPeriod) {
+        const sumSig = macdHistory.reduce((acc, v) => acc + v, 0);
+        signalEMA = sumSig / signalPeriod;
+        const hist = macdVal - signalEMA;
+        result.push({
+          macdLine: Number(macdVal.toFixed(2)),
+          signalLine: Number(signalEMA.toFixed(2)),
+          histogram: Number(hist.toFixed(2)),
+        });
+      } else if (signalEMA !== null) {
+        signalEMA = macdVal * kSignal + signalEMA * (1 - kSignal);
+        const hist = macdVal - signalEMA;
+        result.push({
+          macdLine: Number(macdVal.toFixed(2)),
+          signalLine: Number(signalEMA.toFixed(2)),
+          histogram: Number(hist.toFixed(2)),
+        });
+      }
+    } else {
+      result.push({ macdLine: null, signalLine: null, histogram: null });
+    }
+  }
+
+  return result;
+}
+
 /**
  * Cálculo do Average True Range (ATR de 14 períodos para volatilidade diária)
  */
-export function calculateATR(history: HistoricalPrice[], period = 14): number {
-  if (!history || history.length < period + 1) return 0.5;
+export function calculateATR(history: HistoricalPrice[], period = 14): number | null {
+  if (!history || history.length < period + 1) return null;
 
   const trValues: number[] = [];
   for (let i = 1; i < history.length; i++) {
@@ -135,13 +224,13 @@ export function calculateATR(history: HistoricalPrice[], period = 14): number {
 /**
  * Cálculo do Volume Relativo vs Média dos últimos 20 dias
  */
-export function calculateVolumeRatio(history: HistoricalPrice[], period = 20): number {
-  if (!history || history.length < period) return 100;
+export function calculateVolumeRatio(history: HistoricalPrice[], period = 20): number | null {
+  if (!history || history.length < period) return null;
   const recentVolumes = history.slice(history.length - period).map((h) => h.volume || 0);
   const currentVolume = recentVolumes[recentVolumes.length - 1];
   const avgVolume = recentVolumes.reduce((acc, v) => acc + v, 0) / period;
 
-  if (avgVolume === 0) return 100;
+  if (avgVolume === 0) return null;
   return Number(((currentVolume / avgVolume) * 100).toFixed(0));
 }
 
@@ -206,7 +295,7 @@ export function evaluateTechnicalChecklist(
   mm200: number | null,
   rsi: number | null,
   macdHist: number | null,
-  volRatio: number
+  volRatio: number | null
 ): {
   items: TechnicalChecklistItem[];
   score: number; // 0 a 5
@@ -215,32 +304,32 @@ export function evaluateTechnicalChecklist(
   const isMaAligned = mm20 !== null && spot >= mm20;
   const isRsiHealthy = rsi !== null && rsi >= 40 && rsi <= 65;
   const isMacdPositive = macdHist !== null && macdHist >= 0;
-  const isVolumeConfirming = volRatio >= 90;
+  const isVolumeConfirming = volRatio !== null && volRatio >= 90;
   const isAssymetryFavorable = isMaAligned && isMacdPositive;
 
   const items: TechnicalChecklistItem[] = [
     {
       id: 'ma_alignment',
       title: 'Alinhamento de Médias Altista (Spot >= MA20)',
-      detail: `Preço (R$ ${spot.toFixed(2)}) operando ${spot >= (mm20 || 0) ? 'acima' : 'abaixo'} da MA20 (R$ ${mm20 || '-'}) e buscando MA50 (R$ ${mm50 || '-'}).`,
+      detail: `Preço (R$ ${spot.toFixed(2)}) operando ${spot >= (mm20 || 0) ? 'acima' : 'abaixo'} da MA20 (R$ ${mm20 !== null ? mm20.toFixed(2) : '-'}) e buscando MA50 (R$ ${mm50 !== null ? mm50.toFixed(2) : '-'}).`,
       passed: isMaAligned,
     },
     {
       id: 'rsi_momentum',
       title: 'Momentum RSI(14) Saudável (40 - 65)',
-      detail: `RSI(14) em ${rsi || 'N/D'} — ${isRsiHealthy ? 'zona de tração altista sem sobrecompra (>70)' : 'fora da zona ideal de momentum'}.`,
+      detail: `RSI(14) em ${rsi !== null ? rsi.toFixed(1) : 'N/D'} — ${isRsiHealthy ? 'zona de tração altista sem sobrecompra (>70)' : 'fora da zona ideal de momentum'}.`,
       passed: isRsiHealthy,
     },
     {
       id: 'macd_histogram',
       title: 'MACD Histograma Positivo / Cruzamento',
-      detail: `Histograma ${macdHist !== null && macdHist >= 0 ? `positivo (+${macdHist})` : `negativo (${macdHist})`} confirmando pressão compradora.`,
+      detail: `Histograma ${macdHist !== null ? (macdHist >= 0 ? `positivo (+${macdHist.toFixed(2)})` : `negativo (${macdHist.toFixed(2)})`) : 'N/D'} confirmando pressão compradora.`,
       passed: isMacdPositive,
     },
     {
       id: 'volume_confirmation',
       title: 'Volume de Confirmação (>= 90% da média 20d)',
-      detail: `Volume em ${volRatio}% da média de 20 pregões (liquidez e confirmação de fluxo).`,
+      detail: volRatio !== null ? `Volume em ${volRatio}% da média de 20 pregões (liquidez e confirmação de fluxo).` : 'Volume relativo indisponível (histórico de pregões insuficiente).',
       passed: isVolumeConfirming,
     },
     {
@@ -252,7 +341,7 @@ export function evaluateTechnicalChecklist(
   ];
 
   const passedCount = items.filter((i) => i.passed).length;
-  let statusLabel = 'NEUTRO (3/5)';
+  let statusLabel = `NEUTRO (${passedCount}/5)`;
   if (passedCount >= 4) statusLabel = `BOM (COMPRA) (${passedCount}/5)`;
   else if (passedCount <= 2) statusLabel = `FRÁGIL / VENDA (${passedCount}/5)`;
 
@@ -269,18 +358,19 @@ export function evaluateTechnicalChecklist(
 export function calculateRiskReward(
   spot: number,
   trend: 'ALTA' | 'BAIXA' | 'LATERAL',
-  atr: number,
+  atr: number | null,
   supports: number[],
   resistances: number[]
 ): OperationalRiskReward {
-  const atrBuffer = Math.max(atr, spot * 0.02);
+  // PROVENANCE: Quando ATR for nulo (histórico curto), utiliza buffer técnico mínimo de 2% do preço
+  const atrBuffer = atr !== null && atr > 0 ? atr : (spot * 0.02);
 
   if (trend === 'ALTA') {
-    const stopLoss = Number((Math.min(supports[0], spot - atrBuffer * 1.5)).toFixed(2));
+    const stopLoss = Number((Math.min(supports[0] || spot * 0.96, spot - atrBuffer * 1.5)).toFixed(2));
     const risk = spot - stopLoss;
     const target1 = Number((spot + risk * 1.5).toFixed(2));
     const target2 = Number((spot + risk * 2.5).toFixed(2));
-    const rRatio = Number((((target1 - spot) / risk) || 1.8).toFixed(1));
+    const rRatio = risk > 0 ? Number(((target1 - spot) / risk).toFixed(1)) : 1.5;
 
     return {
       bias: 'LONG',
@@ -293,11 +383,11 @@ export function calculateRiskReward(
       resistances,
     };
   } else if (trend === 'BAIXA') {
-    const stopLoss = Number((Math.max(resistances[0], spot + atrBuffer * 1.5)).toFixed(2));
+    const stopLoss = Number((Math.max(resistances[0] || spot * 1.04, spot + atrBuffer * 1.5)).toFixed(2));
     const risk = stopLoss - spot;
     const target1 = Number((spot - risk * 1.5).toFixed(2));
     const target2 = Number((spot - risk * 2.5).toFixed(2));
-    const rRatio = Number((((spot - target1) / risk) || 1.8).toFixed(1));
+    const rRatio = risk > 0 ? Number(((spot - target1) / risk).toFixed(1)) : 1.5;
 
     return {
       bias: 'SHORT',

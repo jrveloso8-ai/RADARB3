@@ -47,7 +47,7 @@ export const StudyAuditorCard: React.FC<StudyAuditorCardProps> = ({ quote }) => 
     const text = `=== PARECER DO AUDITOR RADAR B3 PRO ===
 Ativo: ${audit.symbol} (${audit.price.toFixed(2)})
 Veredito: ${audit.verdict}
-Selo: ${audit.auditSeal.label} (${audit.auditSeal.certificateNumber})
+Registro: ${audit.auditSeal.label} (${audit.auditSeal.certificateNumber})
 
 1. AUDITORIA TÉCNICA (Score: ${audit.technicalAudit.score}/5):
 ${audit.technicalAudit.items.map(i => `• [${i.status}] ${i.title}: ${i.metricValue} - ${i.justification}`).join('\n')}
@@ -138,7 +138,7 @@ ${audit.barrierAudit.items.map(i => `• [${i.status}] ${i.title}: ${i.metricVal
             <div className="flex items-center justify-between text-xs font-mono">
               <span className="text-gray-400 flex items-center gap-1.5">
                 <Award className="w-4 h-4 text-cyan-400" />
-                <span>Certificado: <strong>{audit.auditSeal.certificateNumber}</strong></span>
+                <span>Registro de Análise: <strong>{audit.auditSeal.certificateNumber}</strong></span>
               </span>
               <span className="text-gray-400">Modelo: {audit.auditSeal.model}</span>
             </div>

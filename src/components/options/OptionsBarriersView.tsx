@@ -22,6 +22,7 @@ import { OptionAnalysisResult } from '@/lib/types/financial';
 import { safeFetchJson } from '@/lib/utils/api-client';
 import { OptionPayoffChart } from './OptionPayoffChart';
 import { isActionableStrategy } from '@/lib/domain/cme-election';
+import { DataValue } from '../shared/DataValue';
 
 interface OptionsBarriersViewProps {
   initialSymbol?: string;
@@ -440,8 +441,12 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
                         <td className="py-1.5 text-right text-gray-400">
                           {wall.uncovered.toLocaleString('pt-BR')}
                         </td>
-                        <td className="py-1.5 text-right text-gray-300">{wall.iv}%</td>
-                        <td className="py-1.5 text-right text-gray-300">{wall.delta}</td>
+                        <td className="py-1.5 text-right text-gray-300">
+                          <DataValue value={wall.iv !== null ? `${wall.iv}%` : null} provenance={wall.iv !== null ? 'DERIVADO' : 'INDISPONIVEL'} />
+                        </td>
+                        <td className="py-1.5 text-right text-gray-300">
+                          <DataValue value={wall.delta !== null ? wall.delta.toFixed(2) : null} provenance={wall.delta !== null ? 'MEDIDO' : 'INDISPONIVEL'} />
+                        </td>
                         <td
                           className={`py-1.5 text-right font-bold ${
                             wall.distSpot >= 0 ? 'text-emerald-400' : 'text-red-400'
@@ -491,8 +496,12 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
                         <td className="py-1.5 text-right text-gray-400">
                           {wall.covered > 0 ? wall.covered.toLocaleString('pt-BR') : '-'}
                         </td>
-                        <td className="py-1.5 text-right text-gray-300">{wall.iv}%</td>
-                        <td className="py-1.5 text-right text-gray-300">{wall.delta}</td>
+                        <td className="py-1.5 text-right text-gray-300">
+                          <DataValue value={wall.iv !== null ? `${wall.iv}%` : null} provenance={wall.iv !== null ? 'DERIVADO' : 'INDISPONIVEL'} />
+                        </td>
+                        <td className="py-1.5 text-right text-gray-300">
+                          <DataValue value={wall.delta !== null ? wall.delta.toFixed(2) : null} provenance={wall.delta !== null ? 'MEDIDO' : 'INDISPONIVEL'} />
+                        </td>
                         <td
                           className={`py-1.5 text-right font-bold ${
                             wall.distSpot >= 0 ? 'text-emerald-400' : 'text-red-400'

@@ -137,10 +137,35 @@ export function analyzeOptionPositions(
     };
 
   const dteYears = Math.max(1, selectedExpirationInfo.dte) / 252.0;
-  const spot = underlyingPrice > 0 ? underlyingPrice : 30.0;
+  if (underlyingPrice <= 0) {
+    return {
+      underlyingSymbol: '',
+      underlyingPrice: 0,
+      marketType: 'equity',
+      availableExpirations: allExpirations,
+      selectedExpiration: expirationDate,
+      selectedExpirationInfo,
+      openInterestDate: '',
+      maxPain: 0,
+      ivAtm: null,
+      ivQuality: 'INSUFICIENTE',
+      hv21: 0,
+      hv63: 0,
+      putCallRatio: 0,
+      totalCallOpenInterest: 0,
+      totalPutOpenInterest: 0,
+      top5CallWalls: [],
+      top5PutWalls: [],
+      strikeDistribution: [],
+      straddleRows: [],
+      electedOptionStrategy: null,
+    };
+  }
 
-  const realHv21 = calculateHistoricalVolatility(historicalPrices, 21) ?? 24.5;
-  const realHv63 = calculateHistoricalVolatility(historicalPrices, 63) ?? 26.0;
+  const spot = underlyingPrice;
+
+  const realHv21 = calculateHistoricalVolatility(historicalPrices, 21) ?? 0;
+  const realHv63 = calculateHistoricalVolatility(historicalPrices, 63) ?? 0;
 
   // Mapa de analytics indexado por símbolo da opção
   const analyticsBySymbol = new Map<string, OptionAnalyticsItem>();
@@ -185,7 +210,12 @@ export function analyzeOptionPositions(
         ? analyticsItem.impliedVolatility
         : pos.iv ?? null;
 
-    const delta = analyticsItem?.delta !== undefined ? analyticsItem.delta : pos.delta ?? (side === 'call' ? 0.5 : -0.5);
+    const delta =
+      analyticsItem?.delta !== undefined && analyticsItem.delta !== null
+        ? analyticsItem.delta
+        : pos.delta !== undefined && pos.delta !== null
+        ? pos.delta
+        : undefined;
 
     const enriched: OptionPositionItem = {
       ...pos,
@@ -227,10 +257,10 @@ export function analyzeOptionPositions(
       contracts: c.openInterest || 0,
       uncovered: c.uncoveredQuantity || 0,
       covered: c.coveredQuantity || 0,
-      iv: c.iv || 0,
-      delta: c.delta || 0.5,
+      iv: c.iv ?? null,
+      delta: c.delta ?? null,
       distSpot: Number((((c.strike - spot) / spot) * 100).toFixed(1)),
-      lastPrice: c.lastPrice || 0,
+      lastPrice: c.lastPrice ?? null,
     }));
 
   // Top 5 Put Walls (Suporte Institucional)
@@ -244,10 +274,10 @@ export function analyzeOptionPositions(
       contracts: p.openInterest || 0,
       uncovered: p.uncoveredQuantity || 0,
       covered: p.coveredQuantity || 0,
-      iv: p.iv || 0,
-      delta: p.delta || -0.5,
+      iv: p.iv ?? null,
+      delta: p.delta ?? null,
       distSpot: Number((((p.strike - spot) / spot) * 100).toFixed(1)),
-      lastPrice: p.lastPrice || 0,
+      lastPrice: p.lastPrice ?? null,
     }));
 
   // Distribuição de Volume / Open Interest por Strike
@@ -256,10 +286,14 @@ export function analyzeOptionPositions(
   );
   const distributionStrikes = relevantStrikes.length > 0 ? relevantStrikes : allStrikes.slice(0, 30);
 
+  const strikeStep = distributionStrikes.length > 1 && distributionStrikes[1] > distributionStrikes[0]
+    ? (distributionStrikes[1] - distributionStrikes[0])
+    : 1.0;
+
   const strikeDistribution: StrikeVolumeDistribution[] = distributionStrikes.map((strike) => {
     const callOi = callsByStrike.get(strike) || 0;
     const putOi = putsByStrike.get(strike) || 0;
-    const isSpot = Math.abs(strike - spot) <= (distributionStrikes[1] - distributionStrikes[0] || 0.5) / 2;
+    const isSpot = Math.abs(strike - spot) <= strikeStep / 2;
     const isMaxPain = strike === maxPainStrike;
 
     return {

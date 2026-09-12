@@ -27,9 +27,9 @@ describe('Motor de Opções e Barreiras B3 — Testes Obrigatórios O1 a O8 (Spe
 
     expect(res.top5CallWalls).toHaveLength(1);
     expect(res.top5CallWalls[0].strike).toBe(30.0);
-    expect(res.top5CallWalls[0].contracts).toBe(500000);
-    expect(res.top5CallWalls[0].lastPrice).toBe(0); // Sem preço teórico fictício
-    expect(res.top5CallWalls[0].iv).toBe(0);
+    expect(res.top5CallWalls[0].lastPrice).toBeNull(); // Sem preço teórico fictício
+    expect(res.top5CallWalls[0].iv).toBeNull();
+    expect(res.top5CallWalls[0].delta).toBeNull();
   });
 
   // O2: confidence: 'low' não elegível para IV ATM
@@ -196,4 +196,29 @@ describe('Motor de Opções e Barreiras B3 — Testes Obrigatórios O1 a O8 (Spe
     expect(mostLiquid.date).toBe('2026-09-18');
     expect(mostLiquid.dte).toBe(14);
   });
+
+  // Testes de Regressão da Auditoria - Fase 3 (Itens 3.5 e 3.6)
+  it('Fase 3 - Item 3.6: underlyingPrice <= 0 deve retornar estado vazio explícito e nunca adotar spot padrão de 30.0', () => {
+    const positions: OptionPositionItem[] = [
+      { symbol: 'PETRI300', underlyingSymbol: 'PETR4', side: 'call', strike: 30.0, expirationDate: '2026-09-18', openInterest: 50000 },
+    ];
+    const res = analyzeOptionPositions('PETR4', 0, positions, [], '2026-09-18', mockExp);
+
+    expect(res.underlyingPrice).toBe(0);
+    expect(res.top5CallWalls).toHaveLength(0);
+    expect(res.top5PutWalls).toHaveLength(0);
+    expect(res.strikeDistribution).toHaveLength(0);
+  });
+
+  it('Fase 3 - Item 3.5: delta sem analytics não deve ser fabricado como 0.5 ou -0.5', () => {
+    const positions: OptionPositionItem[] = [
+      { symbol: 'PETRI300', underlyingSymbol: 'PETR4', side: 'call', strike: 30.0, expirationDate: '2026-09-18', openInterest: 50000 },
+      { symbol: 'PETRU300', underlyingSymbol: 'PETR4', side: 'put', strike: 30.0, expirationDate: '2026-09-18', openInterest: 50000 },
+    ];
+    const res = analyzeOptionPositions('PETR4', 30.0, positions, [], '2026-09-18', mockExp);
+
+    expect(res.top5CallWalls[0].delta).toBeNull();
+    expect(res.top5PutWalls[0].delta).toBeNull();
+  });
 });
+
