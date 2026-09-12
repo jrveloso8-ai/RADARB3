@@ -257,14 +257,14 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
                 <span className="text-gray-400">Investidores Únicos Hoje:</span>
                 <span className="font-mono text-cyan-400 font-bold text-xs flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" />
-                  {uniqueVisitors || 1} {uniqueVisitors === 1 ? 'visitante único' : 'visitantes únicos'}
+                  {uniqueVisitors ?? 0} {uniqueVisitors === 1 ? 'visitante único' : 'visitantes únicos'}
                 </span>
               </div>
 
               <div className="flex items-center justify-between p-3 bg-[#0b0f19] rounded-xl border border-gray-800">
-                <span className="text-gray-400">Vercel Web Analytics:</span>
-                <span className="text-xs font-mono text-emerald-400 font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Ativo em Tempo Real
+                <span className="text-gray-400">Rastreamento de Acessos:</span>
+                <span className="text-xs font-mono text-gray-300 font-semibold flex items-center gap-1">
+                  Telemetria Anônima Local (LGPD)
                 </span>
               </div>
 

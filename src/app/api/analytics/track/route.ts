@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
   saveData(analytics);
 
   return NextResponse.json({
-    uniqueToday: Math.max(analytics.uniqueHashes.length, 1),
+    uniqueToday: analytics.uniqueHashes.length,
     totalViewsToday: analytics.totalViews,
     date: todayStr,
   });

@@ -378,8 +378,8 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                     : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
                 }`}
               >
-                <Bot className="w-3.5 h-3.5 text-purple-400" />
-                <span>Consultor IA</span>
+                <BookOpen className="w-3.5 h-3.5 text-purple-400" />
+                <span>Manual Interativo</span>
               </button>
             </div>
           </div>

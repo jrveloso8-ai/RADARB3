@@ -22,7 +22,7 @@ interface ConsultantRequestBody {
 export async function GET() {
   return NextResponse.json({
     status: 'ONLINE',
-    service: 'Agente de IA do Manual Radar B3 v2',
+    service: 'Manual Interativo e Busca de Regras do Radar B3',
     timestamp: new Date().toISOString(),
   });
 }

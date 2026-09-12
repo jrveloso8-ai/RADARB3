@@ -43,7 +43,7 @@ export const AIConsultantView: React.FC<AIConsultantViewProps> = ({ currentQuote
     {
       id: '1',
       sender: 'ai',
-      text: `### 🤖 Olá! Sou o Consultor IA Especialista em Estudos de Ações & Opções B3
+      text: `### 📖 Olá! Sou o Manual Interativo e Base de Conhecimento do Radar B3
 Estou calibrado com as regras do **Catálogo Oficial de 25 Estratégias de Opções** e com o motor de análise em 3 camadas (**CNPI-P** Fundamentos, **CNPI-T** Técnico e **CNPI-D** Barreiras de Opções).
 
 ${
@@ -123,7 +123,7 @@ Como posso apoiar seus estudos hoje?`,
         {
           id: (Date.now() + 1).toString(),
           sender: 'ai',
-          text: 'Falha na comunicação com o Consultor IA.',
+          text: 'Falha na comunicação com o Manual Interativo.',
           timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -150,26 +150,26 @@ Como posso apoiar seus estudos hoje?`,
   return (
     <div className="space-y-6">
       {/* ========================================================================= */}
-      {/* SEÇÃO SUPERIOR: APRESENTAÇÃO PERSUASIVA, FUNCIONALIDADES E VANTAGENS */}
+      {/* SEÇÃO SUPERIOR: APRESENTAÇÃO DO MANUAL INTERATIVO */}
       {/* ========================================================================= */}
       <div className="bg-gradient-to-br from-[#0b101b] via-[#111827] to-[#0f172a] p-6 sm:p-8 rounded-3xl border-2 border-cyan-500/30 shadow-2xl space-y-6">
-        {/* Cabeçalho de Impacto */}
+        {/* Cabeçalho */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-gray-800/80 pb-5">
           <div className="flex items-start gap-4">
             <div className="p-3.5 bg-gradient-to-tr from-cyan-600 via-emerald-500 to-teal-400 rounded-2xl text-slate-950 shadow-lg shadow-cyan-500/20 mt-0.5">
-              <Cpu className="w-8 h-8 font-black" />
+              <BookOpen className="w-8 h-8 font-black" />
             </div>
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="px-2.5 py-0.5 rounded-md text-[11px] font-black bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 tracking-wider font-mono">
-                  INTELIGÊNCIA QUANTITATIVA CNPI
+                  BASE DE CONHECIMENTO & REGRAS DO SISTEMA
                 </span>
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">
-                  Consultor IA: Decisões Rápidas, Precisas e Sem Emoção
+                  Manual Interativo: Regras, Conceitos e Vereditos
                 </h1>
               </div>
               <p className="text-xs sm:text-sm text-gray-300 mt-2 leading-relaxed max-w-4xl">
-                Transforme centenas de dados complexos da B3 em diagnósticos objetivos e acionáveis em segundos. O Consultor IA integra a solidez dos <strong>Fundamentos (CNPI-P)</strong>, o timing da <strong>Análise Técnica (CNPI-T)</strong> e o posicionamento institucional das <strong>Barreiras de Opções (B3)</strong> em uma única fonte da verdade matemática.
+                Consulte rapidamente as regras do <strong>Catálogo Oficial de 25 Estratégias de Opções</strong>, o funcionamento do motor em 3 camadas (<strong>Fundamentos CNPI-P</strong>, <strong>Análise Técnica CNPI-T</strong> e <strong>Barreiras de Opções B3</strong>) e os critérios determinísticos de validação operacional.
               </p>
             </div>
           </div>
@@ -239,17 +239,17 @@ Como posso apoiar seus estudos hoje?`,
       {/* SEÇÃO PRINCIPAL: INTERFACE INTERATIVA DO CONSULTOR IA */}
       {/* ========================================================================= */}
       <div className="bg-[#0f172a] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[640px]">
-        {/* Header do Consultor IA */}
+        {/* Header do Manual Interativo */}
         <div className="p-4 bg-[#111827] border-b border-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-              <Bot className="w-5 h-5 text-slate-950 font-bold" />
+              <BookOpen className="w-5 h-5 text-slate-950 font-bold" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-white text-sm sm:text-base">Consultor IA de Estudos</h3>
+                <h3 className="font-bold text-white text-sm sm:text-base">Manual Interativo de Estudos</h3>
                 <span className="px-2 py-0.2 rounded-full text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
-                  CNPI EXPERT
+                  BASE REGRAS B3
                 </span>
               </div>
               <p className="text-[11px] text-gray-400">
@@ -260,7 +260,7 @@ Como posso apoiar seus estudos hoje?`,
 
           <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400 font-mono">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Modelo Ativo</span>
+            <span>Manual Ativo</span>
           </div>
         </div>
 
@@ -275,7 +275,7 @@ Como posso apoiar seus estudos hoje?`,
               >
                 {!isUser && (
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-emerald-500 flex items-center justify-center text-slate-950 shrink-0 font-bold mt-1 shadow-md">
-                    <Bot className="w-4 h-4" />
+                    <BookOpen className="w-4 h-4" />
                   </div>
                 )}
 
@@ -314,7 +314,7 @@ Como posso apoiar seus estudos hoje?`,
           {loading && (
             <div className="flex items-center gap-3 text-xs text-gray-400 font-mono p-3 bg-[#111827] rounded-2xl border border-gray-800 w-fit">
               <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
-              <span>Consultor IA analisando o cenário quantitativo...</span>
+              <span>Consultando o Manual e regras quantitativas...</span>
             </div>
           )}
           <div ref={messagesEndRef} />
