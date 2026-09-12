@@ -276,4 +276,71 @@ describe('Domain: Opportunity Radar & 25 Strategies Mapping', () => {
     expect(bullOpp!.execution.probabilityOfProfit).toBeNull();
     expect(bullOpp!.execution.popProvenance).toBe('INDISPONIVEL');
   });
+
+  // =========================================================================
+  // TESTE DE REGRESSÃO EXIGIDO - ITEM 3A (MAX PAIN PIN-RISK STRATEGY)
+  // =========================================================================
+  it('Item 3A: com q.maxPain definido e preço próximo (dentro de 4%), gera oportunidade de Pin-Risk Butterfly', () => {
+    const mockQuoteWithMaxPain = {
+      symbol: 'PETR4',
+      shortName: 'Petrobras PN',
+      price: 38.00,
+      changePct: 0.2,
+      history: [],
+      trend: 'LATERAL' as const,
+      fundamentalStatus: 'APROVADO' as const,
+      fundamentalScore: 80,
+      maxPain: 38.50, // Distância: |38.00 - 38.50| / 38.00 = 1.3% (dentro do limiar de 4%)
+      ivAtm: 26.0,
+      realOptions: {
+        debit: 0.45,
+        pop: 62,
+      },
+    };
+
+    const result = buildMasterOpportunityList({
+      quotes: [mockQuoteWithMaxPain],
+    });
+
+    const maxPainOpp = result.opportunities.find((o) => o.id === 'max-pain-PETR4');
+    expect(maxPainOpp).toBeDefined();
+    expect(maxPainOpp!.matchedStrategyName).toMatch(/Butterfly/); // Long Butterfly ou Iron Butterfly
+    expect(maxPainOpp!.bias).toBe('LATERAL');
+    expect(maxPainOpp!.scoreProvenance).toBe('DERIVADO');
+    expect(maxPainOpp!.convictionScore).toBeGreaterThanOrEqual(75);
+    expect(maxPainOpp!.execution.target1).toBe(38.50);
+  });
+
+  it('Item 3A: sem q.maxPain definido ou com preço distante do Max Pain, não gera oportunidade de pin-risk', () => {
+    const mockQuoteDistantMaxPain = {
+      symbol: 'VALE3',
+      shortName: 'Vale ON',
+      price: 60.00,
+      changePct: 0.1,
+      history: [],
+      trend: 'LATERAL' as const,
+      fundamentalStatus: 'APROVADO' as const,
+      fundamentalScore: 80,
+      maxPain: 70.00, // Distância: 16.6% (muito além do limiar de 4%)
+    };
+
+    const mockQuoteWithoutMaxPain = {
+      symbol: 'ITUB4',
+      shortName: 'Itaú PN',
+      price: 35.00,
+      changePct: 0.5,
+      history: [],
+      trend: 'LATERAL' as const,
+      fundamentalStatus: 'APROVADO' as const,
+      fundamentalScore: 85,
+      maxPain: undefined,
+    };
+
+    const result = buildMasterOpportunityList({
+      quotes: [mockQuoteDistantMaxPain, mockQuoteWithoutMaxPain],
+    });
+
+    expect(result.opportunities.find((o) => o.id === 'max-pain-VALE3')).toBeUndefined();
+    expect(result.opportunities.find((o) => o.id === 'max-pain-ITUB4')).toBeUndefined();
+  });
 });

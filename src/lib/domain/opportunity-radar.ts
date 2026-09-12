@@ -640,6 +640,89 @@ export function detectTheWheelOpportunity(
 }
 
 /**
+ * Detecta oportunidade de Pin-Risk / Efeito Atrator no Strike de Max Pain B3 (#13 Long Butterfly ou #16 Iron Butterfly)
+ * Racional: Quando o preço à vista está próximo do strike de Max Pain (dentro do limiar de 4%),
+ * os lançadores de opções têm incentivo financeiro para defender o strike, gerando ancoragem/compressão.
+ */
+export function detectMaxPainPinOpportunity(
+  symbol: string,
+  shortName: string,
+  spotPrice: number,
+  changePct: number,
+  maxPainStrike: number | undefined,
+  ivAtm: number | null,
+  realOptions?: {
+    debit?: number;
+    netCredit?: number;
+    pop?: number;
+  }
+): TradeOpportunityItem | null {
+  if (!maxPainStrike || maxPainStrike <= 0) return null;
+
+  // PROVENANCE: ESTIMADO Limiar estatístico de atração de pin-risk de até 4% de distância entre spot e Max Pain
+  const distancePct = Math.abs((spotPrice - maxPainStrike) / spotPrice);
+  if (distancePct > 0.04) return null;
+
+  // Classifica o regime de volatilidade com base no IV ATM real medido
+  const volRegime: VolatilityRegime = ivAtm && ivAtm > 35 ? 'ALTA' : ivAtm && ivAtm < 18 ? 'MUITO_BAIXA' : 'MODERADA';
+
+  const matched = matchBestOptionStrategyFrom25({
+    bias: 'LATERAL',
+    volRegime,
+    spot: spotPrice,
+    isPinTarget: true,
+    maxPainStrike,
+  });
+
+  // Conviction score determinístico derivado da proximidade do strike de Max Pain (quanto mais próximo, maior o score)
+  const proximityBonus = Math.round((1 - distancePct / 0.04) * 20);
+  const convictionScore = Math.min(95, Math.max(65, 75 + proximityBonus));
+
+  const pop = realOptions?.pop ?? Math.round(55 + (1 - distancePct / 0.04) * 15);
+  const maxProfitEst =
+    matched.isCredit && realOptions?.netCredit
+      ? `Crédito de R$ ${realOptions.netCredit.toFixed(2)} por opção`
+      : realOptions?.debit
+      ? `R$ ${(Math.abs(maxPainStrike * 0.04) - realOptions.debit).toFixed(2)} por opção`
+      : undefined;
+
+  return {
+    id: `max-pain-${symbol}`,
+    symbol,
+    shortName,
+    assetClass: 'OPÇÃO',
+    category: 'VOLATILIDADE_OPCOES',
+    title: `${matched.strategy.name} (Efeito Max Pain) — ${symbol}`,
+    bias: 'LATERAL',
+    convictionScore,
+    scoreProvenance: 'DERIVADO',
+    confidenceBadge: 'ALTA CONVICÇÃO',
+    rationale: `Ativo cotado a R$ ${spotPrice.toFixed(2)}, a apenas ${(distancePct * 100).toFixed(1)}% do ponto de menor prejuízo dos formadores de mercado (Max Pain em R$ ${maxPainStrike.toFixed(2)}). Tendência dos formadores defenderem esse strike até o vencimento. ${matched.rationale}`,
+    triggerCondition: `Montar estrutura de pin-risk no strike R$ ${maxPainStrike.toFixed(2)}: ${matched.strategyLegsFormatted}.`,
+    execution: {
+      entryPrice: spotPrice,
+      stopLoss: Number((spotPrice * (matched.isCredit ? 1.06 : 0.95)).toFixed(2)),
+      target1: maxPainStrike,
+      target2: maxPainStrike,
+      riskRewardRatio: 2.2,
+      timeframe: 'Vencimento Atual B3',
+      probabilityOfProfit: pop,
+      popProvenance: realOptions?.pop ? 'DERIVADO' : 'ESTIMADO',
+      electedStrategy: matched.strategy,
+      strategyLegsFormatted: matched.strategyLegsFormatted,
+      maxProfitEst,
+      maxLossEst: realOptions?.debit ? `R$ ${realOptions.debit.toFixed(2)}` : undefined,
+      profitProvenance: maxProfitEst ? 'DERIVADO' : 'INDISPONIVEL',
+    },
+    matchedStrategyId: matched.strategy.id,
+    matchedStrategyName: matched.strategy.name,
+    tags: ['Max Pain', 'Pin Risk', matched.strategy.name, 'Derivativos B3'],
+    spotPrice,
+    changePct,
+  };
+}
+
+/**
  * Detecta Oportunidades Intermarket e Commodities Globais
  */
 export function detectIntermarketOpportunities(
@@ -856,6 +939,20 @@ export function buildMasterOpportunityList(params: {
         q.realOptions
       );
       if (wheelOpp) opportunities.push(wheelOpp);
+    }
+
+    // F. Oportunidade de Pin-Risk no Strike de Max Pain B3 (#13 Long Butterfly ou #16 Iron Butterfly)
+    if (q.maxPain && q.maxPain > 0) {
+      const pinOpp = detectMaxPainPinOpportunity(
+        q.symbol,
+        q.shortName,
+        q.price,
+        q.changePct,
+        q.maxPain,
+        q.ivAtm || null,
+        q.realOptions
+      );
+      if (pinOpp) opportunities.push(pinOpp);
     }
   }
 
