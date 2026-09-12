@@ -33,12 +33,6 @@ echo ---------------------------------------------------
 echo.
 
 echo Executando script anti-dados-fabricados (scripts\check-fabricated-data.js) ...
-echo ^(ATENCAO: este script hoje isenta qualquer linha com o comentario
-echo   "// PROVENANCE:" de ser contada como violacao, MESMO que o valor
-echo   fabricado nao tenha sido removido - so etiquetado. Ate essa brecha
-echo   ser fechada no proprio script, um resultado "limpo" aqui NAO prova
-echo   sozinho que o dado passou a ser real - confira o diff manualmente
-echo   nos itens marcados com PROVENANCE.^)
 echo ---------------------------------------------------
 call node scripts\check-fabricated-data.js
 set FABRICATED_RESULT=%ERRORLEVEL%

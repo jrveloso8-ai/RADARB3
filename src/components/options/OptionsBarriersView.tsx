@@ -260,9 +260,19 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
               HV21 / HV63 (Real)
             </span>
             <span className="text-sm font-bold text-white mt-1 block">
-              {data.hv21}% / {data.hv63}%
+              <DataValue
+                value={data.hv21 && data.hv21 > 0 ? `${data.hv21}%` : null}
+                provenance={data.hv21 && data.hv21 > 0 ? 'DERIVADO' : 'INDISPONIVEL'}
+              />
+              {' / '}
+              <DataValue
+                value={data.hv63 && data.hv63 > 0 ? `${data.hv63}%` : null}
+                provenance={data.hv63 && data.hv63 > 0 ? 'DERIVADO' : 'INDISPONIVEL'}
+              />
             </span>
-            <span className="text-[10px] text-gray-500 mt-0.5 block font-sans">Volatilidade Real B3</span>
+            <span className="text-[10px] text-gray-500 mt-0.5 block font-sans">
+              HV calculada internamente a partir do histórico de preços B3 — a BRAPI não disponibiliza este dado como campo pronto.
+            </span>
           </div>
 
           {/* Card 5: P/C Ratio */}
@@ -297,9 +307,23 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
           <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-400 border border-cyan-500/30 font-bold">
             PRECIFICAÇÃO
           </span>
-          <span>Modelo Matemático: Black-Scholes (Merton 1973 c/ q=DivYield) | Volatilidade: HV21 ({data?.hv21 || 24.5}%)</span>
+          <span>
+            Modelo Matemático: Black-Scholes (Merton 1973 c/ q=DivYield) | Volatilidade: HV21 (
+            <DataValue
+              value={data?.hv21 && data.hv21 > 0 ? `${data.hv21}%` : null}
+              provenance={data?.hv21 && data.hv21 > 0 ? 'DERIVADO' : 'INDISPONIVEL'}
+            />
+            )
+          </span>
         </div>
-        <span className="text-gray-500">Proveniência: THEORETICAL_BS_HV21_B3_EOD</span>
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 text-[10px] hidden md:inline">
+            HV calculada internamente a partir do histórico de preços B3 — a BRAPI não disponibiliza este dado como campo pronto. |
+          </span>
+          <span className="text-gray-400">
+            Proveniência: <strong className="text-emerald-400">DERIVADO</strong>
+          </span>
+        </div>
       </div>
 
       {/* 5. SEÇÃO CENTRAL EM 2 COLUNAS (DISTRIBUIÇÃO DE VOLUME + TOP 5 WALLS) */}

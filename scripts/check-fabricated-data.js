@@ -26,6 +26,7 @@ const TARGET_FILES = [
   'src/lib/domain/black-scholes.ts',
   'src/lib/domain/study-auditor.ts',
   'src/lib/domain/options-barriers.ts',
+  'src/components/options/OptionsBarriersView.tsx',
 ];
 
 // Regex estrita de proveniência com taxonomia obrigatória
@@ -36,7 +37,11 @@ const FORBIDDEN_PATTERNS = [
   { name: 'Fallback "|| 0."', regex: /\|\|\s*0\.\d+/ },
   { name: 'Fallback "|| 100"', regex: /\|\|\s*100\b/ },
   { name: 'Nullish HV "?? 24.5"', regex: /\?\?\s*24\.5/ },
+  { name: 'Fallback HV "|| 24.5"', regex: /\|\|\s*24\.5/ },
   { name: 'Nullish HV "?? 26.0"', regex: /\?\?\s*26\.0/ },
+  { name: 'Fallback HV "|| 26.0"', regex: /\|\|\s*26\.0/ },
+  { name: 'Nullish HV "?? 25.0"', regex: /\?\?\s*25(?:\.0)?\b/ },
+  { name: 'Fallback HV "|| 25.0"', regex: /\|\|\s*25(?:\.0)?\b/ },
   { name: 'Débito estimado "* 0.02"', regex: /\*\s*0\.02\b/ },
   { name: 'Prêmio estimado "* 0.025"', regex: /\*\s*0\.025\b/ },
   { name: 'Crédito estimado "* 0.015"', regex: /\*\s*0\.015\b/ },
