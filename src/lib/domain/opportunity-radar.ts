@@ -760,6 +760,15 @@ export function buildMasterOpportunityList(params: {
     dte?: number;
     maxPain?: number;
     supports?: number[];
+    realOptions?: {
+      debit?: number;
+      deltaCallLong?: number;
+      deltaPutLong?: number;
+      netCredit?: number;
+      pop?: number;
+      putPremium?: number;
+      putDelta?: number;
+    };
   }[];
   macroOverview?: {
     brentChange: number;
@@ -790,7 +799,7 @@ export function buildMasterOpportunityList(params: {
     const divOpp = detectRsiDivergences(q.symbol, q.shortName, q.history, q.price);
     if (divOpp) opportunities.push(divOpp);
 
-    // B. Trava de Alta com Call (#11) se em Alta
+    // B. Trava de Alta com Call (#11) se em Alta (conecta realOptions quando disponível)
     if (trend === 'ALTA' && q.fundamentalStatus === 'APROVADO') {
       const bullOpp = detectBullCallSpreadOpportunity(
         q.symbol,
@@ -799,12 +808,13 @@ export function buildMasterOpportunityList(params: {
         q.changePct,
         trend,
         q.fundamentalStatus,
-        q.fundamentalScore
+        q.fundamentalScore,
+        q.realOptions
       );
       if (bullOpp) opportunities.push(bullOpp);
     }
 
-    // C. Trava de Baixa com Put (#12) se em Baixa
+    // C. Trava de Baixa com Put (#12) se em Baixa (conecta realOptions quando disponível)
     if (trend === 'BAIXA' || q.fundamentalStatus === 'REPROVADO') {
       const bearOpp = detectBearSpreadOpportunity(
         q.symbol,
@@ -812,12 +822,13 @@ export function buildMasterOpportunityList(params: {
         q.price,
         q.changePct,
         trend,
-        q.fundamentalStatus
+        q.fundamentalStatus,
+        q.realOptions
       );
       if (bearOpp) opportunities.push(bearOpp);
     }
 
-    // D. Iron Condor (#20) se em mercado lateral
+    // D. Iron Condor (#20) se em mercado lateral (conecta realOptions quando disponível)
     if (trend === 'LATERAL' && q.fundamentalStatus === 'APROVADO') {
       const condorOpp = detectIronCondorOpportunity(
         q.symbol,
@@ -826,12 +837,13 @@ export function buildMasterOpportunityList(params: {
         q.changePct,
         trend,
         q.fundamentalStatus,
-        q.ivAtm || null
+        q.ivAtm || null,
+        q.realOptions
       );
       if (condorOpp) opportunities.push(condorOpp);
     }
 
-    // E. The Wheel Strategy (#6) para empresas de score alto
+    // E. The Wheel Strategy (#6) para empresas de score alto (conecta realOptions quando disponível)
     if (q.fundamentalStatus === 'APROVADO' && q.fundamentalScore >= 75) {
       const wheelOpp = detectTheWheelOpportunity(
         q.symbol,
@@ -840,7 +852,8 @@ export function buildMasterOpportunityList(params: {
         q.fundamentalStatus,
         q.fundamentalScore,
         q.supports || [q.price * 0.95],
-        q.ivAtm || null
+        q.ivAtm || null,
+        q.realOptions
       );
       if (wheelOpp) opportunities.push(wheelOpp);
     }

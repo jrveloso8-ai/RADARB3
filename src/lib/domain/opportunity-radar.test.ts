@@ -217,4 +217,63 @@ describe('Domain: Opportunity Radar & 25 Strategies Mapping', () => {
     const ivResultWithRealOptions = resolveAtmIV(28.4);
     expect(ivResultWithRealOptions).toBe(28.4);
   });
+
+  it('Regressão Item 1.2/1.3 & 5: buildMasterOpportunityList conecta realOptions às estratégias de opções', () => {
+    const mockQuote = {
+      symbol: 'PETR4',
+      shortName: 'Petrobras PN',
+      price: 38.50,
+      changePct: 1.2,
+      history: [],
+      trend: 'ALTA' as const,
+      fundamentalStatus: 'APROVADO' as const,
+      fundamentalScore: 82,
+      ivAtm: 29.5,
+      realOptions: {
+        debit: 1.15,
+        deltaCallLong: 0.55,
+        netCredit: 0.85,
+        pop: 55,
+        putPremium: 0.95,
+        putDelta: 0.30,
+      },
+    };
+
+    const result = buildMasterOpportunityList({
+      quotes: [mockQuote],
+    });
+
+    const bullOpp = result.opportunities.find((o) => o.id === 'bull-spread-PETR4');
+    expect(bullOpp).toBeDefined();
+    // Verifica que agora o débito e PoP são calculados a partir dos dados reais repassados
+    expect(bullOpp!.execution.maxLossEst).toBe('R$ 1.15 (débito real pago)');
+    expect(bullOpp!.execution.profitProvenance).toBe('DERIVADO');
+    expect(bullOpp!.execution.probabilityOfProfit).toBe(55);
+    expect(bullOpp!.execution.popProvenance).toBe('DERIVADO');
+  });
+
+  it('Regressão Item 1.2/1.3 & 5: buildMasterOpportunityList sem realOptions mantém proveniência INDISPONIVEL', () => {
+    const mockQuoteWithoutOptions = {
+      symbol: 'VALE3',
+      shortName: 'Vale ON',
+      price: 60.00,
+      changePct: 2.0,
+      history: [],
+      trend: 'ALTA' as const,
+      fundamentalStatus: 'APROVADO' as const,
+      fundamentalScore: 78,
+    };
+
+    const result = buildMasterOpportunityList({
+      quotes: [mockQuoteWithoutOptions],
+    });
+
+    const bullOpp = result.opportunities.find((o) => o.id === 'bull-spread-VALE3');
+    expect(bullOpp).toBeDefined();
+    // Sem opções reais passadas, deve se manter INDISPONIVEL honestamente
+    expect(bullOpp!.execution.maxLossEst).toBeUndefined();
+    expect(bullOpp!.execution.profitProvenance).toBe('INDISPONIVEL');
+    expect(bullOpp!.execution.probabilityOfProfit).toBeNull();
+    expect(bullOpp!.execution.popProvenance).toBe('INDISPONIVEL');
+  });
 });
