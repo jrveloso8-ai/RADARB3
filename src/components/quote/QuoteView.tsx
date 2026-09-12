@@ -246,18 +246,27 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                   <span className="text-gray-400 text-[10px] block">VARIAÇÃO</span>
                   <span
                     className={`text-sm font-bold flex items-center ${
-                      data.regularMarketChangePercent >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      (data.regularMarketChangePercent || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
                     }`}
                   >
-                    {data.regularMarketChangePercent >= 0 ? '+' : ''}
-                    {data.regularMarketChangePercent ? data.regularMarketChangePercent.toFixed(2) : '0.00'}%
+                    <DataValue
+                      value={
+                        data.regularMarketChangePercent !== undefined && data.regularMarketChangePercent !== null
+                          ? `${data.regularMarketChangePercent >= 0 ? '+' : ''}${data.regularMarketChangePercent.toFixed(2)}%`
+                          : null
+                      }
+                      provenance={data.regularMarketChangePercent !== undefined && data.regularMarketChangePercent !== null ? 'MEDIDO' : 'INDISPONIVEL'}
+                    />
                   </span>
                 </div>
 
                 <div className="px-3 py-1.5 rounded-xl bg-[#111827] border border-gray-800">
                   <span className="text-gray-400 text-[10px] block">VENCIMENTO OPÇÕES</span>
                   <span className="text-xs font-bold text-cyan-300">
-                    {barrier?.expirationDate || '2026-09-18'} ({barrier?.dte || 13} DTE)
+                    <DataValue
+                      value={barrier?.expirationDate ? `${barrier.expirationDate} (${barrier.dte ?? 'N/D'} DTE)` : null}
+                      provenance={barrier?.expirationDate ? 'MEDIDO' : 'INDISPONIVEL'}
+                    />
                   </span>
                 </div>
               </div>
@@ -410,7 +419,10 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                 <div className="p-3 bg-[#0b101b] border border-gray-800 rounded-xl space-y-1">
                   <span className="text-[10px] text-gray-400 block font-sans">SPOT</span>
                   <span className="text-base font-bold text-white block">
-                    R$ {data.regularMarketPrice ? data.regularMarketPrice.toFixed(2) : '0.00'}
+                    <DataValue
+                      value={data.regularMarketPrice ? `R$ ${data.regularMarketPrice.toFixed(2)}` : null}
+                      provenance={data.regularMarketPrice ? 'MEDIDO' : 'INDISPONIVEL'}
+                    />
                   </span>
                   <span className="text-[9px] text-gray-500 block truncate">
                     {range52wLabel}
@@ -420,7 +432,10 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                 <div className="p-3 bg-[#0b101b] border border-gray-800 rounded-xl space-y-1">
                   <span className="text-[10px] text-amber-400 block font-sans">MA20 (CURTA)</span>
                   <span className="text-base font-bold text-white block">
-                    R$ {data.trendAnalysis?.movingAverages.mm20 ? data.trendAnalysis.movingAverages.mm20.toFixed(2) : '-'}
+                    <DataValue
+                      value={data.trendAnalysis?.movingAverages.mm20 ? `R$ ${data.trendAnalysis.movingAverages.mm20.toFixed(2)}` : null}
+                      provenance={data.trendAnalysis?.movingAverages.mm20 ? 'DERIVADO' : 'INDISPONIVEL'}
+                    />
                   </span>
                   <span className="text-[9px] text-emerald-400 flex items-center gap-0.5">
                     ▲ {data.regularMarketPrice && data.trendAnalysis?.movingAverages.mm20 && data.regularMarketPrice >= data.trendAnalysis.movingAverages.mm20 ? 'Acima' : 'Abaixo'}
@@ -430,7 +445,10 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                 <div className="p-3 bg-[#0b101b] border border-gray-800 rounded-xl space-y-1">
                   <span className="text-[10px] text-cyan-400 block font-sans">MA50 (MÉDIA)</span>
                   <span className="text-base font-bold text-white block">
-                    R$ {data.trendAnalysis?.movingAverages.mm50 ? data.trendAnalysis.movingAverages.mm50.toFixed(2) : '-'}
+                    <DataValue
+                      value={data.trendAnalysis?.movingAverages.mm50 ? `R$ ${data.trendAnalysis.movingAverages.mm50.toFixed(2)}` : null}
+                      provenance={data.trendAnalysis?.movingAverages.mm50 ? 'DERIVADO' : 'INDISPONIVEL'}
+                    />
                   </span>
                   <span className="text-[9px] text-gray-400 block">Médio Prazo</span>
                 </div>
@@ -438,7 +456,10 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                 <div className="p-3 bg-[#0b101b] border border-gray-800 rounded-xl space-y-1">
                   <span className="text-[10px] text-purple-400 block font-sans">MA200 (LONGA)</span>
                   <span className="text-base font-bold text-white block">
-                    R$ {data.trendAnalysis?.movingAverages.mm200 ? data.trendAnalysis.movingAverages.mm200.toFixed(2) : '-'}
+                    <DataValue
+                      value={data.trendAnalysis?.movingAverages.mm200 ? `R$ ${data.trendAnalysis.movingAverages.mm200.toFixed(2)}` : null}
+                      provenance={data.trendAnalysis?.movingAverages.mm200 ? 'DERIVADO' : 'INDISPONIVEL'}
+                    />
                   </span>
                   <span className="text-[9px] text-gray-400 block truncate">Tendência Primária</span>
                 </div>
@@ -747,7 +768,10 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                       <div className="p-3 bg-[#111827] rounded-xl border border-red-500/20">
                         <span className="text-[10px] text-red-400 block font-sans">STOP TÉCNICO</span>
                         <span className="text-sm font-bold text-red-400 mt-1 block">
-                          {plan ? `R$ ${plan.stop.toFixed(2)}` : '—'}
+                          <DataValue
+                            value={plan?.stop ? `R$ ${plan.stop.toFixed(2)}` : null}
+                            provenance={plan?.stop ? 'DERIVADO' : 'INDISPONIVEL'}
+                          />
                         </span>
                       </div>
 
@@ -756,7 +780,10 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                           {biasFromTrend(data?.trendAnalysis?.trend) === 'SHORT' ? 'ALVO 1 (SUPORTE)' : 'ALVO 1 (RESISTÊNCIA)'}
                         </span>
                         <span className="text-sm font-bold text-emerald-400 mt-1 block">
-                          {plan ? `R$ ${plan.target1.toFixed(2)}` : '—'}
+                          <DataValue
+                            value={plan?.target1 ? `R$ ${plan.target1.toFixed(2)}` : null}
+                            provenance={plan?.target1 ? 'DERIVADO' : 'INDISPONIVEL'}
+                          />
                         </span>
                       </div>
 
@@ -765,7 +792,10 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                           {biasFromTrend(data?.trendAnalysis?.trend) === 'SHORT' ? 'ALVO 2 (2º SUPORTE)' : 'ALVO 2 (2ª RESISTÊNCIA)'}
                         </span>
                         <span className="text-sm font-bold text-emerald-400 mt-1 block">
-                          {plan ? `R$ ${plan.target2.toFixed(2)}` : '—'}
+                          <DataValue
+                            value={plan?.target2 ? `R$ ${plan.target2.toFixed(2)}` : null}
+                            provenance={plan?.target2 ? 'DERIVADO' : 'INDISPONIVEL'}
+                          />
                         </span>
                       </div>
                     </div>
