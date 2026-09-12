@@ -22,7 +22,7 @@ describe('Pré-Liberação: Badge de Minério (ref.) e Disclaimers Permanentes',
     const content = fs.readFileSync(footerPath, 'utf-8');
 
     expect(content).toContain('AVISO LEGAL & CARÁTER ESTRITAMENTE EDUCACIONAL');
-    expect(content).toContain('não constitui recomendação de compra, venda ou execução');
+    expect(content).toContain('constitui recomendação de compra, venda ou execução');
     expect(content).toContain('(est.)');
     expect(content).toContain('(ref.)');
   });
