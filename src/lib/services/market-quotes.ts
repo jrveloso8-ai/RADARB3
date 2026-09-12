@@ -3,13 +3,18 @@
  * Suporta cotações de índices mundiais, commodities (Brent, WTI, Minério), agrícolas (Milho, Boi, Soja), moedas e VIX
  */
 
-interface CachedQuote {
+import { DataProvenance } from '../types/provenance';
+
+export interface CachedQuote {
   symbol: string;
   name: string;
   price: number;
   change: number;
   changePct: number;
   timestamp: number;
+  isStale?: boolean;
+  source: 'live' | 'fallback';
+  provenance: DataProvenance;
 }
 
 const quotesCache = new Map<string, { data: CachedQuote; expiresAt: number }>();
@@ -49,6 +54,9 @@ export async function fetchLiveMarketQuote(symbol: string, name: string): Promis
           change,
           changePct: Number(changePct.toFixed(2)),
           timestamp: Date.now(),
+          isStale: false,
+          source: 'live',
+          provenance: 'MEDIDO',
         };
 
         quotesCache.set(symbol, { data: quote, expiresAt: Date.now() + 60000 }); // Cache 60s
@@ -59,8 +67,9 @@ export async function fetchLiveMarketQuote(symbol: string, name: string): Promis
     // Fallback gracioso abaixo
   }
 
-  // Fallbacks coerentes caso o feed esteja temporariamente indisponível
+  // PROVENANCE: Valores de referência estáticos quando o feed Yahoo Finance estiver temporariamente indisponível. Marcados com isStale: true e source: 'fallback'.
   const fallbackDefaults: Record<string, { price: number; changePct: number; change: number }> = {
+    // PROVENANCE: Fallback SPY
     'SPY': { price: 761.78, changePct: -0.69, change: -5.27 },
     'EWZ': { price: 36.57, changePct: 1.50, change: 0.54 },
     '^VIX': { price: 16.43, changePct: 0.61, change: 0.10 },
@@ -83,6 +92,9 @@ export async function fetchLiveMarketQuote(symbol: string, name: string): Promis
     change: def.change,
     changePct: def.changePct,
     timestamp: Date.now(),
+    isStale: true,
+    source: 'fallback',
+    provenance: 'ESTIMADO',
   };
 
   quotesCache.set(symbol, { data: fallbackQuote, expiresAt: Date.now() + 15000 });
@@ -136,10 +148,13 @@ export async function getLiveMarketOverview(): Promise<LiveMarketOverview> {
   const ironOre = {
     symbol: 'FEF1!',
     name: 'Minério de Ferro Futuro 62% (SGX)',
+    // PROVENANCE: Fechamento de referência SGX 62% Fe quando feed em tempo real de Dalian/Cingapura está indisponível
     price: 97.90,
     change: -1.60,
     changePct: -1.61,
     isEstimated: true,
+    isStale: true,
+    source: 'fallback' as const,
     provenance: 'ESTIMADO' as const,
   };
 

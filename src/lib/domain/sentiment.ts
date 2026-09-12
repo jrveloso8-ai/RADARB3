@@ -4,6 +4,7 @@
  */
 
 import { LiveMarketOverview } from '../services/market-quotes';
+import { getRealHourlySentimentHistory, SentimentHistoryPoint } from '../services/sentiment-history';
 
 export type SentimentZone =
   | 'PESSIMISMO_EXTREMO'
@@ -59,14 +60,16 @@ export interface MarketSentimentReport {
     lastUpdateLabel: string;
     nextUpdateLabel: string;
     minutesToNextUpdate: number;
-    cycleType: '24H_HOURLY';
+    cycleType: string;
   };
+  hasSufficientHistory?: boolean;
+  historyStatusMessage?: string;
   hourlyHistory: Array<{
     hour: number;
     formattedHour: string;
     score: number;
     temperatureCelsius: number;
-    zone: SentimentZone;
+    zone: string;
   }>;
   calculatedAt: string;
 }
@@ -203,14 +206,16 @@ export function calculateMarketSentiment(
   const session = getMarketSessionInfo(targetDate);
 
   // Valores padrão de referência (alinhados com as cotações do TradingView)
-  const spy = liveOverview?.spy || { symbol: 'SPY', name: 'S&P 500 ETF (SPY)', price: 761.78, change: -5.27, changePct: -0.69, timestamp: Date.now() };
+  // PROVENANCE: Fallback de referência quando feed SPY ao vivo estiver temporariamente offline
+  const spy = liveOverview?.spy || { symbol: 'SPY', name: 'S&P 500 ETF (SPY)', price: 761.78, change: -5.27, changePct: -0.69, timestamp: Date.now(), isStale: true, source: 'fallback' as const };
   const ewz = liveOverview?.ewz || { symbol: 'EWZ', name: 'Brasil ETF NYSE (EWZ)', price: 36.57, change: 0.54, changePct: 1.50, timestamp: Date.now() };
   const vix = liveOverview?.vix || { symbol: '^VIX', name: 'Índice de Volatilidade (VIX)', price: 16.43, change: 0.10, changePct: 0.61, timestamp: Date.now() };
   const brent = liveOverview?.brent || { symbol: 'UKOIL', name: 'Petróleo Brent (UKOIL)', price: 94.37, change: -0.83, changePct: -0.87, timestamp: Date.now() };
   const wti = liveOverview?.wti || { symbol: 'USOIL', name: 'Petróleo WTI (USOIL)', price: 89.68, change: -1.01, changePct: -1.11, timestamp: Date.now() };
   const dxy = liveOverview?.dxy || { symbol: 'DXY', name: 'Índice Dólar Global (DXY)', price: 99.79, change: 0.14, changePct: 0.14, timestamp: Date.now() };
   const gold = liveOverview?.gold || { symbol: 'GOLD', name: 'Ouro Spot (GOLD)', price: 4321.59, change: -6.91, changePct: -0.16, timestamp: Date.now() };
-  const ironOre = liveOverview?.ironOre || { symbol: 'FEF1!', name: 'Minério de Ferro Futuro (SGX)', price: 97.90, change: -1.60, changePct: -1.61 };
+  // PROVENANCE: Fallback de referência quando cotação SGX de minério estiver temporariamente offline
+  const ironOre = liveOverview?.ironOre || { symbol: 'FEF1!', name: 'Minério de Ferro Futuro (SGX)', price: 97.90, change: -1.60, changePct: -1.61, isStale: true, source: 'fallback' as const };
 
   // =========================================================================
   // CÁLCULO REAL PONDERADO DOS 5 PILARES COM BASE EM ATIVOS DO TRADINGVIEW
@@ -261,7 +266,7 @@ export function calculateMarketSentiment(
   const fxStatusLabel = `${fxContribution > 0 ? '+' : ''}${fxContribution} pts (${fxStatus === 'POSITIVO' ? 'Positivo' : fxStatus === 'ESTAVEL' ? 'Estável' : 'Cautela'})`;
   const fxSummary = `DXY em ${dxy.price.toFixed(2)} (${dxy.changePct > 0 ? '+' : ''}${dxy.changePct.toFixed(2)}%) com volatilidade contida; suporte a fluxo cambial em equilíbrio.`;
 
-  // 4. Curva de Juros & Risco Fiscal Brasil (DI Futuro / EWZ)
+  // 4. Proxy de Risco-Brasil via ETF EWZ (NYSE)
   let fiscalScore = 42;
   if (ewz.changePct > 1.0) fiscalScore = 48; // EWZ em alta dá suporte
   else if (ewz.changePct < -1.0) fiscalScore = 30;
@@ -270,9 +275,9 @@ export function calculateMarketSentiment(
   const fiscalContribution = Number(((fiscalScore * fiscalWeight) / 100).toFixed(1));
   const fiscalStatus = fiscalScore >= 55 ? 'ESTAVEL' : 'CAUTELA';
   const fiscalStatusLabel = `${fiscalContribution > 0 ? '+' : ''}${fiscalContribution} / 25 pts (Cautela)`;
-  const fiscalSummary = `EWZ a US$ ${ewz.price.toFixed(2)} (${ewz.changePct > 0 ? '+' : ''}${ewz.changePct.toFixed(2)}%); prêmio de risco na curva longa de juros exige seletividade técnica.`;
+  const fiscalSummary = `Proxy ETF EWZ cotado a US$ ${ewz.price.toFixed(2)} (${ewz.changePct > 0 ? '+' : ''}${ewz.changePct.toFixed(2)}%); oscilação do ativo em NY reflete percepção de risco-país.`;
 
-  // 5. Fluxo Institucional & Estrangeiro na B3
+  // 5. Co-Movimento EWZ vs S&P 500 (Fluxo Internacional)
   let instScore = 58;
   if (ewz.changePct > 0 && spy.changePct > 0) instScore = 72;
   else if (ewz.changePct > 0) instScore = 62;
@@ -282,7 +287,7 @@ export function calculateMarketSentiment(
   const instContribution = Number(((instScore * instWeight) / 100).toFixed(1));
   const instStatus = instScore >= 60 ? 'ALTISTA' : instScore >= 45 ? 'ESTAVEL' : 'BAIXISTA';
   const instStatusLabel = `${instContribution > 0 ? '+' : ''}${instContribution} pts (${instStatus === 'ALTISTA' ? 'Entrada Líquida' : 'Neutro'})`;
-  const instSummary = `Saldo de capital externo na B3 e fluxo em ADRs sustentam suporte no mercado à vista.`;
+  const instSummary = `Correlação de curto prazo entre ETF Brasil (EWZ) e mercado americano (SPY) orientando direção do fluxo externo.`;
 
   // 5 Pilares Consolidados
   const pillars: SentimentPillar[] = [
@@ -317,8 +322,8 @@ export function calculateMarketSentiment(
       summary: fxSummary,
     },
     {
-      id: 'fiscal_di',
-      name: '4. Curva de Juros & Risco Fiscal Brasil (DI / EWZ)',
+      id: 'risk_ewz',
+      name: '4. Proxy de Risco-Brasil via ETF EWZ (NYSE)',
       weight: fiscalWeight,
       score: fiscalScore,
       contribution: fiscalContribution,
@@ -327,8 +332,8 @@ export function calculateMarketSentiment(
       summary: fiscalSummary,
     },
     {
-      id: 'inst_flow',
-      name: '5. Fluxo Institucional & Estrangeiro na B3',
+      id: 'flow_ewz_spy',
+      name: '5. Co-Movimento EWZ vs S&P 500 (Fluxo Internacional)',
       weight: instWeight,
       score: instScore,
       contribution: instContribution,
@@ -390,22 +395,27 @@ export function calculateMarketSentiment(
   const nextHourFormatted = `${String(nextHour).padStart(2, '0')}:00`;
   const minutesToNext = 60 - currentMinute;
 
-  // Histórico das últimas 24 horas
-  const hourlyHistory = Array.from({ length: 24 }, (_, idx) => {
-    const h = (currentHour - 23 + idx + 24) % 24;
-    // Variação leve no histórico horário
-    const hOffset = Math.sin((h / 24) * Math.PI * 2) * 6;
-    const hScore = Math.max(15, Math.min(90, Math.round(currentScore + hOffset)));
-    const hTemp = scoreToTemperature(hScore);
-    const { zone: hZone } = classifySentimentZone(hScore);
-    return {
-      hour: h,
-      formattedHour: `${String(h).padStart(2, '0')}h`,
-      score: hScore,
-      temperatureCelsius: hTemp,
-      zone: hZone,
-    };
-  });
+  // Histórico horário persistido real (Fase 2 - Item 2.2 - Sem gerador artificial)
+  const currentPoint: SentimentHistoryPoint = {
+    hour: currentHour,
+    formattedHour: `${String(currentHour).padStart(2, '0')}h`,
+    score: currentScore,
+    temperatureCelsius,
+    zone,
+    timestamp: targetDate.getTime(),
+    calculatedAt: targetDate.toISOString(),
+  };
+
+  const { history: realHistory, hasSufficientHistory, statusMessage } =
+    getRealHourlySentimentHistory(currentPoint);
+
+  const hourlyHistory = realHistory.map((p) => ({
+    hour: p.hour,
+    formattedHour: p.formattedHour,
+    score: p.score,
+    temperatureCelsius: p.temperatureCelsius,
+    zone: p.zone,
+  }));
 
   return {
     score: currentScore,
@@ -425,6 +435,8 @@ export function calculateMarketSentiment(
       minutesToNextUpdate: minutesToNext,
       cycleType: '24H_HOURLY',
     },
+    hasSufficientHistory,
+    historyStatusMessage: statusMessage,
     hourlyHistory,
     calculatedAt: targetDate.toISOString(),
   };

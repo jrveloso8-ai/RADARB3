@@ -36,3 +36,6 @@ next-env.d.ts
 
 # Archives
 *.tgz
+
+# Runtime data
+/data/*.json
