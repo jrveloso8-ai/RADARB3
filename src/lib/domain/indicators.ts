@@ -416,3 +416,54 @@ export function calculateRiskReward(
     resistances,
   };
 }
+
+/**
+ * Cálculo da Faixa Real de 52 Semanas (Mínima e Máxima anual dos últimos 252 pregões da B3)
+ * Regra: NUNCA usar valor fixo/fabricado. Se houver menos de 252 pregões, sinaliza a contagem real.
+ */
+export function calculate52WeekRange(history: HistoricalPrice[]): {
+  min52w: number | null;
+  max52w: number | null;
+  candleCount: number;
+  label: string;
+  isCompleteYear: boolean;
+} {
+  if (!history || history.length === 0) {
+    return {
+      min52w: null,
+      max52w: null,
+      candleCount: 0,
+      label: '52w: N/D',
+      isCompleteYear: false,
+    };
+  }
+
+  // Pega os últimos até 252 pregões (1 ano útil na B3)
+  const last252 = history.slice(Math.max(0, history.length - 252));
+  const candleCount = last252.length;
+
+  const validLows = last252
+    .map((c) => c.low)
+    .filter((v): v is number => typeof v === 'number' && v > 0);
+  const validHighs = last252
+    .map((c) => c.high)
+    .filter((v): v is number => typeof v === 'number' && v > 0);
+
+  const min52w = validLows.length > 0 ? Math.min(...validLows) : null;
+  const max52w = validHighs.length > 0 ? Math.max(...validHighs) : null;
+  const isCompleteYear = candleCount >= 252;
+
+  const label = isCompleteYear
+    ? `52w: ${min52w !== null ? `R$ ${min52w.toFixed(2)}` : 'N/D'} - ${max52w !== null ? `R$ ${max52w.toFixed(2)}` : 'N/D'}`
+    : candleCount > 0
+    ? `Mín/Máx (${candleCount} pregões): ${min52w !== null ? `R$ ${min52w.toFixed(2)}` : 'N/D'} - ${max52w !== null ? `R$ ${max52w.toFixed(2)}` : 'N/D'}`
+    : '52w: N/D';
+
+  return {
+    min52w,
+    max52w,
+    candleCount,
+    label,
+    isCompleteYear,
+  };
+}

@@ -42,7 +42,7 @@ import { SentimentThermometer } from '../sentiment/SentimentThermometer';
 import { safeFetchJson } from '@/lib/utils/api-client';
 import { DataValue } from '../shared/DataValue';
 import { MACRO_CONFIG } from '@/lib/config/macro';
-import { calculateHistoricalRSI, calculateHistoricalMACD } from '@/lib/domain/indicators';
+import { calculateHistoricalRSI, calculateHistoricalMACD, calculate52WeekRange } from '@/lib/domain/indicators';
 
 interface QuoteViewProps {
   initialSymbol?: string;
@@ -117,27 +117,8 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
 
   const visibleHistory = history.slice(Math.max(0, history.length - chartPeriod));
 
-  // Faixa de 52 semanas real a partir dos últimos 252 pregões (Fase 3 - Item 3.1)
-  const last252Candles = history.slice(Math.max(0, history.length - 252));
-  const candleCount52w = last252Candles.length;
-  let min52w: number | null = null;
-  let max52w: number | null = null;
-  if (candleCount52w > 0) {
-    const validLows = last252Candles
-      .map((c) => c.low ?? c.close)
-      .filter((v): v is number => typeof v === 'number' && v > 0);
-    const validHighs = last252Candles
-      .map((c) => c.high ?? c.close)
-      .filter((v): v is number => typeof v === 'number' && v > 0);
-    if (validLows.length > 0) min52w = Math.min(...validLows);
-    if (validHighs.length > 0) max52w = Math.max(...validHighs);
-  }
-  const range52wLabel =
-    candleCount52w >= 252
-      ? `52w: ${min52w ? min52w.toFixed(2) : 'N/D'} - ${max52w ? max52w.toFixed(2) : 'N/D'}`
-      : candleCount52w > 0
-      ? `Mín/Máx (${candleCount52w} pregões): ${min52w ? min52w.toFixed(2) : 'N/D'} - ${max52w ? max52w.toFixed(2) : 'N/D'}`
-      : '52w: N/D';
+  // Faixa de 52 semanas real a partir dos últimos 252 pregões (Fase 3 - Item 3.1 / Item 3C.a)
+  const { min52w, max52w, candleCount: candleCount52w, label: range52wLabel } = calculate52WeekRange(history);
 
   // Séries históricas de RSI e MACD por candle (Fase 3 - Item 3.2)
   const historyCloses = history.map((h) => h.close);
