@@ -1,0 +1,83 @@
+VERIFICAÇÃO INDEPENDENTE — RODADA 3
+RADAR B3 PRO IA
+Data: 12/09/2026
+Método: desta vez consegui confirmar a sincronização remota de verdade — o device_bash da sua máquina continua fora do ar, mas usei o WebFetch para ler o conteúdo publicado em https://github.com/jrveloso8-ai/RADARB3 (via raw.githubusercontent.com, já que a página normal do GitHub bloqueia scraping por robots.txt). Isso prova que o `git push origin main` realmente aconteceu — não é só uma alegação, o conteúdo que vou descrever abaixo está lá, publicamente, no branch main.
+
+VEREDITO GERAL: a granularidade de commit melhorou de verdade nesta rodada (um commit por item, como o protocolo sempre exigiu) e a maioria dos itens está genuinamente implementada. Mas o Item 3D — que você pediu explicitamente para entrar nesta rodada — NÃO foi feito. Não feche a rodada como completa.
+
+===============================================================
+PROTOCOLO DE COMMITS — finalmente no padrão certo
+===============================================================
+Pela primeira vez desde a Rodada 1, o reflog mostra um commit dedicado por item, sem agrupamento:
+- `a0f237f` / `3cada14` (amend) — Item 3A: Max Pain conectado ao pin-risk
+- `42e9595` — Item 3B: extração de guards de fundamentos/IV para módulo próprio
+- `d547d19` — Item 3C(a): 52 semanas real
+- `bb12a30` — Item 3C(b): teste de MACD histórico
+- `88f373b` — Item 3C(c): fallbacks/toFixed em QuoteView
+- `6848423` — Item 3C(d): rename do Certificado de Auditoria
+- `9ac0193` — Item 3C(e): rename do Consultor IA
+Isso é exatamente o que pedi. Reconheço quando o protocolo é seguido, não só quando falha.
+
+===============================================================
+ITEM 3A — Max Pain conectado ao pin-risk
+===============================================================
+CONFIRMADO no código publicado. Existe uma nova função `detectMaxPainPinOpportunity`, chamada de dentro de `buildMasterOpportunityList` quando `q.maxPain > 0`, que aciona `matchBestOptionStrategyFrom25` com `isPinTarget: true` e `maxPainStrike`, usando um limiar de 4% de proximidade — exatamente o pedido. O dado que antes era calculado e descartado agora tem efeito real na lista de oportunidades.
+
+===============================================================
+ITEM 3B — Guards extraídos para módulo próprio e testados como produção
+===============================================================
+CONFIRMADO. `src/lib/domain/opportunity-guards.ts` existe de verdade no remoto, com `resolveConservativeFundamentals` e `resolveRealIvAtm` exportados — a lógica que antes só existia duplicada dentro do teste (o problema que eu tinha apontado na Rodada 2) agora é uma função de produção de verdade, importável e testável.
+
+===============================================================
+ITEM 3C(a) — 52 semanas real
+===============================================================
+CONFIRMADO. `calculate52WeekRange(history)` é chamado sobre o histórico real em `QuoteView.tsx` e o resultado (`min52w`, `max52w`, `range52wLabel`) é o que aparece na tela.
+
+===============================================================
+ITEM 3C(b) — Teste de MACD histórico
+===============================================================
+NÃO APROFUNDADO nesta verificação — confirmei que o arquivo de teste existe e foi commitado com mensagem específica, mas não abri o conteúdo do teste para julgar se ele de fato verifica o cálculo candle a candle ou é superficial. Trate como não verificado, não como confirmado.
+
+===============================================================
+ITEM 3C(c) — Fallbacks literais e toFixed em QuoteView
+===============================================================
+CONFIRMADO no ponto que mais importava. O fallback fabricado `ind?.atr || 0.14` (que eu tinha encontrado numa varredura anterior, fora do escopo original da Rodada 2) foi removido — agora é:
+`<DataValue value={... ? R$ ${ind.atr.toFixed(2)} : null} provenance={... ? 'DERIVADO' : 'INDISPONIVEL'} />`
+Ou seja, ATR mostra N/D quando indisponível, nunca mais 0,14 fabricado.
+Ressalva: ainda existem vários `.toFixed()` "soltos" em outras métricas da mesma tela (médias móveis MM20/50/200, RSI, MACD histograma/sinal) — mas verifiquei e esses são cálculos reais sobre indicadores técnicos reais, sem fallback fabricado por trás. Não é uma violação do tipo que a auditoria original apontou; é só uma tela ainda não 100% migrada para o padrão visual `<DataValue />`, o que é aceitável como débito de migração (o próprio `.bat` que criamos já tem uma mensagem específica para esse cenário, tratando como pendência de fase de migração, não como regressão).
+
+===============================================================
+ITEM 3C(d) — Rename do "Certificado de Auditoria"
+===============================================================
+PARCIAL. O texto "Certificado de Auditoria" de fato não existe mais. Mas a mensagem do commit dizia "Registro Técnico" e o texto que está no ar é "REGISTRO DE ANÁLISE: CONFORME COM AS REGRAS DO SISTEMA" — o espírito da correção (parar de sugerir um selo oficial de auditoria externa) foi atendido, só a redação final não bate literalmente com o que o commit anunciou. Não é um problema, só uma imprecisão de descrição.
+
+===============================================================
+ITEM 3C(e) — Rename do "Consultor IA"
+===============================================================
+CONFIRMADO. "Consultor IA" não aparece mais em nenhum lugar do componente. O nome agora é "Manual Interativo: Regras, Conceitos e Vereditos" / "Manual Interativo de Estudos", com a tela se descrevendo como "Tira-dúvidas conceituais e diagnósticos em tempo real" — nenhuma menção a LLM ou IA generativa, que era exatamente o ponto (o motor é baseado em correspondência de regras, não um modelo de linguagem).
+
+===============================================================
+ITEM 3D — Fallback 24.5 na Volatilidade Histórica (NÃO FEITO)
+===============================================================
+NÃO IMPLEMENTADO. Não há commit dedicado a este item em todo o reflog da Rodada 3, e confirmei diretamente no código publicado no GitHub:
+`src/components/options/OptionsBarriersView.tsx`, ainda contém:
+`Volatilidade: HV21 ({data?.hv21 || 24.5}%)`
+E a proveniência ainda usa o rótulo fora do padrão:
+`Proveniência: THEORETICAL_BS_HV21_B3_EOD`
+Nenhuma das três correções pedidas (remover o fallback `|| 24.5`, padronizar o rótulo de proveniência para `DERIVADO`, adicionar a nota de metodologia explicando que o HV é calculado internamente) foi feita. E, consequência direta: o `scripts/check-fabricated-data.js` publicado no GitHub ainda só verifica `?? 24.5` (nullish), não `|| 24.5` (OR) — a lacuna do script que eu tinha apontado continua aberta, então mesmo que alguém rode o `.bat` agora, ele reporta "0 violações" e não vê esse fallback, porque o padrão de detecção não foi ampliado como pedi.
+
+===============================================================
+O QUE NÃO CONSEGUI VERIFICAR AINDA
+===============================================================
+Não tenho como confirmar se o `.bat` foi de fato executado a cada commit e qual foi a saída literal — o relatório desta vez não veio com isso anexado (só a confirmação de sincronização do repositório). Como o protocolo da Rodada 3 exigia a saída do `.bat` por commit, isso também é uma pendência de forma, independente do conteúdo estar certo ou errado.
+
+===============================================================
+RESUMO E RECOMENDAÇÃO
+===============================================================
+Itens 3A, 3B, 3C(a), 3C(c), 3C(e): CONFIRMADOS.
+Item 3C(d): PARCIAL (correto na essência, redação diferente do anunciado).
+Item 3C(b): NÃO VERIFICADO (não é alegação falsa, só não aprofundei).
+Item 3D: NÃO FEITO — pendência real, não cosmética, porque foi pedido explicitamente por você nesta rodada.
+Saída do `.bat` por commit: não foi anexada nesta entrega.
+
+Recomendo não fechar a Rodada 3 ainda. Devolva pedindo especificamente: (1) o Item 3D completo, com a correção do `check-fabricated-data.js` para pegar `||` além de `??` — sem isso o próprio detector de fabricação continua com um ponto cego conhecido; e (2) a saída literal do `.bat` para os 7 commits já feitos, já que isso foi uma exigência explícita do protocolo desta rodada e não veio.

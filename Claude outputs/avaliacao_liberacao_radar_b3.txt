@@ -1,0 +1,76 @@
+AVALIAÇÃO DE PRONTIDÃO PARA LIBERAÇÃO — RADAR B3 PRO IA
+Pergunta respondida: "o que falta para liberar totalmente? posso liberar uma versão com alertas e continuar trabalhando em paralelo?"
+Base: verificação direta de código (não relatórios), sessão atual + histórico Fases 0-4, Rodada 2, Rodada 3.
+
+===============================================================
+1. INVENTÁRIO — O QUE ESTÁ REALMENTE FECHADO
+===============================================================
+Confirmado em código (não apenas relatado):
+
+- Estrutura de proveniência (DataProvenance, <DataValue/>, check-fabricated-data.js) existe e funciona.
+- TradingView cards fabricados removidos (Fase 2) — reconfirmado após descartar um falso-negativo de cache de staging.
+- Rodada 2 (6 pendências) — todas confirmadas corrigidas no código.
+- Rodada 3:
+  * 3A Max Pain: conectado de fato à geração de estratégia (detectMaxPainPinOpportunity → matchBestOptionStrategyFrom25). Confirmado.
+  * 3B Guards extraídos para módulo de produção (opportunity-guards.ts). Confirmado.
+  * 3C(a) 52 semanas real, 3C(c)/3C(e) renomeações ("Registro de Análise", "Manual Interativo"). Confirmadas.
+  * 3C(b) MACD histórico: ACABEI DE LER O TESTE NA ÍNTEGRA. Confirmado: usa calculateHistoricalMACD/calculateMACD reais (importados de ./indicators, não reimplementados no teste), valida ausência de fabricação no warm-up e ausência de valor estático repetido (uniqueHistograms.size > 15), e bate o último ponto histórico com o cálculo pontual direto. Pendência 2 do documento anterior está FECHADA.
+  * 3D (HV21 fallback || 24.5, rótulo de proveniência, nota de metodologia, gap do check-fabricated-data.js): CONFIRMADO corrigido nesta sessão (fallback removido, rótulo agora DERIVADO, nota de metodologia presente, script atualizado com padrões || 24.5/25.0/26.0).
+  * portao_auditoria_radar_b3.bat: comentário obsoleto sobre a brecha de PROVENANCE genuinamente removido (reconfirmado após descartar um segundo falso-negativo de cache).
+
+Conclusão do item 1: a Rodada 3 pode ser considerada tecnicamente fechada. Os três pilares (testes, script anti-fabricação, typecheck do committed) estão b atendidos onde foram checados.
+
+===============================================================
+2. ACHADO NOVO NESTA CHECAGEM — RELEVANTE PARA "LIBERAR COM ALERTAS"
+===============================================================
+Fui verificar exatamente a pergunta que você fez: hoje, o que é ESTIMADO/SIMULADO já aparece com alerta visível para o usuário final, e o que não aparece?
+
+OpportunityRadarView.tsx (barra de cotações macro, visível a todo usuário):
+- Milho B3 e Boi B3: têm badge "(est.)" visível. OK — está dentro do padrão do projeto.
+- Minério de Ferro ("Minério: $97.90 (-1.61%)"): NÃO tem nenhum badge. É renderizado exatamente como Brent/DXY/VIX, que são cotações ao vivo de verdade.
+
+Fui na origem do dado (market-quotes.ts, linha ~148): o valor é um LITERAL FIXO no código (price: 97.90, change: -1.60, changePct: -1.61), com um comentário do próprio programador admitindo que é "fechamento de referência SGX quando o feed em tempo real está indisponível". Ou seja: é dado SIMULADO/estático por definição própria da taxonomia do projeto — mas chega à tela sem "(ref.)" e com um changePct que parece uma variação de mercado real, quando na verdade é sempre o mesmo -1,61%.
+
+Isto é exatamente o tipo de coisa que motivou todo este processo de auditoria: dado não-vivo se passando por dado vivo, sem alerta. E como o dado está sendo exibido, e não numa condicional segura como a que o Rodada 2/3 já corrigiu no HV21, isso é visível a qualquer usuário que abra a tela principal do Radar hoje.
+
+SentimentThermometer.tsx (Termômetro de Sentimento, também tela principal):
+- Não tem nenhuma importação de DataValue, nenhuma tag ESTIMADO/SIMULADO, nenhum badge de proveniência em lugar nenhum do componente. Isso não prova por si só que há dado fabricado ali (não tive tempo de auditar sentiment.ts linha a linha nesta passada) — mas prova que, SE houver qualquer pilar ou cotação estimada/simulada alimentando o termômetro, ela hoje chega ao usuário sem nenhuma sinalização. É um ponto cego de auditoria, não uma violação confirmada.
+
+===============================================================
+3. LACUNAS CONHECIDAS, NUNCA FECHADAS, INDEPENDENTES DO ACIMA
+===============================================================
+- ESLint / Regra 00 não configurado: o portão de auditoria já avisa isso a cada execução como "pendência conhecida, não bloqueante". Continua sem existir um bloqueio estrutural contra número mágico solto em JSX fora de DataValue.tsx.
+- QuoteView.tsx: vários .toFixed() "crus" (MM20/50/200, RSI, MACD histograma/sinal) sem fallback fabricado por trás, mas também sem badge de proveniência — dívida de migração, não fabricação, mas também não é "alerta visível" no sentido que você está pedindo agora.
+- Não há evidência, em nenhum ponto desta auditoria, de um disclaimer legal geral e permanente na aplicação (algo como "conteúdo educacional, não é recomendação de investimento, dados sujeitos a atraso/estimativa"). Isso é ortogonal à taxonomia MEDIDO/DERIVADO/etc. e normalmente é exigido para qualquer produto de mercado financeiro aberto a usuários reais, independente da qualidade técnica dos dados.
+- Processo de publicação no GitHub continua manual e sem gate (publicar_github.bat), por decisão sua — mantido como está, não é um bloqueio técnico, é uma escolha operacional sua.
+
+===============================================================
+4. RISCO — O QUE ACEITAR AGORA vs. O QUE MITIGAR ANTES DE LIGAR
+===============================================================
+ACEITAR (risco baixo, monitorável, correto mitigar em paralelo pós-lançamento):
+- HV, MACD, guards, Max Pain, 52 semanas — já são DERIVADO real ou têm proveniência correta. Risco residual é só cosmético (ex.: divergência de texto do "Registro Técnico", item 3C(d)).
+- ESLint/Regra 00 ausente — é uma rede de segurança para o FUTURO, não uma falha presente conhecida. Pode evoluir em paralelo sem bloquear o lançamento.
+- QuoteView com .toFixed() cru em indicadores técnicos — são cálculos reais, não fabricação; badge de proveniência ali é polimento, não correção de bug.
+- Confirmação profunda do que alimenta o Termômetro de Sentimento — pode ser auditado em paralelo, contanto que você trate a ausência de badges ali como "não verificado", não como "está limpo".
+
+MITIGAR ANTES DE LIGAR PARA O PÚBLICO (risco alto, exatamente o que o processo inteiro foi desenhado para pegar):
+- Minério de Ferro no OpportunityRadarView: hoje é dado estático se passando por cotação viva, sem nenhum alerta. É rápido de corrigir (mesmo padrão já usado em Milho/Boi: badge "(ref.)" ou "(est.)" ao lado do valor) e é diretamente o tipo de item que, se um usuário perceber sozinho, destrói a credibilidade de todo o resto do sistema que você acabou de auditar tão rigorosamente.
+- Disclaimer geral de "não é recomendação de investimento / dados podem ser estimados ou atrasados": mitigar antes de abrir para terceiros, não tanto pela auditoria técnica, mas por exposição/responsabilidade ao publicar para uso real.
+
+===============================================================
+5. RECOMENDAÇÃO
+===============================================================
+Sim — dá para liberar agora, mas não do jeito que está hoje. Recomendo uma liberação em duas frentes, não uma frente só com "torça para não aparecer nada errado":
+
+(1) Antes de abrir para qualquer usuário externo (bloqueante, rápido — 1-2 itens de código, não uma rodada inteira):
+    a) Corrigir o badge do Minério de Ferro (adicionar "(ref.)" igual ao padrão já usado em Milho/Boi B3). É o único item desta checagem que é uma violação ativa e visível hoje.
+    b) Inserir um disclaimer permanente e visível (rodapé fixo ou banner na tela principal) do tipo "conteúdo educacional, não é recomendação de investimento; valores marcados (est.)/(ref.) são referenciais". Isso cobre exposição legal/reputacional geral e reforça — em vez de substituir — os badges pontuais.
+
+(2) Pode continuar em paralelo, sem bloquear o lançamento:
+    a) Configurar ESLint / Regra 00.
+    b) Auditar sentiment.ts / SentimentThermometer.tsx a fundo (ainda não fiz essa auditoria de conteúdo, só confirmei ausência de badges).
+    c) Badges de proveniência nos indicadores "crus" do QuoteView.
+    d) Ajuste cosmético do texto de "Registro Técnico" (item 3C-d).
+    e) Resposta da BRAPI sobre exposição de HV — não muda nada hoje, sua solução própria já é DERIVADO legítimo.
+
+Não recomendo liberar sem o item (1a): é justamente o padrão de falha que motivou a criação de toda a taxonomia MEDIDO/DERIVADO/ESTIMADO/SIMULADO/INDISPONÍVEL — item pequeno, mas é o tipo de furo que, sozinho, invalida a mensagem de "sistema auditado" para quem for usar de fora. O item (1b) é mais sobre exposição de responsabilidade do que sobre a qualidade técnica dos dados, mas para uma versão pública é elementar independente do estado da auditoria.

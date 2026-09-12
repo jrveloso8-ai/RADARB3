@@ -1,0 +1,416 @@
+AUDITORIA DE PROVENIÊNCIA DE DADOS — RADAR B3 PRO IA (projeto TESTE_BRAPI)
+Metodologia: skill "auditoria-sistema-existente" (inventário -> classificação MEDIDO/DERIVADO/ESTIMADO/SIMULADO/INDISPONIVEL -> priorização por risco de decisão)
+Data da auditoria: 12/09/2026
+Repositório: C:\Projetos Antigravity\TESTE_BRAPI (Next.js / TypeScript)
+Escopo: leitura de código-fonte real (src/app, src/components, src/lib). NENHUMA correção foi aplicada — apenas leitura e classificação, conforme solicitado.
+Status: auditoria de código estática (sem execução do app, sem chamadas reais às APIs BRAPI/Yahoo em runtime).
+
+===============================================================================
+COMO LER ESTE RELATÓRIO
+===============================================================================
+Cada achado é classificado como:
+  MEDIDO    = vem de fato de uma API/fonte real, sem manipulação que descaracterize.
+  DERIVADO  = calculado a partir de dado real com fórmula transparente e razoável.
+  ESTIMADO  = aproximação/heurística explícita, deveria ser rotulada como tal na tela.
+  SIMULADO  = valor fixo, inventado ou de fallback apresentado como se fosse real/ao vivo.
+  INDISPONIVEL = corretamente tratado como N/D (comportamento correto, citado como boa prática).
+
+Severidade de risco de decisão: CRÍTICA / ALTA / MÉDIA / BAIXA — conforme o dano provável se o
+usuário confiar no número para decidir uma operação real.
+
+===============================================================================
+MÓDULO 1 — PANORAMA GERAL (TradingViewOverview.tsx)
+===============================================================================
+
+1.1 [CRÍTICA] Visão "Índices Globais & B3" e Visão "Setores da B3" são 100% hardcoded.
+Arquivo: src/components/tradingview/TradingViewOverview.tsx (linhas ~285-462)
+O array `sectorData` (6 setores da B3: Financeiro, Petróleo, Materiais, Elétricas, Consumo,
+Imobiliário) e os cards de "Principais Bolsas Globais", "Commodities Estratégicas" e "Câmbio,
+DXY & Juros" contêm strings literais fixas no componente: S&P 500 +0.32%, Nasdaq +0.45%, Brent
+US$ 78.40, Ouro US$ 2.650/oz, USD/BRL R$ 5.48, DI Futuro Jan/2027 12.45% a.a., Selic Meta
+10.75% a.a., variações de ITUB4/PETR4/VALE3 por setor, etc. Nenhum desses números é buscado de
+qualquer API — são valores digitados no código-fonte e NUNCA mudam.
+Classificação: SIMULADO rotulado como MEDIDO.
+Por quê é grave: a aba abre com um badge "Sincronização Ao Vivo" e o rótulo "Feeds Oficiais
+TradingView em Tempo Real" logo abaixo dos mesmos números fixos, e a tela é a primeira que o
+usuário vê ao abrir o sistema (aba padrão "Panorama Geral"). O usuário não tem como distinguir
+visualmente o widget real do TradingView (ticker tape e market overview, que SÃO widgets
+externos reais) dos cards de texto estático que ficam ao lado.
+
+1.2 [ALTA] Termômetro de Sentimento — "Histórico das últimas 24h" é gerado por função seno, não é histórico real.
+Arquivo: src/lib/domain/sentiment.ts, função `calculateMarketSentiment`, bloco `hourlyHistory` (linha ~394)
+O gráfico de 24 horas do termômetro de sentimento é calculado assim:
+  hOffset = Math.sin((h / 24) * Math.PI * 2) * 6
+  hScore = score atual + hOffset
+Ou seja, não existe persistência de scores passados — a cada carregamento de página o "histórico"
+é recriado matematicamente a partir do score do momento, formando sempre a mesma onda senoidal.
+Classificação: SIMULADO rotulado como histórico real ("Histórico das últimas 24 horas").
+Risco: qualquer leitura de "tendência do sentimento ao longo do dia" feita pelo usuário sobre
+esse gráfico é uma ilusão de padrão sem base factual nenhuma.
+
+1.3 [ALTA] Pilares "Curva de Juros & Risco Fiscal Brasil" e "Fluxo Institucional & Estrangeiro na B3" não usam nenhum dado de juros ou de fluxo — usam só a variação do ETF EWZ.
+Arquivo: src/lib/domain/sentiment.ts, linhas ~264-285
+Os dois pilares (25% e 20% do peso total do termômetro, respectivamente) são derivados
+inteiramente de `ewz.changePct` (variação do ETF "Brasil" negociado em NY) através de bandas
+if/else arbitrárias (`if ewz.changePct > 1.0 → score 48`, etc.). Não há nenhuma chamada a dados
+de DI Futuro, Tesouro, Boletim Focus ou fluxo estrangeiro B3 (que existe publicamente) em
+nenhum lugar do código.
+Classificação: SIMULADO/ESTIMADO grosseiro apresentado com nomenclatura de dado oficial
+("Fluxo Institucional e Estrangeiro na B3" soa como o dado real que a B3 publica diariamente).
+
+1.4 [MÉDIA] Pesos e limiares do score de sentimento (20%/20%/15%/25%/20%; limiares como
+"SPY < -1% → score 30") são heurísticas do desenvolvedor sem lastro estatístico/backtest.
+Isso por si não é "fabricação" (o pipeline usa preços reais quando disponíveis — ver 1.5), mas o
+comentário no código diz "CÁLCULO REAL PONDERADO" — a palavra "real" se refere apenas aos preços
+de entrada, não à fórmula. Recomenda-se rotular na tela como "índice proprietário/heurístico",
+não como um índice de sentimento validado.
+Classificação: DERIVADO com rótulo overclaiming.
+
+1.5 [MÉDIA] Fallback silencioso para cotações globais quando o fetch ao Yahoo Finance falha.
+Arquivo: src/lib/services/market-quotes.ts, `fetchLiveMarketQuote`
+Se a chamada não-oficial à Yahoo Finance (`query1.finance.yahoo.com`, endpoint não documentado)
+falhar/expirar (timeout de 4s), o sistema silenciosamente troca por um dicionário de valores fixos
+(SPY 761.78, EWZ 36.57, VIX 16.43, Brent 94.37 etc., aparentemente "fotografia" antiga) — sem
+qualquer indicação na tela de que os dados são de fallback e não ao vivo.
+Classificação: contágio SIMULADO→MEDIDO sem aviso. Usa endpoint de terceiro não oficial (risco de
+quebra sem aviso).
+
+1.6 [CRÍTICA] Minério de Ferro (FEF1!) é sempre um valor fixo — nunca há tentativa de busca real.
+Arquivo: src/lib/services/market-quotes.ts, linhas 134-141
+  const ironOre = { symbol: 'FEF1!', price: 97.90, change: -1.60, changePct: -1.61 };
+Não existe nenhuma chamada de rede para este dado. É um literal fixo no código, usado tanto no
+Panorama (pilar "Commodities" do sentimento) quanto no Radar de Oportunidades (ver 2.5), incluindo
+para GERAR recomendações de compra de VALE3 baseadas nessa variação estática.
+
+===============================================================================
+MÓDULO 2 — RADAR DE OPORTUNIDADES (OpportunityRadarView.tsx / opportunity-radar.ts / api/opportunities)
+===============================================================================
+Este é o módulo com maior concentração de achados de risco CRÍTICO, pois gera recomendações de
+operação (estrutura, strikes, prêmio estimado, probabilidade de lucro) que o usuário pode
+executar com dinheiro real.
+
+2.1 [CRÍTICA] "Score de Convicção" (0-100, exibido em destaque em cada card) é uma constante fixa por regra, não um cálculo.
+Arquivo: src/lib/domain/opportunity-radar.ts
+Cada função de detecção atribui um número fixo, escrito diretamente no código, independente do
+ativo: divergência de alta = 88, divergência de baixa = 84, bull spread = 87, bear spread = 83,
+iron condor = 89, the wheel = 92, intermarket brent = 86, intermarket minério = 85, agro alta
+convicção = 88 / demais = 78. Não há backtest, não há regressão, não há ajuste por ativo — é o
+mesmo "88" para qualquer papel que caia na mesma condição if/else.
+Classificação: SIMULADO apresentado como métrica quantitativa de convicção.
+Risco: o usuário decide "confiar mais" em oportunidades com convictionScore mais alto — mas o
+número não mede nada específico do ativo, é apenas um rótulo do branch de código que disparou.
+
+2.2 [CRÍTICA] "Probabilidade de Lucro" (PoP) também é constante fixa por regra, não estatística real.
+Mesmo arquivo, campo `probabilityOfProfit`. Ex.: divergência de alta = 68%, divergência de baixa
+= 65%, bull spread = 72%, bear spread = 68%, iron condor = 76%, the wheel = 82%, intermarket = 70-
+72%. Nenhuma dessas probabilidades vem de simulação de Monte Carlo, delta da opção ou dado
+histórico de acerto da estratégia — são chutes fixos embutidos no código-fonte.
+Classificação: SIMULADO rotulado como probabilidade estatística.
+
+2.3 [CRÍTICA] Prêmio/débito/crédito estimado das estruturas de opções é uma % arbitrária do preço à vista — não vem de cotação real de opção.
+Ex.: `debitEst = spotPrice * 0.02` (Bull/Bear Spread), `premiumEst = spotPrice * 0.025` (The
+Wheel), `creditEst = spotPrice * 0.015` (Iron Condor). Isso significa que os campos
+"maxProfitEst"/"maxLossEst" mostrados ao usuário — em R$ por ação e por lote de 1.000 — são
+inventados a partir de uma porcentagem fixa do preço da ação, e não das cotações reais de opções
+que o próprio sistema já sabe buscar (via `brapiService.getOptionAnalytics`, usado em outros
+módulos). O Radar de Oportunidades não usa essa fonte real para as opções que ele mesmo sugere.
+Classificação: SIMULADO apresentado como estimativa de prêmio de mercado.
+
+2.4 [CRÍTICA] IV ATM usada para decidir "regime de volatilidade" é uma estimativa artificial (HV × 1,05), não a IV real de mercado.
+Arquivo: src/app/api/opportunities/route.ts, linha 85: `ivAtm: hv21 * 1.05`
+Esse valor entra na função `classifyVolatilityRegime` (lib/domain/volatility.ts), que por sua vez
+decide se "a estrutura X é favorável para venda de crédito" — inclusive para a recomendação de
+Iron Condor mostrada com "RENDA RECORRENTE" e convictionScore 89. A função de classificação em si
+é bem escrita, mas recebe um insumo fabricado, sem qualquer flag na tela avisando que o IV usado
+não é real (é apenas 105% da volatilidade histórica).
+Classificação: contágio SIMULADO → verdito aparentemente MEDIDO (ver seção sobre contágio no
+método da skill: um número fabricado alimentando um cálculo correto ainda produz um resultado
+não confiável).
+
+2.5 [ALTA] Fallback de análise fundamentalista: se a chamada de fundamentos falhar/expirar, o ativo é tratado como "APROVADO, Score 75/100" por padrão — sem rodar o motor real de análise.
+Arquivo: src/app/api/opportunities/route.ts, linhas 59-71
+  let fundamentalStatus: 'APROVADO' | 'REPROVADO' = 'APROVADO';
+  let fundamentalScore = 75;
+  try { ... } catch { /* Manter defaults seguros em caso de timeout */ }
+Isso é especialmente grave porque o motor real (`analyzeFundamentals`, em lib/domain/fundamentals.ts)
+é rigoroso e bem construído (ver Módulo 3.2 — ele reprova por padrão quando faltam dados). O
+atalho no Radar de Oportunidades ignora esse rigor: uma falha de rede (comum sob rate limit da
+BRAPI sem token) vira automaticamente uma aprovação fictícia de score 75, que é score suficiente
+para disparar a recomendação "The Wheel Strategy" (exige score >= 70) com convictionScore 92 e
+o rótulo "Empresa sólida aprovada no CNPI-P".
+
+2.6 [ALTA] Commodities agrícolas (Milho e Boi Gordo Futuro B3) têm PREÇO sempre fixo — apenas a variação percentual tenta ser real.
+Arquivo: src/lib/services/market-quotes.ts, linhas 144-156 e src/app/api/opportunities/route.ts,
+linhas 30-34.
+  cornB3Est = { price: 63.80, changePct: <tentativa real via CBOT> }
+  boiB3Est = { price: 244.50, changePct: <tentativa real via CME> }
+  sojaPrice: 134.50  (este nem tenta — é sempre fixo, também o changePct de soja no route.ts usa
+                       fallback de -0.65 se a chamada falhar)
+Relevância direta: o usuário mantém projetos ativos de inteligência de mercado para milho/boi
+(Milho Trader, Agro Intelligence B2B) — este módulo do Radar B3 apresenta um preço de futuro B3
+que nunca é atualizado, sob o rótulo de commodity "em tempo real".
+Classificação: SIMULADO (preço) + ESTIMADO/proxy (variação, que na verdade vem do contrato CBOT/
+CME internacional, não do contrato B3 local — câmbio e base logística não são considerados).
+
+2.7 [MÉDIA] `dte: 14` (dias até o vencimento) é fixo para todos os ativos, e `maxPain:
+quote.regularMarketPrice` (route.ts, linha 88) faz o Max Pain — que é uma métrica real calculável
+a partir do open interest — ser simplesmente igual ao preço à vista, sem nenhum cálculo. Nesse
+mesmo arquivo o sistema tem uma função de Max Pain real e correta (`calculateMaxPain`, em
+black-scholes.ts) que não é usada aqui.
+
+===============================================================================
+MÓDULO 3 — CONSULTA & GRÁFICO 12M (QuoteView.tsx) — POR SUBMÓDULO
+===============================================================================
+
+--- 3.1 Submódulo Técnico (CNPI-T) ---
+
+3.1.1 [ALTA] Faixa "52 semanas" no card SPOT é inventada como ±15% do preço atual — não usa o
+histórico de 12 meses que o próprio sistema já baixa.
+Arquivo: src/components/quote/QuoteView.tsx, linha ~402:
+  52w: {(price * 0.85).toFixed(2)} - {(price * 1.15).toFixed(2)}
+O sistema busca 1 ano de histórico diário via BRAPI (`range: '1y'`) e o usa no gráfico de velas
+logo abaixo — mas para a faixa de 52 semanas, em vez de calcular min/max real dos closes/lows/
+highs dos últimos 252 pregões, usa uma banda arbitrária de ±15% sobre o preço do dia. Isso é
+particularmente grave porque o dado real já está disponível na mesma tela.
+Classificação: SIMULADO onde MEDIDO seria trivial de implementar.
+
+3.1.2 [MÉDIA] O histograma do MACD desenhado no mini-gráfico repete o MESMO valor do dia atual
+em todas as barras históricas.
+Arquivo: QuoteView.tsx, linhas ~636-645 (sub-gráfico "MACD (12,26,9) & Histograma"):
+  const hist = ind?.macd.histogram || 0.05; // valor único do dia atual
+  // usado para desenhar TODAS as barras do período visível (20/50/90/180/252 pregões)
+Isso significa que o "histórico de MACD" visualizado no candlestick é visualmente enganoso: todas
+as barras têm a mesma altura/sinal, refletindo apenas o valor mais recente, não uma série real.
+(O RSI, por comparação, tenta usar `h.rsi` por candle — mas como o tipo de dado histórico não
+carrega um campo `rsi` por item vindo da BRAPI, na prática ele também cai no fallback `|| 50` para
+a maioria dos pontos — vale confirmação do programador sobre se `h.rsi` é populado em algum lugar
+do pipeline antes de chegar aqui.)
+
+3.1.3 [MÉDIA] Vários fallbacks numéricos plausíveis substituem "N/D" quando o dado está ausente,
+sem aviso visual: ATR `|| 0.14`, Volume vs Média `|| 100`, Sinal MACD `|| 0.00`, Checklist Técnico
+`statusLabel || '3/5'`. Um "3/5" ou "100%" aparentam ser dados reais mesmo quando faltam.
+
+3.1.4 [BAIXA] Suportes/Resistências de curtíssimo prazo (`calculateSupportResistance`, em
+indicators.ts) usam ±2% do preço atual como primeiro nível — é uma heurística DERIVADA razoável,
+mas está listada ao lado de suportes/resistências REAIS (mínima/máxima de 20/60 pregões) sem
+distinção visual entre "nível calculado por regra simples" e "nível estrutural do gráfico".
+
+--- 3.2 Submódulo Fundamentos (CNPI-P) ---
+
+3.2.1 [POSITIVO — usar como referência de boa prática] O motor `analyzeFundamentals`
+(lib/domain/fundamentals.ts) é o módulo mais bem construído do sistema em termos de proveniência:
+todo campo ausente vira explicitamente "N/D" com 0 pontos (nunca um valor inventado); todo ajuste
+("normalizado", "reconciliado") é marcado com `isAdjusted: true`, mostra o valor contábil bruto ao
+lado (`rawAccountingValue`) e cita a razão do ajuste; a aprovação exige adicionalmente
+`hasProfitabilityData && hasSolvencyData` (ou seja, dado insuficiente reprova, nunca aprova por
+omissão). Recomenda-se usar este arquivo como padrão de qualidade para os demais módulos.
+
+3.2.2 [MÉDIA] Ressalva sobre 3.2.1: no arquivo lib/services/brapi.ts (linhas 326-335), há uma
+exceção codificada especificamente para o ticker "VALE3": se a Dívida Financeira/EBITDA
+reconciliada não puder ser calculada, o código usa um valor fixo de 0.8x:
+  financialDebtToEbitda = ... : 0.8;
+Isso é um número mágico específico de um único ativo, embutido permanentemente no código de
+serviço (não no motor de análise). Mesmo que 0.8x tenha sido correto no momento em que foi escrito,
+ele nunca se atualiza e não há qualquer data de referência ou aviso associado a esse fallback.
+Classificação: SIMULADO específico de ticker, sem data de validade.
+
+3.2.3 [BAIXA] O card fixo no topo do QuoteView diz "4. MACRO: SELIC 10.75%" (linha 271) sempre,
+independente de qualquer dado real de Selic — é texto fixo dentro do badge "100% BASE REAL B3 /
+BRAPI". Ver também achado transversal sobre taxa livre de risco (seção 7.1).
+
+--- 3.3 Submódulo Opções & OI (B3) ---
+
+3.3.1 [POSITIVO] lib/domain/options-barriers.ts declara explicitamente no cabeçalho do arquivo:
+"NENHUM preço teórico em tela: preços e IV vêm de analytics ou aparecem como N/D" — e o código
+confirma essa intenção na função `analyzeOptionPositions`: preço e IV só são preenchidos quando
+vêm do endpoint de analytics da BRAPI; caso contrário ficam `null`/`undefined` (não são inventados).
+É o segundo módulo mais bem construído do sistema.
+
+3.3.2 [MÉDIA] Apesar do princípio acima, alguns campos auxiliares ainda usam placeholders
+plausíveis em vez de null explícito: `delta = ... : (side === 'call' ? 0.5 : -0.5)` (linha 188) —
+um delta "genérico" de ±0.5 quando a BRAPI não devolve a grega, mostrado na tabela de paredes
+(Walls) como se fosse a grega real da opção; `iv: c.iv || 0` e `lastPrice: c.lastPrice || 0` nas
+listas de Call/Put Walls — 0% de IV ou R$ 0,00 de prêmio parecem valores reais, não "sem dado".
+`spot = underlyingPrice > 0 ? underlyingPrice : 30.0` — preço à vista cai para R$ 30,00 fixo se o
+valor recebido for inválido, distorcendo todas as distâncias percentuais (`distSpot`) calculadas a
+partir dele.
+
+3.3.3 [BAIXA] `realHv21 ?? 24.5` e `realHv63 ?? 26.0` (linha 142-143) são fallbacks de volatilidade
+histórica quando não há preços suficientes — números plausíveis, mas fixos.
+
+--- 3.4 Submódulo Recomendações de Estudo (aba "execution" / StudyAuditorCard) ---
+
+3.4.1 [MÉDIA] O "Selo de Auditoria" (`auditSeal`) gera um "número de certificado" que é apenas uma
+string formatada, sem qualquer registro, validação externa ou rastreabilidade:
+Arquivo: lib/domain/study-auditor.ts, linha 345:
+  certificateNumber: `AUD-${symbol}-${ano}${mes}`
+Isso é exibido com o rótulo "CERTIFICADO_CONFORME" e um "Selo de Auditoria", linguagem que evoca
+certificação formal (à semelhança de selos CVM/APIMEC/CNPI reais), quando na prática é apenas uma
+etiqueta de texto gerada no navegador a cada consulta, sem persistência nem verificação.
+Classificação: não é um dado de mercado fabricado, mas é uma alegação de conformidade/certificação
+fabricada — merece atenção por risco de induzir confiança indevida.
+
+3.4.2 [BAIXA] Reaproveita os mesmos fallbacks já citados (`atr || 0.5`, `volRatio || 100`) do
+módulo técnico — mesmo problema, escopo já coberto em 3.1.3.
+
+--- 3.5 Submódulo Consultor IA (AIConsultantView.tsx / api/ai-consultant/route.ts) ---
+
+3.5.1 [MÉDIA — transparência/rotulagem, não dado de mercado] O "Consultor IA" NÃO é um modelo de
+IA/LLM. É um mecanismo de correspondência de palavras-chave (`question.toLowerCase().includes(...)`)
+que devolve blocos de texto Markdown pré-escritos e fixos no código-fonte do endpoint
+(`app/api/ai-consultant/route.ts`), sem qualquer chamada a OpenAI/Anthropic/outro provedor de IA.
+O ícone de robô ("Bot") e o nome "Consultor IA"/"Agente de IA do Manual Radar B3 v2" sugerem ao
+usuário uma IA conversacional real. O conteúdo das respostas fixas, na parte lida, é tecnicamente
+correto e reflete a lógica real do sistema (ex.: descrição da metodologia de tendência bate com
+trends.ts) — o problema é de rotulagem da capacidade, não de dado fabricado dentro das respostas.
+Quando a pergunta é sobre o ativo específico em tela (contexto), a resposta usa os dados reais já
+carregados na página (spot, veredito, walls) — isso está correto.
+
+===============================================================================
+MÓDULO 4 — RASTREADOR DE TENDÊNCIAS (ScreenerView.tsx / api/trends)
+===============================================================================
+
+4.1 [POSITIVO] Este é o módulo tecnicamente mais robusto do sistema: tendência real (médias
+móveis sobre histórico de 12 meses), fundamentos reais (mesmo motor rigoroso do módulo 3.2),
+trade plan real (lib/domain/trade-plan.ts, ver 4.2), e barreiras de opções reais com degradação
+graciosa (`barrierAlert = undefined` em caso de falha, em vez de inventar). As 3 listas (Alta/
+Baixa/Lateral) só recebem ativos com `listedInTracker === true`, evitando promover ativos sem
+dado suficiente.
+
+4.2 [POSITIVO] lib/domain/trade-plan.ts é o melhor exemplo de proveniência do sistema: alvos vêm
+de pivôs estruturais reais (topos/fundos locais e máx/mín de 20/60 pregões calculados a partir do
+histórico), e quando não há resistência/suporte real na direção da tendência, o próprio código
+retorna `isViable: false` com a mensagem "Sem resistência histórica acima do spot... Operação não
+viável" — em vez de inventar um alvo. Deveria ser o padrão replicado no Radar de Oportunidades
+(Módulo 2), que faz exatamente o oposto.
+
+4.3 [BAIXA] Em `api/trends/route.ts`, linha 112, a eleição de estratégia de opções
+(`electBestOptionStrategy`) recebe o parâmetro de RSI hardcoded como `50` (neutro) para todos os
+ativos, em vez do RSI real calculado em outro ponto do pipeline. Isso pode fazer a estratégia
+eleita ignorar sobrecompra/sobrevenda real do ativo.
+
+===============================================================================
+MÓDULO 5 — BARREIRAS DE OPÇÕES (OptionsBarriersView.tsx)
+===============================================================================
+Utiliza o mesmo motor já auditado em 3.3 (lib/domain/options-barriers.ts). Os achados 3.3.2 e
+3.3.3 se aplicam integralmente a este módulo, pois é a tela dedicada exclusivamente a essa
+funcionalidade. Não foi identificado dado adicional fabricado na camada de apresentação
+(OptionsBarriersView.tsx) além do que já herda do motor.
+
+===============================================================================
+MÓDULO 6 — MANUAL & AJUDA IA (HelpSupportView.tsx)
+===============================================================================
+Não lido em profundidade nesta rodada (ver "Itens não cobertos" abaixo) por ser primariamente
+conteúdo estático de documentação/FAQ, onde a expectativa correta é ser mesmo fixo (não há
+"dado de mercado" para fabricar). Mesma ressalva de rotulagem do item 3.5.1 (a busca dentro do
+manual e o chat de perguntas também usam correspondência de texto, não IA real) deve ser
+verificada pelo programador caso o rótulo "IA" apareça aqui também.
+
+===============================================================================
+ACHADOS TRANSVERSAIS (mais de um módulo)
+===============================================================================
+
+7.1 [MÉDIA] Taxa livre de risco (Selic) hardcoded em pelo menos 3 lugares DIFERENTES e com
+valores DIFERENTES entre si, sem fonte única:
+  - lib/services/brapi.ts, linha 465: fallback riskFreeRate = 0.14 (14%) quando a BRAPI não
+    devolve o campo em analytics de opções.
+  - lib/domain/black-scholes.ts, linhas 47 e 110: parâmetro default r = 0.1075 (10,75%) usado no
+    motor de Black-Scholes/IV quando o chamador não especifica.
+  - components/quote/QuoteView.tsx, linha 271: texto fixo "SELIC 10.75%" no card de proveniência.
+Não há uma única constante de configuração para a Selic vigente (nem busca a uma fonte real como
+BCB/Tesouro Direto, que a memória do usuário indica já ter sido mapeada em outros projetos dele).
+Isso gera dois riscos: (a) Gregas calculadas com 14% divergem de Gregas calculadas com 10,75% para
+o mesmo instrumento, dependendo de qual caminho de código foi usado; (b) conforme a Selic mudar
+(é uma taxa que muda por decisão do Copom), todos os três pontos precisam ser lembrados e
+atualizados manualmente — hoje nenhum é.
+
+7.2 [BAIXA] Contador "Investidores Únicos Hoje" tem piso artificial de 1.
+Arquivo: app/api/analytics/track/route.ts, linha 83: `uniqueToday: Math.max(analytics.uniqueHashes.length, 1)`
+E no modal de diagnóstico (Navbar.tsx, linha 260): `{uniqueVisitors || 1} visitante único` — ou
+seja, mesmo que a contagem real seja 0 (ninguém visitou, ou a leitura em disco falhou em ambiente
+serverless read-only, cenário que o próprio código antecipa em comentário), a tela nunca mostra
+"0" — sempre mostra pelo menos "1 investidor único hoje". O mecanismo de contagem em si (hash SHA-
+256 de IP+data, salvo em arquivo JSON local) é razoável para uma contagem aproximada, mas note que
+em ambiente serverless (Vercel) o sistema de arquivos é efêmero/read-only por instância — o
+comentário no próprio código já reconhece isso ("Em produção serverless sem disco gravável, mantém
+em memória durante o ciclo") — ou seja, a contagem provavelmente reinicia a cada cold start em
+produção, tornando o número menos confiável do que a UI sugere.
+
+7.3 [BAIXA] Badge fixo "Vercel Web Analytics: Ativo em Tempo Real" (Navbar.tsx, linha ~266) é
+exibido de forma incondicional, sem checar se o Vercel Analytics está de fato coletando dados
+(apenas confirma que o componente `<Analytics />` da Vercel foi importado em layout.tsx — o que
+está correto — mas a mensagem "Ativo em Tempo Real" não decorre de nenhuma verificação real de
+status).
+
+7.4 [BAIXA] Inconsistência de contrato de dados: `RawFundamentalData.financialDebtToEbitda` é
+comentado como "ex: 0.8x" no tipo (lib/domain/fundamentals.ts, linha 25) — o mesmo número 0.8 do
+hardcode específico de VALE3 (achado 3.2.2) aparece também como exemplo na documentação do tipo,
+sugerindo que o valor de exemplo pode ter sido copiado do hardcode real, e não o contrário.
+
+===============================================================================
+PRIORIZAÇÃO CONSOLIDADA POR RISCO DE DECISÃO (ordem sugerida de correção)
+===============================================================================
+1. [2.1, 2.2, 2.3] Radar de Oportunidades: Score de Convicção, PoP e prêmio/débito estimado — são
+   os números mais "acionáveis" (o usuário pode montar a operação com base neles) e são os mais
+   fabricados de todo o sistema.
+2. [2.5] Fallback silencioso "APROVADO score 75" quando a análise fundamentalista falha — pode
+   liberar recomendação de compra/venda de put para empresa que na verdade seria reprovada.
+3. [1.1] Panorama Geral com índices/setores/commodities 100% estáticos rotulados "ao vivo" — é a
+   primeira tela vista, maior exposição, mais fácil de um usuário levar como referência de humor
+   de mercado do dia sem perceber que é texto fixo.
+4. [1.2, 1.3] Termômetro de Sentimento: histórico de 24h fictício e pilares "fiscal"/"fluxo
+   institucional" que na real são só o ETF EWZ.
+5. [2.4] Contágio de IV estimada (HV×1.05) alimentando o veredito de regime de volatilidade que
+   decide se "Iron Condor é recomendado".
+6. [2.6, 1.6] Preços fixos de commodities agrícolas e minério de ferro — relevante em especial
+   dado o interesse direto do usuário em produtos de inteligência de milho/agro.
+7. [3.1.1, 3.1.2] Faixa de 52 semanas fabricada e histograma de MACD "achatado" no gráfico
+   candlestick da Consulta — o gráfico principal do sistema mostrando informação visualmente
+   incorreta.
+8. [3.4.1] "Certificado de Auditoria" sem lastro — risco de imagem/confiança mais do que de dado.
+9. [3.5.1] Rótulo "Consultor IA" para um FAQ por palavra-chave — risco de transparência.
+10. Demais itens MÉDIA/BAIXA — ajustes de rotulagem (mostrar "N/D" em vez de fallback plausível) e
+    unificação da taxa livre de risco (7.1).
+
+===============================================================================
+PONTOS FORTES DO SISTEMA (para não perder na correção)
+===============================================================================
+- lib/domain/fundamentals.ts: melhor exemplo de rigor (N/D explícito, ajustes rotulados e
+  auditáveis, reprovação por falta de dado).
+- lib/domain/trade-plan.ts: melhor exemplo de "sem fallback arbitrário" (retorna isViable:false em
+  vez de inventar alvo).
+- lib/domain/options-barriers.ts: cabeçalho e implementação seguem o princípio "preço/IV real ou
+  N/D, nunca teórico inventado" quase integralmente.
+- lib/domain/trends.ts (generateConsolidatedVerdict): já verifica explicitamente `hasRealIV` antes
+  de recomendar Iron Condor lateral — um dos poucos lugares que já implementa o "gate" que a
+  skill de arquitetura de proveniência recomenda para sistemas novos.
+Recomenda-se usar esses quatro arquivos como referência de padrão ao corrigir os demais módulos.
+
+===============================================================================
+ITENS NÃO COBERTOS NESTA RODADA (ficam em lista fechada à parte, conforme critério de fechamento)
+===============================================================================
+- lib/domain/cme-election.ts (67 KB) — catálogo/matriz de eleição de estratégias entre as 25 do
+  manual B3/CME: lido apenas por amostragem via grep; não foi feita leitura linha a linha completa.
+- lib/domain/agri-commodities.ts — lógica de sazonalidade (seasonPhase) de milho/boi/soja: não
+  verificado se os parâmetros de safra são reais/fixos por calendário ou estimados.
+- lib/domain/cme-strategies.ts, lib/domain/operation-matrix.ts, lib/domain/b3-calendar.ts: lidos
+  parcialmente/indiretamente; sem achados relevantes identificados, mas não auditados a fundo.
+- components/options/OptionPayoffChart.tsx, components/quote/StockTradePlanChart.tsx,
+  components/quote/StudyAuditorCard.tsx (renderização completa), components/help/HelpSupportView.tsx
+  (conteúdo completo do manual, 45 KB): componentes de apresentação — leitura parcial; não
+  identificados novos dados fabricados além dos já herdados dos motores de domínio auditados.
+- Nenhum teste foi executado (`npm test`); os arquivos `.test.ts` existentes não foram lidos.
+- Esta auditoria foi feita 100% por leitura estática de código-fonte no ambiente Windows do
+  usuário (o app não estava rodando); nenhuma chamada real à BRAPI/Yahoo foi observada em runtime
+  para confirmar comportamento em produção (ex.: taxa real de sucesso/timeout do fetch da BRAPI ou
+  do Yahoo Finance, frequência real de fallback).
+
+===============================================================================
+CRITÉRIO DE FECHAMENTO DESTA RODADA DE AUDITORIA
+===============================================================================
+Esta rodada é considerada concluída quando: (a) todo o inventário de src/app, src/components e
+src/lib foi lido ou amostrado por grep dirigido, (b) cada item de risco CRÍTICA e ALTA teve o
+código real (não o rótulo da tela) inspecionado até a origem do número, e (c) este relatório foi
+entregue sem nenhuma correção aplicada. Os itens listados em "Itens não cobertos" ficam como lista
+fechada nomeada para uma eventual rodada 2, e não devem ser tratados como "auditoria incompleta"
+desta entrega.

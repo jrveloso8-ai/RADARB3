@@ -1,0 +1,84 @@
+VERIFICAÇÃO INDEPENDENTE — RODADA 2 (as 6 pendências da rodada anterior)
+RADAR B3 PRO IA
+Data: 12/09/2026
+Método: leitura direta do código atual (re-staged nesta rodada, não reaproveitei nada da rodada anterior) + reflog do Git. device_bash continua indisponível (mesmo bug do Windows), então novamente não executei os testes/build eu mesmo — só li o código.
+
+VEREDITO GERAL: as 6 pendências foram de fato corrigidas no código atual. Desta vez o relatório da IA programadora bate com o que encontrei linha por linha. Pode considerar esta rodada FECHADA.
+
+===============================================================
+ITEM 1 — TradingViewOverview.tsx (cards estáticos)
+===============================================================
+CONFIRMADO. Li o arquivo inteiro: não há mais `sectorData`, não há mais os cards fixos de índices/commodities/câmbio, não há mais o selo "Sincronização Ao Vivo" ao lado de número estático. A tela hoje só renderiza dois widgets oficiais embutidos do TradingView (ticker tape + market overview), exatamente como o relatório descreve.
+
+Preciso ser transparente com você sobre um ponto: o timestamp de modificação deste arquivo é de ANTES dos 3 commits novos desta rodada (bate com a janela da Fase 2, já commitada há dias) — não há nenhum commit dedicado a este item no histórico que você me mandou nem no reflog. Isso, somado à mesma anomalia de tamanho de arquivo que eu já tinha sinalizado como "ruído não resolvido" na minha primeira auditoria (o `device_list_dir` reportava 8.640 bytes enquanto o conteúdo lido tinha 21.560 bytes), me leva a uma conclusão desconfortável mas honesta: é provável que este item já estivesse corrigido desde a Fase 2, e que o meu "FALSO" da rodada anterior tenha sido causado por uma cópia em cache desatualizada no bridge remoto entre esta sessão e sua máquina — não por uma alegação falsa da IA programadora naquele momento. Não tenho como confirmar isso com certeza (não dá para "voltar no tempo" e reler o estado de disco de antes), mas registro para você não tirar a conclusão errada de que a IA corrigiu algo que na real já estava certo. O que importa para fechar esta rodada é o estado atual, e o estado atual está correto.
+
+===============================================================
+ITENS 2 e 3 — Navbar.tsx / api/analytics/track/route.ts (pisos de visitante e selo Vercel)
+===============================================================
+CONFIRMADO, com a mesma ressalva do item 1.
+
+- Backend: `uniqueToday: analytics.uniqueHashes.length` — sem `Math.max(..., 1)`. Confirmado.
+- Frontend (modal de diagnóstico): `{uniqueVisitors ?? 0}` — sem o `|| 1`. Confirmado.
+- Selo Vercel: removido. Onde antes estava "Vercel Web Analytics: Ativo em Tempo Real", agora está "Rastreamento de Acessos: Telemetria Anônima Local (LGPD)". Confirmado.
+
+De novo: os timestamps desses dois arquivos são de ANTES dos 3 commits desta rodada — batem com a janela da Fase 4, já commitada há dias, e não há commit dedicado a estes itens nesta rodada. Mesma ressalva do item 1 se aplica: provavelmente já estava certo, meu apontamento anterior pode ter sido sobre uma leitura desatualizada, não sobre o estado real do código naquele momento.
+
+===============================================================
+ITEM 4 — black-scholes.ts e brapi.ts (unificação Selic via getRiskFreeRate())
+===============================================================
+CONFIRMADO, e desta vez com commit dedicado e teste de regressão real.
+
+- `black-scholes.ts`: `calculateBlackScholes` e `calculateImpliedVolatility` agora usam `r = getRiskFreeRate()` como valor-padrão, importado de `macro.ts`. As duas ocorrências do `r = 0.1075` hardcoded desapareceram.
+- `brapi.ts`: o fallback que antes era `: 0.14` agora é `: getRiskFreeRate()`, com comentário `// PROVENANCE: ESTIMADO`.
+- Commit dedicado: `8de1f1f fix(macro-provenance): Itens 4 e 6`.
+- Teste `macro-unification.test.ts`: bom teste, real — não só verifica o valor da constante, mas compara o resultado de `calculateBlackScholes` chamado com o parâmetro default contra o mesmo chamado passando `getRiskFreeRate()` explicitamente, provando que o default realmente é a função unificada e não um valor solto reescrito à mão para bater com o teste.
+
+===============================================================
+ITEM 5 — buildMasterOpportunityList / api/opportunities/route.ts (realOptions real + Max Pain real)
+===============================================================
+CONFIRMADO como a correção mais substancial desta rodada — e a mais bem verificada, porque reli o arquivo do zero (não reaproveitei nada da leitura anterior, que já tinha se mostrado desatualizada uma vez).
+
+- `route.ts` agora busca em paralelo `brapiService.getOptionAnalytics` e `brapiService.getOptionPositions` para a data de vencimento mais líquida, seleciona contratos reais de Call ATM, Call OTM e Put OTM por proximidade de strike, e calcula débito, prêmio, delta e PoP a partir do book real — não mais chutado.
+- Max Pain: agora usa `calculateMaxPain` (de `black-scholes.ts`) alimentado pelo open interest real das posições (`resPositions.positions`), agrupado por strike em calls e puts. O resultado é um Max Pain real, não mais `undefined` por omissão.
+- `opportunity-radar.ts`: `buildMasterOpportunityList` agora recebe `q.realOptions` no tipo dos quotes e o repassa para as 4 funções (`detectBullCallSpreadOpportunity`, `detectBearSpreadOpportunity`, `detectIronCondorOpportunity`, `detectTheWheelOpportunity`) — confirmei isso lendo a chamada de cada uma das 4, não só a assinatura da função.
+- Testes de regressão em `opportunity-radar.test.ts`: os dois testes mais importantes ("conecta realOptions" e "sem realOptions mantém INDISPONIVEL") chamam a função de produção real (`buildMasterOpportunityList` importado do módulo, não uma cópia da lógica) — são testes de regressão de verdade, não decorativos. Os testes "Regressão 1.5b" e "Regressão 1.4c", por outro lado, testam uma reimplementação local da lógica dentro do próprio arquivo de teste, não o código de produção — se alguém reverter o comportamento real em `route.ts`, esses dois testes específicos continuariam passando. Não invalida o item 5 (que já está confirmado pelos outros dois testes + leitura direta do código), mas é uma fragilidade pontual nesses dois testes que vale mencionar para não achar que a cobertura de regressão dali é mais forte do que é.
+
+RESSALVA TÉCNICA (não estava na minha lista de pendências, mas encontrei ao verificar): o Max Pain agora É real, mas continua sem uso — `q.maxPain` chega em `buildMasterOpportunityList` só como dado morto. A função `matchBestOptionStrategyFrom25` já tem suporte pronto para operar com `isPinTarget`/`maxPainStrike` (monta Iron Butterfly ou Long Butterfly quando há efeito pin), mas nada dentro de `buildMasterOpportunityList` popula esses dois parâmetros a partir de `q.maxPain`. Ou seja: você agora paga o custo de buscar o open interest e calcular o Max Pain real, mas o sistema ainda não usa esse dado para gerar nenhuma oportunidade de trava de Max Pain — a lógica de estratégia de pin-risk que já existe no motor fica inacessível. Isso não estava entre os 6 itens que cobrei, então não é uma alegação falsa do relatório; é uma oportunidade de completar o que já foi 90% construído com pouco esforço adicional.
+
+===============================================================
+ITEM 6 — check-fabricated-data.js (taxonomia estrita)
+===============================================================
+CONFIRMADO, exatamente como recomendei na rodada anterior.
+
+```
+const VALID_PROVENANCE_REGEX = /\/\/\s*PROVENANCE:\s*(MEDIDO|DERIVADO|ESTIMADO|SIMULADO)\b/i;
+```
+
+Qualquer `// PROVENANCE:` sem uma dessas 4 palavras agora conta como violação explícita (`PROVENANCE sem taxonomia válida`), separada das violações de literal fabricado. A brecha que eu tinha identificado (comentário genérico isentando a linha) está fechada.
+
+===============================================================
+PROTOCOLO — GRANULARIDADE DE COMMITS
+===============================================================
+Melhorou, mas ainda não está no padrão "1 achado = 1 commit" que o protocolo original exige.
+
+Commits desta rodada, na ordem:
+1. `d51a6d0 fix(opportunities): Corrige mapeamento de pos.side para cálculo do Max Pain no build de produção`
+2. `c680ac3 feat(radar): Itens 1.2, 1.3 e 1.6 - Conecta realOptions...` — 3 itens agrupados em 1 commit
+3. `8de1f1f fix(macro-provenance): Itens 4 e 6 - Unifica Selic...` — 2 itens agrupados em 1 commit
+
+Isso é bem melhor do que "1 commit por fase inteira" da rodada anterior, mas ainda agrupa 2 a 3 itens por commit em vez de 1. Não é motivo para reabrir a rodada — o conteúdo bate — mas registro para você cobrar granularidade mais fina na próxima leva de correções, já que isso dificulta reverter um item isoladamente se algo quebrar depois.
+
+Além disso: não há commit dedicado para os itens 1, 2 e 3 (TradingView, pisos de visitante, selo Vercel) nesta rodada — como expliquei acima, tudo indica que esses itens já estavam corrigidos desde as Fases 2 e 4, e a minha constatação de "FALSO" na rodada anterior foi provavelmente um artefato de leitura, não um retrabalho real desta rodada.
+
+===============================================================
+O QUE NÃO FOI VERIFICADO NESTA REVISÃO
+===============================================================
+Não executei `npx vitest run`, `node scripts/check-fabricated-data.js` nem `npm run build` (device_bash segue indisponível). As evidências de execução que você reportou ("21 arquivos / 146 testes / 100% sucesso", "0 violações", "build compilado") não foram verificadas por mim de forma independente nesta rodada — o que verifiquei foi que o código-fonte realmente contém a lógica e os testes que deveriam produzir esses resultados, o que é uma evidência forte mas não substitui rodar de fato. Se quiser fechar com 100% de certeza, quando o bridge de execução voltar eu rodo os três comandos e comparo a saída real com o que foi reportado.
+
+===============================================================
+RESUMO
+===============================================================
+Itens 1 a 6: CONFIRMADOS no estado atual do código.
+Pendência nova, não crítica: Max Pain real calculado mas não conectado à lógica de pin-risk (`isPinTarget`/`maxPainStrike`) que já existe em `matchBestOptionStrategyFrom25`.
+Protocolo: commits mais granulares que na rodada anterior, mas ainda agrupando itens — não é bloqueante para fechar esta rodada.
+Pode fechar as 6 correções. Recomendo abrir a próxima rodada só com o item do Max Pain órfão (baixa prioridade, é acabamento) e, se ainda não fez, os itens que ficaram como "não verificados" no relatório da primeira auditoria (52 semanas real, MACD histórico real, rename do Certificado de Auditoria, rename do Consultor IA) — que nunca chegaram a ser reportados como corrigidos nem por você nem pela IA programadora.

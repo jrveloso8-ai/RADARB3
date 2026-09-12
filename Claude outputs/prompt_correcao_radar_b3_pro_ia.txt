@@ -1,0 +1,270 @@
+PROMPT PARA O PROGRAMADOR (IA) — PLANO DE CORREÇÃO RADAR B3 PRO IA
+Projeto: C:\Projetos Antigravity\TESTE_BRAPI (Next.js / TypeScript)
+Base: relatório de auditoria "auditoria_radar_b3_pro_ia.txt" (entregue separadamente)
+Regra de ouro do dono do projeto: uma fase só é considerada fechada quando o problema foi
+REALMENTE resolvido e verificado — não quando você diz que resolveu.
+
+===============================================================================
+0. PRINCÍPIO NÃO-NEGOCIÁVEL (vale para toda e qualquer correção deste plano)
+===============================================================================
+Este sistema exibe números que pessoas podem usar para decidir uma operação financeira real.
+A partir de agora:
+- Nenhum valor financeiro pode ser um literal fixo/estimado apresentado como se fosse dado real
+  de mercado, sem que a tela deixe isso explícito.
+- Quando um dado real não está disponível, o comportamento correto é mostrar "N/D" (ou
+  isViable:false, ou null, conforme o padrão que o próprio projeto já usa em alguns lugares) —
+  NUNCA um número plausível "seguro" para não deixar a tela feia.
+- Se um valor é uma estimativa/heurística (ex.: IV aproximada, score proprietário), ele PODE
+  continuar existindo, mas a tela precisa rotulá-lo como estimativa, não como dado real/ao vivo.
+- Não copie o padrão ruim de um arquivo para "resolver rápido" outro arquivo. Copie o padrão BOM
+  que já existe no próprio projeto (ver seção 1).
+
+===============================================================================
+1. REFERÊNCIA DE PADRÃO BOM JÁ EXISTENTE NO PROJETO (use como modelo, não invente um novo)
+===============================================================================
+- src/lib/domain/fundamentals.ts: todo campo ausente vira "N/D" com 0 pontos; todo ajuste é
+  marcado com isAdjusted:true e mostra o valor bruto ao lado; aprovação exige dado mínimo (nunca
+  aprova por omissão).
+- src/lib/domain/trade-plan.ts: quando não há suporte/resistência real na direção da tendência,
+  a função retorna isViable:false com uma mensagem explicando por que a operação não é viável —
+  em vez de inventar um alvo.
+- src/lib/domain/options-barriers.ts: preço e IV de opção só são preenchidos quando vêm do
+  endpoint de analytics real da BRAPI; caso contrário ficam null/undefined.
+Esses três arquivos NÃO devem ser alterados neste plano (exceto onde explicitamente listado na
+Fase 3). Eles são a régua de qualidade para os demais.
+
+===============================================================================
+FASE 0 — CERCA ESTRUTURAL (fazer ANTES de qualquer correção de conteúdo — 1 rodada única)
+===============================================================================
+Objetivo: impedir que a próxima correção reintroduza o mesmo problema de outra forma.
+
+0.1. Criar um tipo compartilhado de proveniência de dado, por exemplo em
+     src/lib/types/provenance.ts:
+       export type DataProvenance = 'MEDIDO' | 'DERIVADO' | 'ESTIMADO' | 'SIMULADO' | 'INDISPONIVEL';
+     Definição de cada valor deve ficar documentada no próprio arquivo (comentário), usando as
+     definições do relatório de auditoria.
+
+0.2. Criar um componente único de exibição de valor financeiro (ex.:
+     src/components/shared/DataValue.tsx) que:
+       - recebe o valor E a proveniência como props obrigatórias;
+       - se provenance === 'INDISPONIVEL', renderiza sempre "N/D" (nunca renderiza o value);
+       - se provenance === 'ESTIMADO' ou 'SIMULADO', renderiza um indicador visual (ex.: ícone ou
+         sufixo "(est.)"/"(ref.)") — não pode ficar visualmente idêntico a um valor MEDIDO/DERIVADO.
+     Este componente deve ser o único caminho aceito para mostrar números financeiros nas telas
+     corrigidas nas Fases 1 a 3. Não é obrigatório migrar TODA a base de código para este
+     componente nesta rodada — é obrigatório usá-lo em todo arquivo tocado pelas Fases 1-3.
+
+0.3. Criar um script de verificação (pode ser um grep/regex simples em Node, não precisa ser
+     ESLint plugin) que falha (exit code != 0) se encontrar, nos arquivos listados nas Fases 1-3
+     deste plano, qualquer um dos padrões abaixo SEM um comentário `// PROVENANCE: <motivo>` na
+     mesma linha ou na linha anterior:
+       - `|| 0.` , `|| 100` , `?? 24.5` , `?? 26.0` , `* 0.02` , `* 0.025` , `* 0.015` (débitos/
+         prêmios estimados), literais de preço óbvios (ex.: `97.90`, `63.80`, `244.50`, `134.50`,
+         `761.78`) fora de arquivos de teste/fixture.
+     Este script roda como parte da Fase 0 e deve ser deixado no projeto (ex.:
+     scripts/check-fabricated-data.js) rodável via `node scripts/check-fabricated-data.js`.
+     Não precisa cobrir 100% dos casos possíveis — precisa cobrir os literais específicos citados
+     no relatório de auditoria, para que eles nunca voltem sem justificativa explícita no código.
+
+0.4. ENTREGA DA FASE 0 (não prossiga para a Fase 1 sem isso):
+     - hash do commit da Fase 0;
+     - diff completo dos 3 arquivos novos;
+     - saída do comando `node scripts/check-fabricated-data.js` rodado ANTES de qualquer correção
+       de conteúdo (para servir de linha de base — é esperado que ele acuse vários itens agora;
+       isso é o comportamento correto, eles serão corrigidos nas fases seguintes).
+
+===============================================================================
+FASE 1 — CRÍTICA — RADAR DE OPORTUNIDADES
+===============================================================================
+Arquivos: src/lib/domain/opportunity-radar.ts, src/app/api/opportunities/route.ts
+
+1.1. `convictionScore` (Score de Convicção, 0-100) hoje é uma constante fixa por regra (88, 84,
+     87, 83, 89, 92, 85, 86, 78 — um valor por função de detecção). CORREÇÃO EXIGIDA: ou (a)
+     substituir por um cálculo real (ex.: combinação ponderada de força do sinal técnico real —
+     magnitude da divergência de RSI, distância real do Max Pain, IV Rank real — não apenas
+     "existe o padrão sim/não"), ou (b), se um cálculo real não for viável nesta rodada, o campo
+     deve ser renomeado/rotulado na UI como "Prioridade da Regra" (não "Convicção"/"Score") com
+     proveniência SIMULADO explícita, deixando claro que é um ranking de categoria da regra, não
+     uma medida por ativo. Escolha (a) ou (b) e justifique no PR.
+
+1.2. `probabilityOfProfit` (PoP): mesma constante fixa por regra. CORREÇÃO EXIGIDA: calcular a
+     partir do Delta real da opção envolvida (quando disponível via
+     brapiService.getOptionAnalytics, que o projeto já usa em outros módulos) ou remover o campo
+     da tela quando não houver dado real de opção para sustentá-lo. Não é aceitável manter um
+     número de probabilidade sem nenhuma base estatística ou de mercado.
+
+1.3. `debitEst`/`premiumEst`/`creditEst` (spot * 0.02 / 0.025 / 0.015): CORREÇÃO EXIGIDA: buscar o
+     prêmio real da opção mais próxima do strike sugerido via
+     brapiService.getOptionAnalytics/getOptionPositions (o projeto já faz isso em
+     src/lib/domain/options-barriers.ts — reaproveitar a mesma fonte). Se não houver opção real
+     líquida disponível para o strike sugerido, a oportunidade NÃO deve ser exibida com valor de
+     prêmio nenhum — mostrar "Prêmio: N/D (sem opção líquida no strike sugerido)" em vez do
+     cálculo por percentual do spot.
+
+1.4. IV ATM estimada como `hv21 * 1.05` (api/opportunities/route.ts linha ~85): CORREÇÃO EXIGIDA:
+     usar a IV ATM real (mesma heurística de mediana já implementada em
+     src/lib/domain/options-barriers.ts, função de cálculo de ivAtmResult) em vez de uma
+     estimativa artificial. Se a IV real não estiver disponível para o ativo, o regime de
+     volatilidade deve ser reportado como INDISPONIVEL (o projeto já tem esse gate implementado
+     em src/lib/domain/trends.ts, função generateConsolidatedVerdict, variável hasRealIV — replicar
+     a mesma lógica aqui).
+
+1.5. Fallback silencioso `fundamentalStatus = 'APROVADO', fundamentalScore = 75` quando a busca de
+     fundamentos falha (api/opportunities/route.ts linhas ~59-71): CORREÇÃO EXIGIDA: em caso de
+     falha/timeout, o ativo deve ser tratado como fundamentalStatus = 'REPROVADO' (postura
+     conservadora, igual à regra que o próprio motor analyzeFundamentals já usa quando falta dado:
+     reprovar por ausência de dado mínimo) OU o ativo deve ser excluído da lista de oportunidades
+     daquele ciclo. Nunca aprovar por padrão em caso de falha.
+
+1.6. `maxPain: quote.regularMarketPrice` (route.ts linha ~88): CORREÇÃO EXIGIDA: usar a função
+     real `calculateMaxPain` já existente em src/lib/domain/black-scholes.ts a partir do open
+     interest real (mesma fonte usada em options-barriers.ts), ou reportar maxPain como
+     INDISPONIVEL quando não houver open interest suficiente.
+
+1.7. `dte: 14` fixo: CORREÇÃO EXIGIDA: usar `getMostLiquidB3Expiration()` (já existe em
+     options-barriers.ts) para obter o DTE real do vencimento mais líquido.
+
+1.8. Preços fixos de commodities agrícolas (`sojaPrice: 134.50` sempre; `cornB3Est.price: 63.80` e
+     `boiB3Est.price: 244.50` sempre, mesmo quando a variação % vem de fonte real):
+     Arquivo: src/lib/services/market-quotes.ts. CORREÇÃO EXIGIDA: buscar o preço real do
+     contrato futuro B3 correspondente (CCM, BGI) se houver fonte disponível na BRAPI/B3; se não
+     houver fonte de preço B3 real disponível, marcar explicitamente o preço como ESTIMADO
+     (derivado do fechamento anterior conhecido + variação do proxy internacional), nunca como
+     dado atual sem rótulo. Prioridade alta dado que o dono do projeto tem produto de inteligência
+     de milho que depende de dado correto aqui — não aceitar "fica assim mesmo, é só uma
+     referência" sem o rótulo visível na tela.
+
+TESTE DE REGRESSÃO EXIGIDO PARA A FASE 1 (um por item, não um teste genérico):
+     Criar/atualizar src/lib/domain/opportunity-radar.test.ts cobrindo: (a) que uma oportunidade
+     sem opção real disponível no strike não retorna maxProfitEst/maxLossEst numéricos; (b) que
+     fundamentalStatus nunca é 'APROVADO' quando a busca de fundamentos lança exceção; (c) que
+     ivAtm usado no veredito de regime de volatilidade é o valor real do options-barriers, não
+     hv21*1.05 (teste deve falhar se alguém reintroduzir a estimativa).
+
+===============================================================================
+FASE 2 — ALTA — PANORAMA GERAL E SENTIMENTO
+===============================================================================
+Arquivos: src/components/tradingview/TradingViewOverview.tsx, src/lib/domain/sentiment.ts,
+src/lib/services/market-quotes.ts
+
+2.1. Cards estáticos de "Índices Globais", "Commodities Estratégicas", "Câmbio, DXY & Juros" e o
+     array `sectorData` (setores da B3) em TradingViewOverview.tsx: CORREÇÃO EXIGIDA: ou (a)
+     substituir por dado real via getLiveMarketOverview()/uma fonte de índices setoriais B3 real,
+     ou (b) remover completamente esses cards estáticos da tela, deixando apenas os widgets reais
+     do TradingView (ticker tape e market overview, que já são reais). NÃO é aceitável manter
+     números fixos ao lado do rótulo "Sincronização Ao Vivo" / "Feeds Oficiais... em Tempo Real"
+     em nenhuma hipótese — se a opção (a) não for viável nesta rodada, execute a opção (b).
+
+2.2. `hourlyHistory` gerado por `Math.sin(...)` em sentiment.ts: CORREÇÃO EXIGIDA: implementar
+     persistência real do score calculado a cada hora (ex.: arquivo/tabela local, mesmo padrão já
+     usado em app/api/analytics/track/route.ts para o contador de visitantes) e montar o
+     hourlyHistory a partir de valores realmente calculados e salvos ao longo do dia. Enquanto não
+     houver pelo menos 2 pontos reais no dia, o gráfico de histórico deve mostrar "Histórico
+     insuficiente (coletando desde HH:MM)" em vez de uma curva senoidal fabricada.
+
+2.3. Pilares "Curva de Juros & Risco Fiscal Brasil" e "Fluxo Institucional & Estrangeiro na B3"
+     calculados apenas a partir de EWZ: CORREÇÃO EXIGIDA: renomear os pilares para refletir
+     exatamente o que é medido (ex.: "4. Proxy de Risco-Brasil via ETF EWZ (NYSE)" e não "Curva de
+     Juros"/"Fluxo Institucional") ATÉ que uma fonte real de DI Futuro e fluxo estrangeiro B3 seja
+     integrada. Não é aceitável nomear um pilar com o nome de um dado que não está sendo usado.
+
+2.4. Fallback silencioso do Yahoo Finance para literais fixos em market-quotes.ts: CORREÇÃO
+     EXIGIDA: quando o fetch falhar e o fallback for usado, propagar um campo `isStale: true` /
+     `source: 'fallback'` no objeto de cotação, e toda tela que consumir esse dado deve exibir um
+     aviso visível (ex.: ícone de alerta + "cotação de referência, feed indisponível") em vez de
+     tratar como dado ao vivo.
+
+2.5. Minério de Ferro (`ironOre`) sempre fixo (97.90/-1.60/-1.61): CORREÇÃO EXIGIDA: buscar fonte
+     real (mesmo que via um provedor adicional) ou, se não houver fonte viável no momento, marcar
+     `source: 'fallback'` e aplicar a mesma regra do item 2.4 em toda tela que o consome
+     (incluindo o Radar de Oportunidades, que usa esse valor para recomendar compra de VALE3/PETR4).
+
+TESTE DE REGRESSÃO EXIGIDO PARA A FASE 2: teste que falha se `sectorData` (ou equivalente) contém
+     itens estáticos sem chamada de fetch associada; teste que hourlyHistory não usa Math.sin;
+     teste que um fetch falho em market-quotes.ts resulta em `source: 'fallback'` propagado.
+
+===============================================================================
+FASE 3 — MÉDIA — CONSULTA & GRÁFICO 12M E TAXA LIVRE DE RISCO
+===============================================================================
+Arquivos: src/components/quote/QuoteView.tsx, src/lib/services/brapi.ts,
+src/lib/domain/black-scholes.ts, src/lib/domain/study-auditor.ts
+
+3.1. Faixa "52 semanas" fabricada como price*0.85 a price*1.15 (QuoteView.tsx ~linha 402):
+     CORREÇÃO EXIGIDA: calcular min/max real dos últimos 252 pregões a partir de
+     `historicalDataPrice`, que já está disponível na mesma tela. Se houver menos de 252 pregões
+     de histórico, rotular como "Mín/Máx do período disponível (N pregões)" em vez de "52w".
+
+3.2. Histograma de MACD no candlestick repetindo o valor do dia em todas as barras (QuoteView.tsx
+     ~linha 638): CORREÇÃO EXIGIDA: usar uma série histórica real de MACD por candle (criar/usar
+     `calculateHistoricalMACD` equivalente ao já existente `calculateHistoricalSMA`/
+     `calculateHistoricalRSI` em indicators.ts/trends.ts) para desenhar o histograma corretamente.
+     Verificar também se `h.rsi` no sub-gráfico de RSI está de fato populado por candle (parece não
+     estar) — se não estiver, aplicar a mesma correção.
+
+3.3. Fallbacks plausíveis sem aviso (ATR `|| 0.14`/`|| 0.5`, Volume `|| 100`, checklist
+     `|| '3/5'`, MACD signal `|| 0.00`) em QuoteView.tsx e study-auditor.ts: CORREÇÃO EXIGIDA:
+     usar o componente DataValue criado na Fase 0 com proveniência INDISPONIVEL nesses pontos —
+     nunca renderizar o número de fallback como se fosse o valor real.
+
+3.4. Unificar a taxa livre de risco (Selic): CORREÇÃO EXIGIDA: criar uma única constante/config
+     (ex.: src/lib/config/macro.ts) com a Selic vigente e sua data de referência, e substituir os
+     três valores divergentes hoje existentes: brapi.ts linha 465 (0.14), black-scholes.ts linhas
+     47/110 (0.1075), e o texto fixo "SELIC 10.75%" em QuoteView.tsx linha 271. Idealmente buscar
+     a Selic real via alguma fonte (BCB/Tesouro) se disponível no projeto; caso contrário, pelo
+     menos garantir UM único valor hardcoded, com data de atualização visível na tela e um
+     comentário `// ATUALIZAR MANUALMENTE A CADA REUNIÃO DO COPOM` no arquivo de config.
+
+3.5. Delta/IV/preço com placeholder ±0.5 / 0 em vez de N/D em options-barriers.ts (linhas
+     188, 230-233, 247-250): CORREÇÃO EXIGIDA: usar DataValue com INDISPONIVEL quando a BRAPI não
+     devolver a grega/preço real, em vez de 0.5/-0.5/0.
+
+3.6. `spot = underlyingPrice > 0 ? underlyingPrice : 30.0` (options-barriers.ts linha 140):
+     CORREÇÃO EXIGIDA: se underlyingPrice <= 0, a análise de opções deve retornar erro/estado
+     vazio explícito, nunca prosseguir com um spot de R$ 30,00 fixo.
+
+3.7. "Certificado de Auditoria" sem lastro (study-auditor.ts linha 345): CORREÇÃO EXIGIDA: manter
+     o certificateNumber como identificador interno de rastreio (ok gerar um ID), mas renomear o
+     rótulo na UI de "CERTIFICADO_CONFORME"/"Selo de Auditoria" para algo que não sugira
+     certificação regulatória formal, ex.: "Registro de Análise Nº ..." — decisão de naming final
+     é do dono do projeto, mas o programador deve sinalizar a ambiguidade explicitamente no PR e
+     sugerir 2 alternativas de texto.
+
+===============================================================================
+FASE 4 — BAIXA — ROTULAGEM E TRANSPARÊNCIA
+===============================================================================
+4.1. Contador de visitantes com piso de 1 (`Math.max(..., 1)` em
+     app/api/analytics/track/route.ts e `uniqueVisitors || 1` em Navbar.tsx): CORREÇÃO EXIGIDA:
+     remover o piso artificial; se a contagem real for 0, mostrar 0 (ou simplesmente não exibir o
+     badge, que já é o comportamento quando uniqueVisitors é null).
+4.2. Badge fixo "Vercel Web Analytics: Ativo em Tempo Real" (Navbar.tsx): remover a alegação de
+     status ("Ativo em Tempo Real") ou verificar de fato via alguma API se está ativo — não deixar
+     texto de status fixo.
+4.3. "Consultor IA" é um FAQ por palavra-chave, sem LLM real (api/ai-consultant/route.ts):
+     CORREÇÃO EXIGIDA: decisão do dono do projeto entre (a) integrar um LLM real, ou (b) renomear
+     a funcionalidade para não usar o termo "IA" (ex.: "Manual Interativo"/"Busca no Manual") e
+     trocar o ícone de robô. Programador deve implementar a opção que o dono do projeto escolher —
+     não decidir sozinho.
+
+===============================================================================
+PROTOCOLO DE ENTREGA E VERIFICAÇÃO (vale para TODAS as fases — leia antes de começar)
+===============================================================================
+- Disciplina de commit: 1 achado = 1 correção = 1 teste de regressão, sempre em commits separados
+  e pequenos. Não agrupe múltiplos itens em um commit "correções diversas".
+- NUNCA reporte "todos os testes passaram" como prova de conclusão. Para CADA item corrigido,
+  entregue: (1) hash do commit, (2) diff do commit, (3) nome do teste de regressão criado/alterado
+  e sua saída ao rodar isoladamente, (4) saída do script scripts/check-fabricated-data.js após a
+  correção (deve parar de acusar aquele item específico).
+- O arquivo de teste de auditoria (os `.test.ts` criados para validar os itens deste plano)
+  pertence a quem audita, não a quem implementa: se você precisar ajustar um teste de auditoria
+  porque ele estava errado, sinalize isso explicitamente no PR em vez de simplesmente alterá-lo
+  silenciosamente.
+- Não corrija nada que não esteja listado neste prompt. Se encontrar outro problema no caminho,
+  documente-o separadamente (não corrija "já que estou aqui") — isso será triado em uma rodada
+  própria.
+- Critério de fechamento de cada FASE (não apenas de cada item): todas as correções da fase
+  aplicadas E o script scripts/check-fabricated-data.js rodando limpo para os arquivos daquela
+  fase E a suíte de testes completa (`npm test`) passando E build de produção (`npm run build`)
+  concluindo sem erro. Só então a fase é reportada como fechada — e mesmo assim, a decisão final
+  de considerar a fase fechada é do dono do projeto, após revisão do diff, não do programador.
+- Ordem de execução: Fase 0 → Fase 1 → Fase 2 → Fase 3 → Fase 4, nessa sequência. Não pule a
+  Fase 0. Não inicie a Fase 2 sem a Fase 1 fechada e revisada.

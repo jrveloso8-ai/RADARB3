@@ -1,0 +1,41 @@
+PENDÊNCIAS DA RODADA 3 — O QUE AINDA FALTA CORRIGIR
+RADAR B3 PRO IA
+Destinatário: IA programadora.
+
+A Rodada 3 avançou bem — commits granulares (um por item, como pedido), e os itens 3A, 3B, 3C(a), 3C(c) e 3C(e) foram verificados diretamente no código publicado e estão corretos. Mas a rodada não está fechada: um item pedido explicitamente ficou de fora, um teste não foi possível confirmar em profundidade, e a evidência de execução do portão de auditoria não veio anexada. Seguem as 3 pendências, em ordem de prioridade.
+
+===============================================================
+PENDÊNCIA 1 (PRIORIDADE ALTA) — Item 3D não foi feito
+===============================================================
+Este item foi pedido explicitamente nesta rodada e não tem nenhum commit associado a ele. Verifiquei direto no código e as três correções continuam ausentes:
+
+(a) `src/components/options/OptionsBarriersView.tsx` ainda tem:
+`Volatilidade: HV21 ({data?.hv21 || 24.5}%)`
+O fallback `|| 24.5` precisa sair. Quando `data?.hv21` for ausente/zero/nulo, exiba `N/D` (via `<DataValue />`, `provenance: 'INDISPONIVEL'`) — nunca o literal 24.5. O cálculo de HV em si (`calculateHistoricalVolatility`) está correto e deve continuar sendo usado; o problema é só a exibição quando falta dado suficiente.
+
+(b) Mesma tela: `"Proveniência: THEORETICAL_BS_HV21_B3_EOD"` — rótulo fora da taxonomia oficial. Troque o rótulo de proveniência para `DERIVADO` (o texto explicativo da metodologia pode continuar detalhado, só o rótulo formal precisa usar `MEDIDO/DERIVADO/ESTIMADO/SIMULADO/INDISPONIVEL`).
+
+(c) Adicione uma nota curta de metodologia perto do valor de HV (card "HV21/HV63" e rodapé de precificação), deixando claro que o cálculo é interno: algo como "HV calculada internamente a partir do histórico de preços B3 — a BRAPI não disponibiliza este dado como campo pronto."
+
+(d) `scripts/check-fabricated-data.js`: confirmei no repositório publicado que o script ainda só detecta `?? 24.5` (regex `/\?\?\s*24\.5/`), não `|| 24.5` (o operador realmente usado no código). Adicione um segundo padrão cobrindo `\|\|\s*24\.5`, e revise se há outros literais protegidos só contra `??` e não contra `||` na lista de `FORBIDDEN_PATTERNS`.
+
+Teste de regressão exigido: um caso com `hv21` ausente/zero deve renderizar N/D, nunca `24.5`; e um teste confirmando que `check-fabricated-data.js` detecta a violação `|| 24.5` se reintroduzida (fixture isolada).
+
+===============================================================
+PENDÊNCIA 2 (PRIORIDADE MÉDIA) — Confirmar o teste do Item 3C(b)
+===============================================================
+Não consegui verificar em profundidade o conteúdo do teste de MACD histórico adicionado nesta rodada (só confirmei que o arquivo existe e foi commitado). Preciso que a entrega inclua, para este item especificamente: o nome exato do(s) teste(s), o que cada um afirma (`expect`), e confirmação de que o teste chama a função real de produção (`calculateHistoricalMACD` ou equivalente) sobre um histórico de preços real/mockado candle a candle — não uma reimplementação da lógica dentro do próprio arquivo de teste (o mesmo problema que encontramos e corrigimos no Item 3B para os testes de fundamentos/IV).
+
+===============================================================
+PENDÊNCIA 3 (PRIORIDADE ALTA, DE PROCESSO) — Evidência do portão de auditoria por commit
+===============================================================
+O protocolo desta rodada exigia a saída literal do `portao_auditoria_radar_b3.bat` rodada após cada commit individual. Nenhuma das entregas até agora veio com isso anexado. A partir de agora, cada item entregue precisa vir acompanhado da saída completa e literal daquela execução — sem isso, o item é tratado como não verificável, independente do código estar certo.
+
+Observação à parte, para você saber o estado do próprio portão: o arquivo `portao_auditoria_radar_b3.bat` que está no repositório é uma versão de uma rodada anterior e tem um comentário desatualizado sobre uma brecha do `check-fabricated-data.js` que já foi fechada na Rodada 2 (o texto ainda avisa sobre o comentário `// PROVENANCE:` isentar violação, que não é mais o caso desde a taxonomia estrita). Não precisa corrigir isso agora — é só um comentário obsoleto, não afeta o resultado — mas pode limpar se for mexer no arquivo de qualquer forma.
+
+===============================================================
+FORMATO DE ENTREGA (continua o mesmo)
+===============================================================
+Para cada pendência: nome do item, hash do commit, diff, teste de regressão nomeado, e saída completa e literal do `.bat` rodada após aquele commit específico. Não envie relatório agregado — item por item, cada um com sua própria evidência.
+
+A publicação no GitHub continua manual, feita pelo Duda depois que tudo estiver revisado — não há necessidade de nenhuma mudança no processo de push da sua parte.

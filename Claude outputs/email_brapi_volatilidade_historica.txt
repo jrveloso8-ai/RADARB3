@@ -1,0 +1,21 @@
+Assunto: Disponibilidade de dado de Volatilidade Histórica (HV) na API — dúvida técnica e sugestão de novo endpoint
+
+Olá, equipe BRAPI,
+
+Meu nome é José Roberto (Duda), sou desenvolvedor e uso a API da BRAPI como fonte principal de dados de mercado em um sistema próprio de análise quantitativa para ações e derivativos da B3 (RADAR B3 PRO IA).
+
+Estou revisando os pontos em que meu sistema calcula, internamente, métricas que idealmente viriam direto da fonte oficial, e um deles é a Volatilidade Histórica (HV) dos ativos — hoje calculo localmente (desvio padrão anualizado dos retornos logarítmicos diários sobre o histórico de preços que já recebo de vocês via /quote com range histórico).
+
+Duas perguntas diretas:
+
+1) A API da BRAPI realmente não expõe hoje nenhum campo ou endpoint com Volatilidade Histórica pronta (em qualquer janela — 21, 63 ou 252 pregões)? Quero confirmar que não estou deixando passar algo que já existe em outro endpoint (por exemplo, dentro de /quote/{ticker} com algum módulo adicional, ou em /futures/options, já que a Volatilidade Implícita eu já consigo via analytics de opções).
+
+2) Caso realmente não exista, seria viável para vocês avaliarem a inclusão de um campo de HV (ideal: HV21, HV63 e HV252 juntas) no retorno de /quote ou em um endpoint dedicado? Do meu lado, o cálculo é simples e determinístico — não estou pedindo nenhuma modelagem proprietária, só uma padronização de um número que provavelmente todo consumidor de dado de opções da B3 acaba recalculando por conta própria hoje, com metodologias potencialmente diferentes entre plataformas.
+
+Da última vez que entrei em contato pedindo um esclarecimento, fui muito bem atendido — por isso volto a procurar vocês diretamente em vez de assumir uma resposta.
+
+Fico à disposição para dar mais contexto sobre o uso, se ajudar a avaliar a demanda.
+
+Obrigado desde já,
+José Roberto (Duda) Veloso Filho
+jr.veloso@outlook.com

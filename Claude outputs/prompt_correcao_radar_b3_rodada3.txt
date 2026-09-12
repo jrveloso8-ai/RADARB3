@@ -1,0 +1,192 @@
+PROMPT DE CORREÇÃO — RODADA 3
+RADAR B3 PRO IA
+Destinatário: IA programadora responsável pela manutenção deste repositório.
+
+===============================================================
+0. MUDANÇA DE PROTOCOLO A PARTIR DE AGORA (LEIA ANTES DE QUALQUER CÓDIGO)
+===============================================================
+Nas duas rodadas anteriores, o fechamento de fase foi feito com base em um relatório agregado seu ("todos os testes passaram", "0 violações", "build compilado"). Um auditor independente verificou o código real depois de cada entrega e encontrou divergências entre o que foi relatado e o que estava de fato no repositório. Isso muda como as próximas entregas vão ser aceitas.
+
+Existe um arquivo `portao_auditoria_radar_b3.bat` que deve estar na raiz do projeto (se não estiver, crie-o com o conteúdo do Anexo A deste prompt, exatamente como está — não resuma, não reescreva a sua própria versão). Ele roda, nesta ordem: (1) toda a suite de testes via `npx vitest run`, (2) `node scripts/check-fabricated-data.js`, (3) opcionalmente ESLint da Regra 00 se um config existir, (4) `git stash + tsc --noEmit` para confirmar que o código COMMITADO compila sozinho.
+
+REGRA NOVA E NÃO NEGOCIÁVEL: a partir desta rodada, nenhum item, nenhuma fase e nenhuma entrega é considerada válida sem a saída LITERAL e COMPLETA da janela do `.bat` (copiada e colada, não resumida, não parafraseada). "Todos os testes passaram" sem a saída anexada será tratado como entrega não verificável e devolvido sem análise.
+
+Continuam valendo as regras já estabelecidas nas rodadas anteriores:
+- 1 achado = 1 correção = 1 teste de regressão = 1 commit individual. Não agrupe itens diferentes no mesmo commit (isso já melhorou na Rodada 2, mas ainda houve commits com 2-3 itens juntos — nesta rodada, zero agrupamento).
+- Nunca fabrique dado numérico. Se não houver fonte real, o valor é `null`/`undefined` com proveniência `INDISPONIVEL`, nunca um literal "plausível".
+- Todo comentário `// PROVENANCE:` deve citar explicitamente MEDIDO, DERIVADO, ESTIMADO ou SIMULADO (o `check-fabricated-data.js` já rejeita automaticamente quem não seguir isso).
+- Rode o `.bat` depois de CADA commit individual, não só no final da rodada. Cole a saída de cada execução junto com o commit correspondente na sua entrega.
+
+===============================================================
+1. ITENS DESTA RODADA
+===============================================================
+
+ITEM 3A — Conectar o Max Pain real à lógica de pin-risk (achado da verificação da Rodada 2, não crítico, mas incompleto)
+O Max Pain agora é calculado corretamente em `api/opportunities/route.ts` a partir do open interest real (via `calculateMaxPain`) e passado como `q.maxPain` para `buildMasterOpportunityList`. O problema: esse valor nunca é usado. A função `matchBestOptionStrategyFrom25` em `opportunity-radar.ts` já tem suporte pronto para `isPinTarget`/`maxPainStrike` (monta Iron Butterfly quando `volRegime` é ALTA/EXTREMA, ou Long Butterfly quando é MODERADA) — mas nada dentro do laço principal de `buildMasterOpportunityList` popula esses dois parâmetros a partir de `q.maxPain`.
+Corrija: dentro de `buildMasterOpportunityList`, quando `q.maxPain` existir e o preço estiver a uma distância razoável dele (ex.: dentro de 3-5% — defina o limiar e documente o racional no commit), chame `matchBestOptionStrategyFrom25` com `isPinTarget: true, maxPainStrike: q.maxPain` e gere a oportunidade correspondente de trava de Max Pain, com `scoreProvenance: 'DERIVADO'` (o Max Pain em si já é real; a decisão de "quão perto é perto o suficiente" pode ser `ESTIMADO` se envolver um limiar arbitrário — rotule de acordo).
+Teste de regressão exigido: um caso com `q.maxPain` definido e preço próximo dele deve gerar uma oportunidade de categoria Iron Butterfly/Long Butterfly; um caso sem `q.maxPain` não deve gerar essa oportunidade nem quebrar o fluxo existente.
+
+ITEM 3B — Fortalecer os dois testes de regressão que testam lógica duplicada em vez do código de produção
+Em `opportunity-radar.test.ts`, os testes "Regressão 1.5b" (fallback de fundamentos) e "Regressão 1.4c" (IV ATM não fabricado) reimplementam a lógica dentro do próprio arquivo de teste, em vez de importar e testar o código real de `api/opportunities/route.ts`. Isso significa que se alguém reverter o comportamento real da rota, esses dois testes continuam passando — falso senso de cobertura.
+Corrija: extraia a lógica de "fallback conservador em erro de fundamentos" e "resolução de IV ATM sem fabricação" para funções nomeadas e exportadas (por exemplo em `opportunity-radar.ts` ou em um novo módulo `src/lib/domain/opportunity-guards.ts`), use essas funções dentro de `route.ts`, e faça os testes importarem e chamarem essas mesmas funções exportadas — não uma cópia da lógica escrita no teste.
+
+ITEM 3C — Itens da auditoria original ainda não verificados nem como corrigidos nem como pendentes
+Estes itens nunca foram reportados como corrigidos nem por você nem pelo Duda, e o auditor não os verificou nas duas últimas rodadas porque o escopo delas era outro. Trate-os como pendências reais desta rodada, não como "provavelmente já estão certos":
+  (a) 52 semanas real: `QuoteView.tsx` deve calcular a faixa de 52 semanas a partir do histórico real de preços (`historicalDataPrice`), não de um valor fixo ou de menos de 12 meses de dados.
+  (b) MACD histórico real: `indicators.ts`/`QuoteView.tsx` devem calcular o MACD candle a candle sobre o histórico real, não usar um único valor pontual repetido no gráfico.
+  (c) Fallbacks numéricos em `QuoteView.tsx`: qualquer `.toFixed()`/número solto sem proveniência declarada nessa tela deve usar `<DataValue />` com `INDISPONIVEL` em vez de um literal.
+  (d) Rename do rótulo "Certificado de Auditoria" em `study-auditor.ts`/`StudyAuditorCard.tsx` (o nome sugere um selo de conformidade oficial que o sistema não emite).
+  (e) Rename do "Consultor IA" (`AIConsultantView.tsx`/`api/ai-consultant/route.ts`) — o motor é baseado em correspondência de palavras-chave, não um LLM; o nome atual induz o usuário a achar que está conversando com uma IA generativa. Decida e implemente um nome que reflita o que o recurso realmente é (ex.: "Manual Interativo" já foi usado como nome em outra parte do sistema — verifique se já não migrou parcialmente e unifique).
+
+Para cada um dos itens 3A a 3C(e), a mesma exigência de sempre: hash de commit individual, diff, teste de regressão nomeado, e a saída completa do `.bat` rodada depois daquele commit especificamente — não uma única rodada do `.bat` no final cobrindo tudo.
+
+===============================================================
+2. FORMATO DE ENTREGA EXIGIDO
+===============================================================
+Para cada item corrigido, entregue nesta ordem:
+1. Nome do item (ex.: "Item 3A — Max Pain conectado ao pin-risk")
+2. Hash do commit
+3. Diff do commit (ou trecho relevante, se muito longo)
+4. Nome do teste de regressão criado e o que ele verifica
+5. Saída completa e literal da janela do `portao_auditoria_radar_b3.bat` rodada IMEDIATAMENTE após aquele commit
+
+Não envie um relatório agregado no final dizendo "tudo passou". Envie item por item, na ordem acima, um de cada vez ou todos juntos — mas cada um com sua própria evidência completa, não uma evidência compartilhada para o conjunto.
+
+===============================================================
+ANEXO A — CONTEÚDO DO portao_auditoria_radar_b3.bat
+===============================================================
+Se o arquivo já existir na raiz do projeto (verifique antes), não recrie — apenas confirme que o conteúdo bate com o que segue. Se não existir, crie exatamente assim:
+
+@echo off
+setlocal EnableDelayedExpansion
+title Portao de Auditoria (Audit Gate) - RADAR B3 PRO IA
+cd /d "%~dp0"
+set "PATH=C:\Program Files\Git\usr\bin;%PATH%"
+
+echo ===================================================
+echo   Portao de Auditoria (Audit Gate) - RADAR B3 PRO IA
+echo ===================================================
+echo.
+echo Regra de ouro: se algum teste ou verificacao falhar, a
+echo correcao e no codigo de producao (opportunity-radar.ts,
+echo market-quotes.ts, sentiment.ts, TradingViewOverview.tsx,
+echo black-scholes.ts, brapi.ts, options-barriers.ts,
+echo Navbar.tsx, analytics/track/route.ts etc) - NUNCA
+echo enfraquecendo o teste ou o script de verificacao.
+echo.
+
+if not exist node_modules (
+    echo node_modules nao encontrado. Rodando "npm install" primeiro...
+    echo ^(isso pode levar alguns minutos^)
+    echo.
+    call npm install
+    echo.
+)
+
+echo Executando toda a suite de testes (vitest run, testes colocados
+echo em src\lib\domain\*.test.ts) ...
+echo ---------------------------------------------------
+call npx vitest run
+set GATE_RESULT=%ERRORLEVEL%
+echo ---------------------------------------------------
+echo.
+
+echo Executando script anti-dados-fabricados (scripts\check-fabricated-data.js) ...
+echo ---------------------------------------------------
+call node scripts\check-fabricated-data.js
+set FABRICATED_RESULT=%ERRORLEVEL%
+echo ---------------------------------------------------
+echo.
+
+set ESLINT_RESULT=0
+set ESLINT_SKIPPED=0
+if exist .eslintrc.json goto :run_eslint
+if exist .eslintrc.js goto :run_eslint
+if exist eslint.config.mjs goto :run_eslint
+if exist eslint.config.js goto :run_eslint
+set ESLINT_SKIPPED=1
+goto :after_eslint
+
+:run_eslint
+echo Verificando REGRA 00 (ESLint: numero magico / .toFixed solto em JSX
+echo fora de DataValue.tsx, e fallback magico em domain/services) ...
+echo ---------------------------------------------------
+call npx eslint src/components --ext .tsx,.jsx
+set ESLINT_RESULT=%ERRORLEVEL%
+call npx eslint src/lib/domain src/lib/services --ext .ts
+if !ERRORLEVEL! NEQ 0 set ESLINT_RESULT=!ERRORLEVEL!
+echo ---------------------------------------------------
+echo.
+
+:after_eslint
+
+echo Verificando se o codigo COMMITADO compila sozinho (git stash + tsc) ...
+echo ---------------------------------------------------
+set STATUS_OUT=%TEMP%\audit_gate_status_out.txt
+git status --porcelain > "%STATUS_OUT%" 2>nul
+set DIRTY_COUNT=0
+for %%A in ("%STATUS_OUT%") do if %%~zA GTR 0 set DIRTY_COUNT=1
+del "%STATUS_OUT%" >nul 2>&1
+set TSC_RESULT=0
+set TSC_OUT=%TEMP%\audit_gate_tsc_out.txt
+
+if "%DIRTY_COUNT%"=="0" (
+    echo Pasta de trabalho ja esta limpa - typecheck roda direto no HEAD.
+    call npx tsc --noEmit > "%TSC_OUT%" 2>&1
+    type "%TSC_OUT%"
+    findstr /I /V "next\types next/types" "%TSC_OUT%" | findstr /I "error TS" >nul
+    if !ERRORLEVEL! EQU 0 (set TSC_RESULT=1) else (set TSC_RESULT=0)
+) else (
+    echo Ha arquivo^(s^) nao commitado^(s^). Isolando o HEAD com
+    echo "git stash" para checar se o que esta COMMITADO compila sozinho...
+    call git stash --include-untracked -m "audit-gate-typecheck-temp"
+    call npx tsc --noEmit > "%TSC_OUT%" 2>&1
+    type "%TSC_OUT%"
+    findstr /I /V "next\types next/types" "%TSC_OUT%" | findstr /I "error TS" >nul
+    if !ERRORLEVEL! EQU 0 (set TSC_RESULT=1) else (set TSC_RESULT=0)
+    echo Restaurando a pasta de trabalho...
+    call git stash pop
+    if !ERRORLEVEL! NEQ 0 (
+        echo.
+        echo ===================================================
+        echo ATENCAO: "git stash pop" NAO restaurou a pasta de trabalho
+        echo automaticamente. Suas mudancas NAO foram perdidas - elas
+        echo continuam guardadas em "git stash list". Resolva o conflito
+        echo antes de continuar.
+        echo ===================================================
+        echo.
+    )
+)
+del "%TSC_OUT%" >nul 2>&1
+echo ---------------------------------------------------
+echo.
+echo DIAGNOSTICO INTERNO ^(nao apague esta linha ao colar o resultado^):
+echo   DIRTY_COUNT=%DIRTY_COUNT% TSC_RESULT=%TSC_RESULT% ESLINT_SKIPPED=%ESLINT_SKIPPED%
+echo.
+
+if %GATE_RESULT% NEQ 0 (
+    echo RESULTADO: AINDA HA TESTE^(S^) FALHANDO.
+) else if %FABRICATED_RESULT% NEQ 0 (
+    echo RESULTADO: TESTES PASSARAM, MAS O CHECK-FABRICATED-DATA.JS ENCONTROU VIOLACAO SEM TAG PROVENANCE.
+) else if %TSC_RESULT% NEQ 0 (
+    echo RESULTADO: TESTES E SCRIPT ANTI-FABRICACAO PASSARAM, MAS O CODIGO COMMITADO NAO COMPILA.
+) else if %ESLINT_SKIPPED% EQU 1 (
+    echo RESULTADO: TESTES, SCRIPT ANTI-FABRICACAO E TYPECHECK PASSARAM. PENDENCIA: ESLint nao configurado - Regra 00 NAO verificada automaticamente.
+) else if %ESLINT_RESULT% NEQ 0 (
+    echo RESULTADO: TESTES, SCRIPT ANTI-FABRICACAO E TYPECHECK PASSARAM, MAS HA VIOLACAO DA REGRA 00 DE ESLINT.
+) else (
+    echo RESULTADO: TODOS OS TESTES PASSARAM, SCRIPT ANTI-FABRICACAO LIMPO, CODIGO COMMITADO COMPILA E REGRA 00 CONFORME.
+)
+
+echo.
+echo ===================================================
+echo Esta janela NAO vai fechar sozinha.
+echo Copie o resultado acima e feche manualmente quando terminar.
+echo ===================================================
+echo.
+cmd /k
+
+===============================================================
+3. FECHAMENTO
+===============================================================
+A decisão final de fechar cada item continua sendo do Duda, depois de o auditor independente reler o diff e a saída do `.bat` — não sua, mesmo com todos os testes verdes. Se algo não puder ser corrigido dentro do que foi pedido (por exemplo, limitação real de dado da BRAPI), diga isso explicitamente no lugar de contornar com um fallback numérico — a resposta "não dá para fazer X porque Y" é aceitável; um valor inventado para preencher X não é.
