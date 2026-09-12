@@ -67,9 +67,9 @@ export async function fetchLiveMarketQuote(symbol: string, name: string): Promis
     // Fallback gracioso abaixo
   }
 
-  // PROVENANCE: Valores de referência estáticos quando o feed Yahoo Finance estiver temporariamente indisponível. Marcados com isStale: true e source: 'fallback'.
+  // PROVENANCE: ESTIMADO Valores de referência estáticos quando o feed Yahoo Finance estiver temporariamente indisponível. Marcados com isStale: true e source: 'fallback'.
   const fallbackDefaults: Record<string, { price: number; changePct: number; change: number }> = {
-    // PROVENANCE: Fallback SPY
+    // PROVENANCE: ESTIMADO Fallback SPY de referência
     'SPY': { price: 761.78, changePct: -0.69, change: -5.27 },
     'EWZ': { price: 36.57, changePct: 1.50, change: 0.54 },
     '^VIX': { price: 16.43, changePct: 0.61, change: 0.10 },
@@ -144,11 +144,11 @@ export async function getLiveMarketOverview(): Promise<LiveMarketOverview> {
     ]);
 
   // Minério de Ferro FEF1! (SGX / Dalian 62% Fe)
-  // PROVENANCE: Referência de mercado de minério de ferro SGX quando feed oficial offline
+  // PROVENANCE: ESTIMADO Referência de mercado de minério de ferro SGX quando feed oficial offline
   const ironOre = {
     symbol: 'FEF1!',
     name: 'Minério de Ferro Futuro 62% (SGX)',
-    // PROVENANCE: Fechamento de referência SGX 62% Fe quando feed em tempo real de Dalian/Cingapura está indisponível
+    // PROVENANCE: ESTIMADO Fechamento de referência SGX 62% Fe quando feed em tempo real de Dalian/Cingapura está indisponível
     price: 97.90,
     change: -1.60,
     changePct: -1.61,
@@ -159,7 +159,7 @@ export async function getLiveMarketOverview(): Promise<LiveMarketOverview> {
   };
 
   // Estimativas convertidas para o mercado físico e futuro B3
-  // PROVENANCE: Preço estimado do Milho B3 (CCM) derivado do fechamento de referência (R$ 63.80) + variação do proxy CBOT
+  // PROVENANCE: ESTIMADO Preço estimado do Milho B3 (CCM) derivado do fechamento de referência (R$ 63.80) + variação do proxy CBOT
   const cornBasePrice = 63.80;
   const cornChangePct = cornCbot.changePct;
   const cornEstimatedPrice = Number((cornBasePrice * (1 + cornChangePct / 100)).toFixed(2));
@@ -172,7 +172,7 @@ export async function getLiveMarketOverview(): Promise<LiveMarketOverview> {
     provenance: 'ESTIMADO' as const,
   };
 
-  // PROVENANCE: Preço estimado do Boi Gordo B3 (BGI) derivado do fechamento de referência (R$ 244.50) + variação do proxy CME
+  // PROVENANCE: ESTIMADO Preço estimado do Boi Gordo B3 (BGI) derivado do fechamento de referência (R$ 244.50) + variação do proxy CME
   const boiBasePrice = 244.50;
   const boiChangePct = liveCattleCme.changePct;
   const boiEstimatedPrice = Number((boiBasePrice * (1 + boiChangePct / 100)).toFixed(2));

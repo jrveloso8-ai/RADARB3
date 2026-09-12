@@ -206,16 +206,16 @@ export function calculateMarketSentiment(
   const session = getMarketSessionInfo(targetDate);
 
   // Valores padrão de referência (alinhados com as cotações do TradingView)
-  // PROVENANCE: Fallback de referência quando feed SPY ao vivo estiver temporariamente offline
-  const spy = liveOverview?.spy || { symbol: 'SPY', name: 'S&P 500 ETF (SPY)', price: 761.78, change: -5.27, changePct: -0.69, timestamp: Date.now(), isStale: true, source: 'fallback' as const };
-  const ewz = liveOverview?.ewz || { symbol: 'EWZ', name: 'Brasil ETF NYSE (EWZ)', price: 36.57, change: 0.54, changePct: 1.50, timestamp: Date.now() };
-  const vix = liveOverview?.vix || { symbol: '^VIX', name: 'Índice de Volatilidade (VIX)', price: 16.43, change: 0.10, changePct: 0.61, timestamp: Date.now() };
-  const brent = liveOverview?.brent || { symbol: 'UKOIL', name: 'Petróleo Brent (UKOIL)', price: 94.37, change: -0.83, changePct: -0.87, timestamp: Date.now() };
-  const wti = liveOverview?.wti || { symbol: 'USOIL', name: 'Petróleo WTI (USOIL)', price: 89.68, change: -1.01, changePct: -1.11, timestamp: Date.now() };
-  const dxy = liveOverview?.dxy || { symbol: 'DXY', name: 'Índice Dólar Global (DXY)', price: 99.79, change: 0.14, changePct: 0.14, timestamp: Date.now() };
-  const gold = liveOverview?.gold || { symbol: 'GOLD', name: 'Ouro Spot (GOLD)', price: 4321.59, change: -6.91, changePct: -0.16, timestamp: Date.now() };
-  // PROVENANCE: Fallback de referência quando cotação SGX de minério estiver temporariamente offline
-  const ironOre = liveOverview?.ironOre || { symbol: 'FEF1!', name: 'Minério de Ferro Futuro (SGX)', price: 97.90, change: -1.60, changePct: -1.61, isStale: true, source: 'fallback' as const };
+  // PROVENANCE: ESTIMADO Fallback de referência quando feed SPY ao vivo estiver temporariamente offline
+  const spy = liveOverview?.spy || { symbol: 'SPY', name: 'S&P 500 ETF (SPY)', price: 761.78, change: -5.27, changePct: -0.69, timestamp: Date.now(), isStale: true, source: 'fallback' as const, provenance: 'ESTIMADO' as const };
+  const ewz = liveOverview?.ewz || { symbol: 'EWZ', name: 'Brasil ETF NYSE (EWZ)', price: 36.57, change: 0.54, changePct: 1.50, timestamp: Date.now(), isStale: true, source: 'fallback' as const, provenance: 'ESTIMADO' as const };
+  const vix = liveOverview?.vix || { symbol: '^VIX', name: 'Índice de Volatilidade (VIX)', price: 16.43, change: 0.10, changePct: 0.61, timestamp: Date.now(), isStale: true, source: 'fallback' as const, provenance: 'ESTIMADO' as const };
+  const brent = liveOverview?.brent || { symbol: 'UKOIL', name: 'Petróleo Brent (UKOIL)', price: 94.37, change: -0.83, changePct: -0.87, timestamp: Date.now(), isStale: true, source: 'fallback' as const, provenance: 'ESTIMADO' as const };
+  const wti = liveOverview?.wti || { symbol: 'USOIL', name: 'Petróleo WTI (USOIL)', price: 89.68, change: -1.01, changePct: -1.11, timestamp: Date.now(), isStale: true, source: 'fallback' as const, provenance: 'ESTIMADO' as const };
+  const dxy = liveOverview?.dxy || { symbol: 'DXY', name: 'Índice Dólar Global (DXY)', price: 99.79, change: 0.14, changePct: 0.14, timestamp: Date.now(), isStale: true, source: 'fallback' as const, provenance: 'ESTIMADO' as const };
+  const gold = liveOverview?.gold || { symbol: 'GOLD', name: 'Ouro Spot (GOLD)', price: 4321.59, change: -6.91, changePct: -0.16, timestamp: Date.now(), isStale: true, source: 'fallback' as const, provenance: 'ESTIMADO' as const };
+  // PROVENANCE: ESTIMADO Fallback de referência quando cotação SGX de minério estiver temporariamente offline
+  const ironOre = liveOverview?.ironOre || { symbol: 'FEF1!', name: 'Minério de Ferro Futuro (SGX)', price: 97.90, change: -1.60, changePct: -1.61, isStale: true, source: 'fallback' as const, provenance: 'ESTIMADO' as const };
 
   // =========================================================================
   // CÁLCULO REAL PONDERADO DOS 5 PILARES COM BASE EM ATIVOS DO TRADINGVIEW

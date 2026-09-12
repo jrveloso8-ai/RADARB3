@@ -5,7 +5,7 @@ import {
   QuoteDetails,
 } from '../types/financial';
 import { RawFundamentalData } from '../domain/fundamentals';
-import { MACRO_CONFIG } from '../config/macro';
+import { getRiskFreeRate, MACRO_CONFIG } from '../config/macro';
 
 interface CacheEntry<T> {
   data: T;
@@ -463,8 +463,8 @@ export class BrapiService {
           theta: item.theta !== undefined && item.theta !== null ? Number(item.theta) : undefined,
           vega: item.vega !== undefined && item.vega !== null ? Number(item.vega) : undefined,
           rho: item.rho !== undefined && item.rho !== null ? Number(item.rho) : undefined,
-          // PROVENANCE: Taxa livre de risco unificada via MACRO_CONFIG quando ausente no payload da brapi
-          riskFreeRate: item.riskFreeRate !== undefined && item.riskFreeRate !== null ? Number(item.riskFreeRate) : MACRO_CONFIG.riskFreeRate,
+          // PROVENANCE: ESTIMADO Taxa livre de risco unificada via getRiskFreeRate() quando ausente no payload da brapi
+          riskFreeRate: item.riskFreeRate !== undefined && item.riskFreeRate !== null ? Number(item.riskFreeRate) : getRiskFreeRate(),
           dividendYield: item.dividendYield !== undefined && item.dividendYield !== null ? Number(item.dividendYield) : 0,
           confidence: item.confidence !== undefined ? item.confidence : undefined,
           nullReason: item.nullReason || null,

@@ -30,7 +30,7 @@ export interface GreeksResult {
   theoreticalPrice: number;
 }
 
-import { MACRO_CONFIG } from '@/lib/config/macro';
+import { getRiskFreeRate } from '@/lib/config/macro';
 
 /**
  * Cálculo das Gregas via Modelo Black-Scholes (Merton 1973 com Dividend Yield)
@@ -46,7 +46,7 @@ export function calculateBlackScholes(
   S: number,
   K: number,
   T: number,
-  r = MACRO_CONFIG.riskFreeRate,
+  r = getRiskFreeRate(),
   sigma = 0.32,
   type: 'call' | 'put' = 'call',
   q = 0.03
@@ -109,7 +109,7 @@ export function calculateImpliedVolatility(
   S: number,
   K: number,
   T: number,
-  r = MACRO_CONFIG.riskFreeRate,
+  r = getRiskFreeRate(),
   type: 'call' | 'put' = 'call',
   q = 0.03
 ): number | null {
