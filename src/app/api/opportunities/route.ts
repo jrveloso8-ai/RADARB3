@@ -160,9 +160,11 @@ export async function GET(request: NextRequest) {
               if (typeof pos.strike === 'number' && pos.strike > 0) {
                 strikesSet.add(pos.strike);
                 const oi = typeof pos.openInterest === 'number' ? pos.openInterest : 0;
-                if (pos.type === 'CALL') {
+                const isCall = String(pos.side || '').toLowerCase() === 'call';
+                const isPut = String(pos.side || '').toLowerCase() === 'put';
+                if (isCall) {
                   callsByStrike.set(pos.strike, (callsByStrike.get(pos.strike) || 0) + oi);
-                } else if (pos.type === 'PUT') {
+                } else if (isPut) {
                   putsByStrike.set(pos.strike, (putsByStrike.get(pos.strike) || 0) + oi);
                 }
               }
