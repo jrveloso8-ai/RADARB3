@@ -7,6 +7,7 @@ import {
   detectBullCallSpreadOpportunity,
 } from './opportunity-radar';
 import { HistoricalPrice } from '../types/financial';
+import { resolveConservativeFundamentals, resolveRealIvAtm } from './opportunity-guards';
 
 describe('Domain: Opportunity Radar & 25 Strategies Mapping', () => {
   it('enquadra corretamente Covered Call (#5) para investidor com ações em carteira e IV alta', () => {
@@ -172,50 +173,41 @@ describe('Domain: Opportunity Radar & 25 Strategies Mapping', () => {
     expect(bullOpp!.execution.popProvenance).toBe('INDISPONIVEL');
   });
 
-  it('Regressão 1.5b: falha na busca de fundamentos nunca resulta em fundamentalStatus APROVADO', () => {
-    // Simula a lógica de tratamento de erro do motor da rota de oportunidades
-    const handleFundamentalFetch = (fetchFn: () => any) => {
-      let fundamentalStatus: 'APROVADO' | 'REPROVADO' = 'REPROVADO';
-      let fundamentalScore = 0;
-      try {
-        fetchFn();
-      } catch {
-        fundamentalStatus = 'REPROVADO';
-        fundamentalScore = 0;
-      }
-      return { fundamentalStatus, fundamentalScore };
+  it('Item 3B / Regressão 1.5b: resolveConservativeFundamentals garante que falha na busca de fundamentos nunca resulta em fundamentalStatus APROVADO', () => {
+    // 1. Falha / payload nulo
+    const resultNull = resolveConservativeFundamentals('PETR4', null);
+    expect(resultNull.status).toBe('REPROVADO');
+    expect(resultNull.score).toBe(0);
+
+    // 2. Erro lançado pelo analisador ou rede
+    const mockFaultyAnalyzer = () => {
+      throw new Error('Falha de conexão / timeout BRAPI');
     };
-
-    const result = handleFundamentalFetch(() => {
-      throw new Error('Timeout da API BRAPI de fundamentos');
-    });
-
-    expect(result.fundamentalStatus).toBe('REPROVADO');
-    expect(result.fundamentalScore).toBe(0);
-    expect(result.fundamentalStatus).not.toBe('APROVADO');
+    const resultError = resolveConservativeFundamentals('PETR4', {} as any, mockFaultyAnalyzer as any);
+    expect(resultError.status).toBe('REPROVADO');
+    expect(resultError.score).toBe(0);
+    expect(resultError.status).not.toBe('APROVADO');
   });
 
-  it('Regressão 1.4c: ivAtm do ativo não pode ser fabricado via hv21 * 1.05', () => {
-    const hv21 = 20.0;
-    const fabricatedIvAtm = hv21 * 1.05; // 21.0
+  it('Item 3B / Regressão 1.4c: resolveRealIvAtm garante que ivAtm nunca é fabricado e retorna null se liquidez insuficiente', () => {
+    // 1. Sem opções no book (null ou array vazio) -> retorna estritamente null (nunca estimativa sintética)
+    expect(resolveRealIvAtm(null)).toBeNull();
+    expect(resolveRealIvAtm([])).toBeNull();
 
-    // Função validadora de proveniência de IV
-    const resolveAtmIV = (realAnalyticsIv: number | null) => {
-      // Se não há medição de opções no book, NUNCA estimar por hv21 * 1.05
-      if (realAnalyticsIv === null || realAnalyticsIv === undefined) {
-        return null;
-      }
-      return realAnalyticsIv;
-    };
+    // 2. Liquidez insuficiente (< 3 cotações de IV válidas) -> retorna null
+    const lowLiquidityAnalytics = [
+      { impliedVolatility: 25.5 },
+      { impliedVolatility: 27.0 },
+    ];
+    expect(resolveRealIvAtm(lowLiquidityAnalytics)).toBeNull();
 
-    // Caso onde o feed de opções não tem IV para o ativo
-    const ivResultWithoutOptions = resolveAtmIV(null);
-    expect(ivResultWithoutOptions).toBeNull();
-    expect(ivResultWithoutOptions).not.toBe(fabricatedIvAtm);
-
-    // Caso onde o feed de opções entrega IV real medida
-    const ivResultWithRealOptions = resolveAtmIV(28.4);
-    expect(ivResultWithRealOptions).toBe(28.4);
+    // 3. Liquidez suficiente (>= 3 cotações válidas) -> calcula a mediana real exata sem fabricação
+    const sufficientAnalytics = [
+      { impliedVolatility: 28.0 },
+      { impliedVolatility: 32.0 },
+      { impliedVolatility: 30.0 },
+    ];
+    expect(resolveRealIvAtm(sufficientAnalytics)).toBe(30.0);
   });
 
   it('Regressão Item 1.2/1.3 & 5: buildMasterOpportunityList conecta realOptions às estratégias de opções', () => {

@@ -8,6 +8,7 @@ import { calculateSupportResistance } from '@/lib/domain/indicators';
 import { getMostLiquidB3Expiration } from '@/lib/domain/options-barriers';
 import { analyzeAssetTrend } from '@/lib/domain/trends';
 import { calculateMaxPain } from '@/lib/domain/black-scholes';
+import { resolveConservativeFundamentals, resolveRealIvAtm } from '@/lib/domain/opportunity-guards';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,22 +64,18 @@ export async function GET(request: NextRequest) {
           quote.shortName
         );
 
-        // Postura conservadora: ausência de fundamentos ou erro = REPROVADO (score 0)
-        let fundamentalStatus: 'APROVADO' | 'REPROVADO' = 'REPROVADO';
-        let fundamentalScore = 0;
-
+        // Postura conservadora via guard: ausência de fundamentos ou erro = REPROVADO (score 0)
+        let rawFundamentals = null;
         try {
-          const rawFundamentals = await brapiService.getFundamentals(cleanSymbol);
-          if (rawFundamentals) {
-            const fResult = analyzeFundamentals(cleanSymbol, rawFundamentals);
-            fundamentalStatus = fResult.status;
-            fundamentalScore = fResult.score;
-          }
+          rawFundamentals = await brapiService.getFundamentals(cleanSymbol);
         } catch {
-          // Conservador: mantém REPROVADO e score 0
-          fundamentalStatus = 'REPROVADO';
-          fundamentalScore = 0;
+          rawFundamentals = null;
         }
+        const { status: fundamentalStatus, score: fundamentalScore } = resolveConservativeFundamentals(
+          cleanSymbol,
+          rawFundamentals,
+          analyzeFundamentals
+        );
 
         const hv21 = calculateHistoricalVolatility(closes, 21);
         const sr = calculateSupportResistance(history, quote.regularMarketPrice);
@@ -104,16 +101,10 @@ export async function GET(request: NextRequest) {
           ]);
 
           const analytics = resAnalytics?.analytics || [];
-          if (analytics && analytics.length > 0) {
-            const validIvs = analytics
-              .filter((a) => typeof a.impliedVolatility === 'number' && a.impliedVolatility > 0)
-              .map((a) => a.impliedVolatility as number)
-              .sort((a, b) => a - b);
-            if (validIvs.length >= 3) {
-              const mid = Math.floor(validIvs.length / 2);
-              realIvAtm = validIvs.length % 2 !== 0 ? validIvs[mid] : (validIvs[mid - 1] + validIvs[mid]) / 2;
-            }
+          // Resolução de IV ATM real via guard dedicado (sem fabricação de dados)
+          realIvAtm = resolveRealIvAtm(analytics);
 
+          if (analytics && analytics.length > 0) {
             // Seleção de contratos reais próximos aos strikes das estratégias
             const spot = quote.regularMarketPrice;
             const calls = analytics.filter(
