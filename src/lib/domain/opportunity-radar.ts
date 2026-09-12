@@ -756,7 +756,7 @@ export function buildMasterOpportunityList(params: {
     fundamentalStatus: 'APROVADO' | 'REPROVADO';
     fundamentalScore: number;
     ivAtm?: number | null;
-    hv21?: number;
+    hv21?: number | null;
     dte?: number;
     maxPain?: number;
     supports?: number[];

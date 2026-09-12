@@ -85,7 +85,8 @@ export async function GET(request: NextRequest) {
         // Consulta de opções para buscar IV ATM real quando disponível
         let realIvAtm: number | null = null;
         try {
-          const analytics = await brapiService.getOptionAnalytics(cleanSymbol);
+          const res = await brapiService.getOptionAnalytics(cleanSymbol, mostLiquidExp.date);
+          const analytics = res?.analytics || [];
           if (analytics && analytics.length > 0) {
             const validIvs = analytics
               .filter((a) => typeof a.impliedVolatility === 'number' && a.impliedVolatility > 0)
@@ -110,7 +111,7 @@ export async function GET(request: NextRequest) {
           fundamentalStatus,
           fundamentalScore,
           ivAtm: realIvAtm, // IV real ou null quando indisponível
-          hv21,
+          hv21: hv21 ?? undefined,
           dte: mostLiquidExp.dte,
           maxPain: undefined, // Sem open interest completo do book na rota rápida, não fabrica valor
           supports: sr.supports,

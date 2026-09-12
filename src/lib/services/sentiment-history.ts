@@ -5,9 +5,6 @@
  * substituindo a curva senoidal sintética (Math.sin) por histórico real.
  */
 
-import fs from 'fs';
-import path from 'path';
-
 export interface SentimentHistoryPoint {
   hour: number;
   formattedHour: string;
@@ -23,14 +20,39 @@ interface StoredSentimentHistory {
   points: SentimentHistoryPoint[];
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const SENTIMENT_FILE = path.join(DATA_DIR, 'sentiment-history.json');
+function getNodeFs() {
+  if (typeof window === 'undefined') {
+    try {
+      return (eval('require'))('fs');
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
-// Cache em memória para ambientes serverless ou read-only
+function getNodePath() {
+  if (typeof window === 'undefined') {
+    try {
+      return (eval('require'))('path');
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+// Cache em memória para ambientes browser, serverless ou read-only
 let memoryStore: StoredSentimentHistory = {
   date: new Date().toISOString().split('T')[0],
   points: [],
 };
+
+function getStorageFilePath(): string | null {
+  const nodePath = getNodePath();
+  if (!nodePath) return null;
+  return nodePath.join(process.cwd(), 'data', 'sentiment-history.json');
+}
 
 function ensureStorage(): StoredSentimentHistory {
   const todayStr = new Date().toISOString().split('T')[0];
@@ -39,17 +61,22 @@ function ensureStorage(): StoredSentimentHistory {
     memoryStore = { date: todayStr, points: [] };
   }
 
-  try {
-    if (fs.existsSync(SENTIMENT_FILE)) {
-      const content = fs.readFileSync(SENTIMENT_FILE, 'utf-8');
-      const parsed: StoredSentimentHistory = JSON.parse(content);
-      if (parsed.date === todayStr && Array.isArray(parsed.points)) {
-        memoryStore = parsed;
-        return memoryStore;
+  const nodeFs = getNodeFs();
+  const filePath = getStorageFilePath();
+
+  if (nodeFs && filePath) {
+    try {
+      if (nodeFs.existsSync(filePath)) {
+        const content = nodeFs.readFileSync(filePath, 'utf-8');
+        const parsed: StoredSentimentHistory = JSON.parse(content);
+        if (parsed.date === todayStr && Array.isArray(parsed.points)) {
+          memoryStore = parsed;
+          return memoryStore;
+        }
       }
+    } catch {
+      // Ignora erro de leitura e usa store em memória
     }
-  } catch {
-    // Ignora erro de leitura e usa store em memória
   }
 
   return memoryStore;
@@ -57,13 +84,20 @@ function ensureStorage(): StoredSentimentHistory {
 
 function persistStorage(store: StoredSentimentHistory) {
   memoryStore = store;
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+  const nodeFs = getNodeFs();
+  const nodePath = getNodePath();
+  const filePath = getStorageFilePath();
+
+  if (nodeFs && nodePath && filePath) {
+    try {
+      const dirPath = nodePath.dirname(filePath);
+      if (!nodeFs.existsSync(dirPath)) {
+        nodeFs.mkdirSync(dirPath, { recursive: true });
+      }
+      nodeFs.writeFileSync(filePath, JSON.stringify(store, null, 2), 'utf-8');
+    } catch {
+      // Ignora falhas de escrita em disco efêmero
     }
-    fs.writeFileSync(SENTIMENT_FILE, JSON.stringify(store, null, 2), 'utf-8');
-  } catch {
-    // Ignora falhas de escrita em disco efêmero
   }
 }
 
