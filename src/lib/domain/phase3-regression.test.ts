@@ -39,10 +39,10 @@ describe('Auditoria Radar B3 PRO IA — Testes de Regressão da Fase 3', () => {
   // 3.3: ATR e Volume sem histórico devem retornar null (sem fallbacks 0.5 e 100)
   it('3.3: calculateATR e calculateVolumeRatio devem retornar null quando histórico insuficiente', () => {
     expect(calculateATR([])).toBeNull();
-    expect(calculateATR([{ date: '2026-09-01', close: 30, open: 30, high: 31, low: 29, volume: 1000 }])).toBeNull();
+    expect(calculateATR([{ date: 1725148800, close: 30, open: 30, high: 31, low: 29, volume: 1000 }])).toBeNull();
 
     expect(calculateVolumeRatio([])).toBeNull();
-    expect(calculateVolumeRatio([{ date: '2026-09-01', close: 30, open: 30, high: 31, low: 29, volume: 1000 }])).toBeNull();
+    expect(calculateVolumeRatio([{ date: 1725148800, close: 30, open: 30, high: 31, low: 29, volume: 1000 }])).toBeNull();
   });
 
   // 3.3b: Study Auditor não deve aprovar volume ou ATR quando faltar dado
