@@ -388,9 +388,9 @@ Mesmo com tendência lateral e balanço aprovado, o Iron Condor é bloqueado se:
       });
     }
 
-    // Resposta Padrão Educacional Abrangente
+    // Resposta Padrão Educacional Abrangente (Motor Baseado em Regras)
     return NextResponse.json({
-      answer: `### 🤖 Assistente do Manual Radar B3
+      answer: `### 📖 Base de Regras do Manual Radar B3 (Motor Determinístico)
 
 Entendi sua dúvida sobre: *"**${question}**"*.
 
@@ -412,7 +412,7 @@ O **Radar B3** opera com base no **Manual de Uso e Lógica de Decisão (Versão 
 Você pode me perguntar sobre qualquer um desses tópicos diretamente!`,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Erro ao processar consulta do assistente.';
+    const message = error instanceof Error ? error.message : 'Erro ao processar consulta ao manual de regras.';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

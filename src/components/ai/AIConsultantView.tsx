@@ -33,12 +33,14 @@ interface Message {
   timestamp: string;
 }
 
-interface AIConsultantViewProps {
+export interface InteractiveManualViewProps {
   currentQuote?: QuoteDetails | null;
   onSelectSymbol?: (symbol: string) => void;
 }
 
-export const AIConsultantView: React.FC<AIConsultantViewProps> = ({ currentQuote }) => {
+export type AIConsultantViewProps = InteractiveManualViewProps;
+
+export const InteractiveManualView: React.FC<InteractiveManualViewProps> = ({ currentQuote }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -236,7 +238,7 @@ Como posso apoiar seus estudos hoje?`,
       </div>
 
       {/* ========================================================================= */}
-      {/* SEÇÃO PRINCIPAL: INTERFACE INTERATIVA DO CONSULTOR IA */}
+      {/* SEÇÃO PRINCIPAL: INTERFACE INTERATIVA DO MANUAL DE REGRAS */}
       {/* ========================================================================= */}
       <div className="bg-[#0f172a] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[640px]">
         {/* Header do Manual Interativo */}
@@ -367,3 +369,6 @@ Como posso apoiar seus estudos hoje?`,
     </div>
   );
 };
+
+// Re-export com nome legado para retrocompatibilidade
+export const AIConsultantView = InteractiveManualView;

@@ -44,13 +44,13 @@ export const HelpSupportView: React.FC = () => {
   const [searchManual, setSearchManual] = useState('');
   const [expandedTopic, setExpandedTopic] = useState<number | null>(1);
 
-  // Chat do Agente de IA Especialista no Manual
+  // Chat do Sistema Interativo do Manual de Regras
   const [messages, setMessages] = useState<SupportMessage[]>([
     {
       id: '1',
       sender: 'ai',
-      text: `### 👋 Olá! Sou o Agente de IA do Manual Radar B3 (Versão 2)
-Tenho conhecimento completo sobre **todas as regras, fórmulas matemáticas, parâmetros de decisão e limites operacionais** descritos no manual.
+      text: `### 📖 Olá! Sou o Sistema Interativo do Manual Radar B3 (Versão 2)
+Tenho catalogadas **todas as regras, fórmulas matemáticas, parâmetros de decisão e limites operacionais** descritos no manual.
 
 Você pode me fazer qualquer pergunta como:
 - *"Por que a PETR4 é aprovada mesmo com liquidez corrente abaixo de 1,0?"*
@@ -104,7 +104,7 @@ Como posso apoiar seus estudos hoje?`,
         text:
           ok && data?.answer
             ? data.answer
-            : 'Desculpe, não foi possível consultar o agente no momento. Por favor, tente novamente.',
+            : 'Desculpe, não foi possível consultar o manual de regras no momento. Por favor, tente novamente.',
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, aiReply]);
@@ -114,7 +114,7 @@ Como posso apoiar seus estudos hoje?`,
         {
           id: (Date.now() + 1).toString(),
           sender: 'ai',
-          text: 'Ocorreu um erro ao conectar ao assistente de IA.',
+          text: 'Ocorreu um erro ao conectar ao sistema de regras do manual.',
           timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -658,7 +658,7 @@ Como posso apoiar seus estudos hoje?`,
           <div className="flex items-center gap-3 self-start md:self-auto">
             <div className="text-right hidden sm:block">
               <div className="text-xs font-mono font-bold text-cyan-400">12 Tópicos Oficiais</div>
-              <div className="text-[11px] text-gray-500 font-sans">Agente de IA e Vídeo Aulas</div>
+              <div className="text-[11px] text-gray-500 font-sans">Manual Interativo e Vídeo Aulas</div>
             </div>
           </div>
         </div>
@@ -731,20 +731,20 @@ Como posso apoiar seus estudos hoje?`,
         </div>
 
         {/* ========================================================================= */}
-        {/* COLUNA DA DIREITA: AGENTE DE IA + VÍDEO EXPLICATIVO (5 COLUNAS) */}
+        {/* COLUNA DA DIREITA: MANUAL INTERATIVO + VÍDEO EXPLICATIVO (5 COLUNAS) */}
         {/* ========================================================================= */}
         <div className="lg:col-span-5 space-y-5 flex flex-col">
-          {/* 1. AGENTE DE IA ESPECIALISTA NO MANUAL */}
+          {/* 1. SISTEMA INTERATIVO DE CONSULTA DO MANUAL */}
           <div className="bg-[#0f172a] border border-gray-800 rounded-2xl p-4 flex flex-col h-[560px] shadow-lg">
             {/* Header do Chat */}
             <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-cyan-950/80 border border-cyan-500/30 text-cyan-400">
-                  <Bot className="w-5 h-5" />
+                  <BookOpen className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                    Agente IA do Manual <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                    Manual Interativo de Regras <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
                   </h3>
                   <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
