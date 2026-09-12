@@ -19,6 +19,7 @@ import {
   ChevronUp,
   HelpCircle,
   ExternalLink,
+  AlertTriangle,
 } from 'lucide-react';
 import { safeFetchJson } from '@/lib/utils/api-client';
 import { TradeOpportunityItem } from '@/lib/domain/opportunity-radar';
@@ -296,22 +297,32 @@ export const OpportunityRadarView: React.FC<OpportunityRadarViewProps> = ({ onSe
 
       {/* 3. Ticker Bar Compacta de Mercado */}
       {macro && (
-        <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none text-xs font-mono">
-          <div className="flex items-center gap-4 bg-slate-900/60 border border-slate-800/80 px-3 py-1.5 rounded-lg whitespace-nowrap">
-            <span className="text-slate-400 text-[11px]">Macro:</span>
-            <span>Brent: <strong className="text-white">${macro.brent.price.toFixed(2)}</strong> <span className={macro.brent.changePct >= 0 ? 'text-emerald-400' : 'text-red-400'}>({macro.brent.changePct >= 0 ? '+' : ''}{macro.brent.changePct}%)</span></span>
-            <span>Minério: <strong className="text-white">${macro.ironOre.price.toFixed(2)}</strong> <span className={macro.ironOre.changePct >= 0 ? 'text-emerald-400' : 'text-red-400'}>({macro.ironOre.changePct >= 0 ? '+' : ''}{macro.ironOre.changePct}%)</span></span>
-            <span>DXY: <strong className="text-white">{macro.dxy.price.toFixed(2)}</strong></span>
-            <span>VIX: <strong className="text-cyan-400">{macro.vix.price.toFixed(2)}</strong></span>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none text-xs font-mono">
+            <div className="flex items-center gap-4 bg-slate-900/60 border border-slate-800/80 px-3 py-1.5 rounded-lg whitespace-nowrap">
+              <span className="text-slate-400 text-[11px]">Macro:</span>
+              <span>Brent: <strong className="text-white">${macro.brent.price.toFixed(2)}</strong> <span className={macro.brent.changePct >= 0 ? 'text-emerald-400' : 'text-red-400'}>({macro.brent.changePct >= 0 ? '+' : ''}{macro.brent.changePct}%)</span></span>
+              <span>Minério: <strong className="text-white">${macro.ironOre.price.toFixed(2)}</strong> <span className={macro.ironOre.changePct >= 0 ? 'text-emerald-400' : 'text-red-400'}>({macro.ironOre.changePct >= 0 ? '+' : ''}{macro.ironOre.changePct}%)</span> <span className="text-[10px] font-semibold text-amber-400 font-mono">(ref.)</span></span>
+              <span>DXY: <strong className="text-white">{macro.dxy.price.toFixed(2)}</strong></span>
+              <span>VIX: <strong className="text-cyan-400">{macro.vix.price.toFixed(2)}</strong></span>
+            </div>
+
+            {macro.agri && (
+              <div className="flex items-center gap-4 bg-slate-900/60 border border-yellow-500/20 px-3 py-1.5 rounded-lg whitespace-nowrap">
+                <span className="text-yellow-400 text-[11px] flex items-center gap-1"><Wheat className="w-3 h-3" /> Agro:</span>
+                <span>Milho B3: <strong className="text-white">R$ {macro.agri.cornB3Est.price.toFixed(2)}</strong> <span className="text-[10px] font-semibold text-amber-400 font-mono">(est.)</span></span>
+                <span>Boi B3: <strong className="text-white">R$ {macro.agri.boiB3Est.price.toFixed(2)}</strong> <span className="text-[10px] font-semibold text-amber-400 font-mono">(est.)</span></span>
+              </div>
+            )}
           </div>
 
-          {macro.agri && (
-            <div className="flex items-center gap-4 bg-slate-900/60 border border-yellow-500/20 px-3 py-1.5 rounded-lg whitespace-nowrap">
-              <span className="text-yellow-400 text-[11px] flex items-center gap-1"><Wheat className="w-3 h-3" /> Agro:</span>
-              <span>Milho B3: <strong className="text-white">R$ {macro.agri.cornB3Est.price.toFixed(2)}</strong> <span className="text-[10px] font-semibold text-amber-400 font-mono">(est.)</span></span>
-              <span>Boi B3: <strong className="text-white">R$ {macro.agri.boiB3Est.price.toFixed(2)}</strong> <span className="text-[10px] font-semibold text-amber-400 font-mono">(est.)</span></span>
-            </div>
-          )}
+          {/* Banner de Aviso Legal e Governança de Dados */}
+          <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl px-3 py-1.5 flex items-center gap-2 text-[11px] text-slate-400 font-sans">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>
+              <strong>Aviso Legal & Governança:</strong> Conteúdo estritamente educacional e analítico, não constitui recomendação de investimento. Cotações marcadas com <strong>(est.)</strong> ou <strong>(ref.)</strong> utilizam preços referenciais ou fechamentos de mercado prévio.
+            </span>
+          </div>
         </div>
       )}
 

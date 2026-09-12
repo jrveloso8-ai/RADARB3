@@ -16,8 +16,9 @@ export const Footer: React.FC = () => {
               <span>AVISO LEGAL & CARÁTER ESTRITAMENTE EDUCACIONAL</span>
             </p>
             <p className="text-[11px] text-gray-400 leading-relaxed font-sans">
-              O sistema destina-se exclusivamente a fins de estudo, pesquisa e análise quantitativa.
+              O sistema destina-se exclusivamente a fins de estudo, pesquisa e análise quantitativa educacional.
               Nenhum dado, indicador, modelo ou veredito apresentado constitui recomendação de compra, venda ou execução de ativos e valores mobiliários.
+              Cotações e parâmetros com identificador <strong>(est.)</strong> ou <strong>(ref.)</strong> utilizam preços referenciais, estimativas estatísticas ou dados de fechamento prévio quando feeds em tempo real estão indisponíveis.
             </p>
           </div>
         </div>
