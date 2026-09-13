@@ -7,6 +7,7 @@ import { OpportunityRadarView } from '@/components/opportunities/OpportunityRada
 import { QuoteView } from '@/components/quote/QuoteView';
 import { ScreenerView } from '@/components/screener/ScreenerView';
 import { OptionsBarriersView } from '@/components/options/OptionsBarriersView';
+import { SpecialStrategiesView } from '@/components/special-strategies/SpecialStrategiesView';
 import { HelpSupportView } from '@/components/help/HelpSupportView';
 import { SYSTEM_VERSION } from '@/lib/config/version';
 import { Shield, Sparkles, TrendingUp, Users } from 'lucide-react';
@@ -91,6 +92,17 @@ export default function HomePage() {
           className={activeTab === 'options' ? 'block' : 'hidden'}
         >
           {activeTab === 'options' && <OptionsBarriersView />}
+        </div>
+
+        <div
+          id="panel-special-strategies"
+          role="tabpanel"
+          aria-labelledby="nav-tab-special-strategies"
+          className={activeTab === 'special-strategies' ? 'block' : 'hidden'}
+        >
+          {activeTab === 'special-strategies' && (
+            <SpecialStrategiesView onSelectSymbol={handleSelectSymbolFromScreener} />
+          )}
         </div>
 
         <div

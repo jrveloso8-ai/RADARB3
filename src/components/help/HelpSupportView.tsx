@@ -360,9 +360,9 @@ Como posso apoiar seus estudos hoje?`,
             </div>
           </div>
           <div className="bg-[#111827] p-3 rounded-xl border border-gray-800 space-y-1.5 text-[11px]">
-            <strong className="text-white">"Lista Vazia é Resposta":</strong>
+            <strong className="text-white">&quot;Lista Vazia é Resposta&quot;:</strong>
             <p className="text-gray-400">
-              Se uma lista aparecer vazia com a mensagem <em>"Nenhuma operação autorizada nesta direção hoje"</em>, isso não é falha de carregamento. É o sistema dizendo que nenhum ativo passou nos critérios. Um sistema obrigado a sempre mostrar algo acaba fabricando operação.
+              Se uma lista aparecer vazia com a mensagem <em>&quot;Nenhuma operação autorizada nesta direção hoje&quot;</em>, isso não é falha de carregamento. É o sistema dizendo que nenhum ativo passou nos critérios. Um sistema obrigado a sempre mostrar algo acaba fabricando operação.
             </p>
           </div>
         </div>

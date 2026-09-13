@@ -14,12 +14,13 @@ import {
   RefreshCw,
   Zap,
   Users,
+  Sparkles,
 } from 'lucide-react';
 import { safeFetchJson } from '@/lib/utils/api-client';
 import { BrapiHealthStatus } from '@/lib/services/brapi';
 import { SYSTEM_VERSION } from '@/lib/config/version';
 
-export type ActiveTab = 'overview' | 'opportunities' | 'quote' | 'screener' | 'options' | 'help';
+export type ActiveTab = 'overview' | 'opportunities' | 'quote' | 'screener' | 'options' | 'special-strategies' | 'help';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -95,6 +96,12 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
       label: 'Barreiras de Opções',
       shortLabel: 'Opções',
       icon: Zap,
+    },
+    {
+      id: 'special-strategies' as ActiveTab,
+      label: 'Estratégias Especiais',
+      shortLabel: 'Especiais',
+      icon: Sparkles,
     },
     {
       id: 'help' as ActiveTab,

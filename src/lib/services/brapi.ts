@@ -449,6 +449,8 @@ export class BrapiService {
 
         return {
           symbol: item.symbol,
+          underlyingSymbol: item.underlyingSymbol || data?.underlying || cleanUnderlying,
+          expirationDate: item.expirationDate || data?.expirationDate || expirationDate,
           side: item.side,
           strike: Number(item.strike),
           optionStyle: item.optionStyle || 'american',

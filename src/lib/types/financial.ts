@@ -175,6 +175,8 @@ export interface TrendsApiResponse {
 
 export interface OptionAnalyticsItem {
   symbol: string;
+  underlyingSymbol?: string;
+  expirationDate?: string;
   side: 'call' | 'put' | 'CALL' | 'PUT';
   strike: number;
   optionStyle?: 'american' | 'european' | string;
