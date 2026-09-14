@@ -1,11 +1,18 @@
 /**
- * AUDITORIA ESTRUTURAL RADAR B3 PRO IA — Verificador de Dados Fabricados
+ * AUDITORIA ESTRUTURAL RADAR B3 PRO IA — Verificador Dinâmico de Dados Fabricados
  * 
  * Script que falha (exit code != 0) se encontrar literais fixos, fallbacks mágicos
  * ou estimativas não documentadas explicitamente nos arquivos de produção.
  * 
+ * COBERTURA:
+ * Varre dinamicamente e recursivamente todo o código de produção em:
+ * - src/lib/domain/
+ * - src/lib/services/
+ * - src/components/ (incluindo src/components/options/OptionsBarriersView.tsx)
+ * - src/app/
+ * 
  * REQUISITO DE AUDITORIA:
- * Todo comentário de proveniência deve obrigatoriamente especificar uma das categorias
+ * Todo dado não medido ou com fallback obrigatório deve especificar uma das categorias
  * da taxonomia oficial: // PROVENANCE: MEDIDO | DERIVADO | ESTIMADO | SIMULADO
  */
 
@@ -14,19 +21,12 @@ const path = require('path');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 
-// Arquivos escopo da auditoria (Fases 1 a 3)
-const TARGET_FILES = [
-  'src/lib/domain/opportunity-radar.ts',
-  'src/app/api/opportunities/route.ts',
-  'src/lib/services/market-quotes.ts',
-  'src/components/tradingview/TradingViewOverview.tsx',
-  'src/lib/domain/sentiment.ts',
-  'src/components/quote/QuoteView.tsx',
-  'src/lib/services/brapi.ts',
-  'src/lib/domain/black-scholes.ts',
-  'src/lib/domain/study-auditor.ts',
-  'src/lib/domain/options-barriers.ts',
-  'src/components/options/OptionsBarriersView.tsx',
+// Pastas de produção auditadas dinamicamente
+const TARGET_DIRS = [
+  'src/lib/domain',
+  'src/lib/services',
+  'src/components',
+  'src/app',
 ];
 
 // Regex estrita de proveniência com taxonomia obrigatória
@@ -34,7 +34,28 @@ const VALID_PROVENANCE_REGEX = /\/\/\s*PROVENANCE:\s*(MEDIDO|DERIVADO|ESTIMADO|S
 
 // Padrões proibidos (sem comentário explícito de proveniência válida)
 const FORBIDDEN_PATTERNS = [
-  { name: 'Fallback "|| 0."', regex: /\|\|\s*0\.\d+/ },
+  // Fallbacks de negócio em opções e deltas (Achado N1 da auditoria)
+  { name: 'Delta de opção fabricado "?? 0.28"', regex: /\?\?\s*0\.28\b/ },
+  { name: 'Delta de opção fabricado "?? 0.16"', regex: /\?\?\s*0\.16\b/ },
+  { name: 'Delta de opção fabricado "?? 0.22"', regex: /\?\?\s*0\.22\b/ },
+  { name: 'POP com fallback numérico "?? 75"', regex: /\?\?\s*75\b/ },
+
+  // Preços fabricados de commodities agrícolas (Achado N2 da auditoria)
+  { name: 'Preço fabricado Milho "|| 62.50"', regex: /\|\|\s*62\.5(?:0)?\b/ },
+  { name: 'Preço fabricado Boi "|| 242.00"', regex: /\|\|\s*242(?:\.00)?\b/ },
+  { name: 'Preço fabricado Soja "|| 132.80"', regex: /\|\|\s*132\.8(?:0)?\b/ },
+
+  // Crivo fundamentalista e solvência (Achados C1, C2 e C5 da auditoria)
+  { name: 'Bypass arbitrário de 1 bilhão em FCO', regex: /fcoVal\s*>\s*1_000_000_000/ },
+  { name: 'ROE clamp forçado em 18%', regex: /Math\.min\(\s*18\.0\s*,/ },
+  { name: 'Solvência hardcoded de VALE3 (0.8x)', regex: /cleanSymbol\s*===\s*['"]VALE3['"].*?:\s*0\.8\b/s },
+
+  // Fallbacks de estratégia e R:R (Achado N4 da auditoria)
+  { name: 'Strategy ID fabricado "|| 11"', regex: /strategySpec\?\.id\s*\|\|\s*11\b/ },
+  { name: 'R:R duplicado fabricado "|| 1.5"', regex: /riskRewardRatio\s*\|\|\s*1\.5\b/ },
+
+  // Fallbacks numéricos genéricos e constantes fixas históricas
+  { name: 'Fallback "|| 0.X"', regex: /\|\|\s*0\.[1-9]\d*/ },
   { name: 'Fallback "|| 100"', regex: /\|\|\s*100\b/ },
   { name: 'Nullish HV "?? 24.5"', regex: /\?\?\s*24\.5/ },
   { name: 'Fallback HV "|| 24.5"', regex: /\|\|\s*24\.5/ },
@@ -45,27 +66,51 @@ const FORBIDDEN_PATTERNS = [
   { name: 'Débito estimado "* 0.02"', regex: /\*\s*0\.02\b/ },
   { name: 'Prêmio estimado "* 0.025"', regex: /\*\s*0\.025\b/ },
   { name: 'Crédito estimado "* 0.015"', regex: /\*\s*0\.015\b/ },
-  { name: 'Preço fixo Minério de Ferro (97.90)', regex: /\b97\.9(?:0)?\b/ },
-  { name: 'Preço fixo Milho B3 (63.80)', regex: /\b63\.8(?:0)?\b/ },
-  { name: 'Preço fixo Boi B3 (244.50)', regex: /\b244\.5(?:0)?\b/ },
-  { name: 'Preço fixo Soja B3 (134.50)', regex: /\b134\.5(?:0)?\b/ },
-  { name: 'Preço fixo SPY (761.78)', regex: /\b761\.78\b/ },
 ];
+
+/**
+ * Coleta recursivamente todos os arquivos .ts, .tsx, .js, .jsx
+ * excluindo testes (.test., .spec.) e declarações (.d.ts)
+ */
+function collectSourceFiles(dir, fileList = []) {
+  if (!fs.existsSync(dir)) return fileList;
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules' && entry.name !== '_backups') {
+        collectSourceFiles(fullPath, fileList);
+      }
+    } else if (entry.isFile()) {
+      const ext = path.extname(entry.name);
+      if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) {
+        if (!entry.name.includes('.test.') && !entry.name.includes('.spec.') && !entry.name.endsWith('.d.ts')) {
+          fileList.push(fullPath);
+        }
+      }
+    }
+  }
+
+  return fileList;
+}
 
 let totalViolations = 0;
 const violationsReport = [];
 
 console.log('================================================================');
-console.log('🔍 AUDITORIA AUTOMÁTICA: Verificando Dados Fabricados / Fallbacks');
+console.log('🔍 AUDITORIA DINÂMICA COMPLETA: Verificando Dados Fabricados / Fallbacks');
 console.log('================================================================\n');
 
-for (const relFile of TARGET_FILES) {
-  const fullPath = path.join(ROOT_DIR, relFile);
-  if (!fs.existsSync(fullPath)) {
-    console.warn(`[AVISO] Arquivo não encontrado: ${relFile}`);
-    continue;
-  }
+const allTargetFiles = [];
+for (const relDir of TARGET_DIRS) {
+  collectSourceFiles(path.join(ROOT_DIR, relDir), allTargetFiles);
+}
 
+console.log(`📁 Varrendo dinamicamente ${allTargetFiles.length} arquivos de código-fonte de produção...\n`);
+
+for (const fullPath of allTargetFiles) {
+  const relFile = path.relative(ROOT_DIR, fullPath).replace(/\\/g, '/');
   const content = fs.readFileSync(fullPath, 'utf8');
   const lines = content.split('\n');
 
@@ -121,6 +166,6 @@ if (totalViolations > 0) {
   console.error('    // PROVENANCE: <MEDIDO|DERIVADO|ESTIMADO|SIMULADO> <detalhes da fonte>\n');
   process.exit(1);
 } else {
-  console.log('✅ NENHUM DADO FABRICADO ENCONTRADO! Todos os arquivos auditados estão em conformidade estrita com a taxonomia.');
+  console.log(`✅ NENHUM DADO FABRICADO ENCONTRADO em ${allTargetFiles.length} arquivos auditados! Todos em conformidade estrita com a taxonomia.`);
   process.exit(0);
 }

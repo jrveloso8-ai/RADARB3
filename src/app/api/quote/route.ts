@@ -156,11 +156,11 @@ export async function GET(request: NextRequest) {
       barrierAlert = undefined;
     }
 
-    // 8. Regime de Volatilidade & Veredito Consolidado CNPI
-    const realHv21 = calculateHistoricalVolatility(closes, 21) ?? 25.0;
+    // 8. Regime de Volatilidade & Veredito Consolidado CNPI (sem fallback arbitrário de 25.0)
+    const realHv21 = calculateHistoricalVolatility(closes, 21);
     const ivAtmRaw = optionAnalysis?.ivAtm?.callIv;
     const volRegime =
-      ivAtmRaw !== undefined && ivAtmRaw > 0
+      realHv21 !== null && realHv21 > 0 && ivAtmRaw !== undefined && ivAtmRaw > 0
         ? classifyVolatilityRegime(ivAtmRaw, realHv21)
         : null;
 

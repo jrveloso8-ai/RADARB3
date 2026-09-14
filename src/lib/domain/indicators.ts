@@ -362,7 +362,7 @@ export function calculateRiskReward(
   supports: number[],
   resistances: number[]
 ): OperationalRiskReward {
-  // PROVENANCE: Quando ATR for nulo (histórico curto), utiliza buffer técnico mínimo de 2% do preço
+  // PROVENANCE: ESTIMADO Quando ATR for nulo (histórico curto), utiliza buffer técnico mínimo de 2% do preço
   const atrBuffer = atr !== null && atr > 0 ? atr : (spot * 0.02);
 
   if (trend === 'ALTA') {

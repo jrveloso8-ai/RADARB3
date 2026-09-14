@@ -340,7 +340,7 @@ export function electBestOptionStrategy(
   verdict: string,
   trend: 'ALTA' | 'BAIXA' | 'LATERAL',
   rsi: number | null,
-  hv21: number,
+  hv21: number | null,
   optionAnalysis?: OptionAnalysisResult,
   fundamentalStatus?: 'APROVADO' | 'REPROVADO',
   analyticsList: OptionAnalyticsItem[] = []
@@ -492,6 +492,28 @@ export function electBestOptionStrategy(
           spotDriftPct,
         },
         priceContext
+      );
+    }
+
+    if (!hv21 || hv21 <= 0) {
+      return createBlockedStrategy(
+        symbol,
+        spot,
+        expDate,
+        dte,
+        bias,
+        'IV_INDISPONIVEL',
+        {
+          seriesInChain: analyticsList.length,
+          seriesEligible: totalChainEligibleCount,
+          validPairs: 0,
+          bestShortDelta: null,
+          dte,
+          spotDriftPct,
+        },
+        priceContext,
+        'Volatilidade Histórica (HV21) real indisponível para comparar com a IV.',
+        ['HV21 real indisponível nos preços históricos. Estruturas a crédito exigem comparação IV/HV.']
       );
     }
 

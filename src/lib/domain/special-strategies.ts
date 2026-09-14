@@ -440,7 +440,7 @@ export function screenDITMStockReplacement(
     const theoreticalExtrinsicValue = Number(Math.max(0.01, bsResult.theoreticalPrice - intrinsicValue).toFixed(2));
     const fairValue = Number((intrinsicValue + theoreticalExtrinsicValue).toFixed(2));
 
-    // Preço Teto: VI + no máximo 1.5% do Spot em gordura de VE (Regra do Lowell)
+    // PROVENANCE: ESTIMADO Regra de Lee Lowell (máximo 1.5% do spot como VE aceitável para Deep ITM)
     const maxAcceptableVE = Number((spotPrice * 0.015).toFixed(2));
     const ceilingPrice = Number((intrinsicValue + maxAcceptableVE).toFixed(2));
 

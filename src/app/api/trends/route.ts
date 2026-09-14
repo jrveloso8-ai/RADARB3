@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
           );
 
           // 6. Opções & Barreiras Institucionais (Eixo 3 - Analytics + Positions)
-          const realHv21 = calculateHistoricalVolatility(closes, 21) ?? 25.0;
+          const realHv21 = calculateHistoricalVolatility(closes, 21);
           let barrierAlert;
           let optionAnalysis;
           let optionStructure = null;

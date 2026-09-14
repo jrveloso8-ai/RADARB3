@@ -1014,7 +1014,8 @@ export function buildMasterOpportunityList(params: {
   const agriOverview = analyzeAgriCommodities(params.agriQuotes || {});
   for (const agri of agriOverview) {
     const opp = agri.tradeOpportunity;
-    if (opp && (opp.bias === 'COMPRA' || opp.bias === 'VENDA')) {
+    if (opp && (opp.bias === 'COMPRA' || opp.bias === 'VENDA') && typeof agri.price === 'number' && agri.price > 0) {
+      const currentPrice = agri.price;
       opportunities.push({
         id: `agri-${agri.id}`,
         symbol: agri.tickerB3,
@@ -1029,21 +1030,21 @@ export function buildMasterOpportunityList(params: {
         rationale: opp.rationale,
         triggerCondition: `Entrada com alvo em R$ ${opp.targetPrice?.toFixed(2)} e stop em R$ ${opp.stopLoss?.toFixed(2)}.`,
         execution: {
-          entryPrice: agri.price,
-          stopLoss: opp.stopLoss || Number((agri.price * 0.95).toFixed(2)),
-          target1: opp.targetPrice || Number((agri.price * 1.08).toFixed(2)),
-          target2: Number(((opp.targetPrice || agri.price * 1.08) * 1.05).toFixed(2)),
+          entryPrice: currentPrice,
+          stopLoss: opp.stopLoss || Number((currentPrice * 0.95).toFixed(2)),
+          target1: opp.targetPrice || Number((currentPrice * 1.08).toFixed(2)),
+          target2: Number(((opp.targetPrice || currentPrice * 1.08) * 1.05).toFixed(2)),
           riskRewardRatio: 2.4,
           timeframe: 'Posição / Safra (15 a 45 dias)',
           probabilityOfProfit: null,
           popProvenance: 'INDISPONIVEL',
-          maxProfitEst: `R$ ${((opp.targetPrice || agri.price * 1.08) - agri.price).toFixed(2)} por ${agri.unit}`,
-          maxLossEst: `R$ ${(agri.price - (opp.stopLoss || agri.price * 0.95)).toFixed(2)} por ${agri.unit}`,
+          maxProfitEst: `R$ ${((opp.targetPrice || currentPrice * 1.08) - currentPrice).toFixed(2)} por ${agri.unit}`,
+          maxLossEst: `R$ ${(currentPrice - (opp.stopLoss || currentPrice * 0.95)).toFixed(2)} por ${agri.unit}`,
           profitProvenance: 'DERIVADO',
         },
         tags: [agri.id, 'Agronegócio', agri.seasonality.seasonPhase, 'Futuros B3'],
-        spotPrice: agri.price,
-        changePct: agri.changePct,
+        spotPrice: currentPrice,
+        changePct: agri.changePct ?? 0,
       });
     }
   }

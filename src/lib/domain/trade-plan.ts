@@ -111,9 +111,9 @@ export function buildTradePlan(
     return null;
   }
 
-  const atrVal =
-    calculateATRFromSeries(highs, lows, closes, CNPI_RULES.TRADE_PLAN.ATR_PERIOD) ||
-    Number((spot * 0.025).toFixed(2));
+  const calculatedAtr = calculateATRFromSeries(highs, lows, closes, CNPI_RULES.TRADE_PLAN.ATR_PERIOD);
+  // PROVENANCE: ESTIMADO Se ATR for zero ou nulo em histórico curto, utiliza proxy técnico conservador de 2.5% do spot
+  const atrVal = calculatedAtr || Number((spot * 0.025).toFixed(2));
   const atrHalf = Number((atrVal * CNPI_RULES.TRADE_PLAN.ATR_MULTIPLIER_STOP).toFixed(2));
 
   const { resistanceLevels, supportLevels } = extractPivotLevels(highs, lows);

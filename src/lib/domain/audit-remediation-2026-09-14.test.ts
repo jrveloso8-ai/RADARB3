@@ -13,37 +13,34 @@ describe('Auditoria de Integridade 14/09/2026 — Regressão & Remediação', ()
   // ─────────────────────────────────────────────────────────────
   it('N1: não deve fabricar POP quando as opções não possuírem delta e volatilidade for ausente', () => {
     const dummyRegime: MarketRegime = {
-      regime: 'COMPRESSAO_VOLATILIDADE',
-      regimeLabel: 'Compressão Lateral',
-      spotPrice: 35.0,
-      hv21: null,
       zScore: 0.2,
-      percentileHV21: 30,
-      pcr: 0.8,
-      pcrLabel: 'Neutro',
+      regime: 'EQUILIBRIO',
+      regimeLabel: 'Compressão Lateral',
+      tailRiskIndex: 0,
+      tailRiskLabel: 'Baixo Risco de Cauda',
       flowSignal: 'NEUTRAL',
       flowLabel: 'Fluxo Estável',
-      ivAtm: 24.0,
+      pcr: 0.8,
+      pcrSignal: 'NEUTRO',
+      pcrLabel: 'Neutro',
       topCallBarrierStrike: 38.0,
       topPutBarrierStrike: 32.0,
-      isInsufficient: false,
+      upperBand2Sigma: 38.0,
+      lowerBand2Sigma: 32.0,
+      upperBand3Sigma: 40.0,
+      lowerBand3Sigma: 30.0,
+      spotPrice: 35.0,
+      hv21: null,
       sampleSize: 200,
-      flow5D: {
-        dominantFlow: 'CALL_BUY',
-        totalVolume: 100000,
-        putCallRatio: 0.8,
-        interpretation: 'Fluxo institucional equilibrado',
-      },
-      pcrTrend: 'STABLE',
-      ivRank: 35,
+      isInsufficient: false,
     };
 
-    // Chain com opções sem delta (delta: null / undefined)
+    // Chain com opções reais mas sem HV21 nem delta
     const chainSemDelta: OptionChainItem[] = [
-      { symbol: 'PETR4P320', side: 'PUT', strike: 32.0, close: 0.80, delta: null as any },
-      { symbol: 'PETR4P300', side: 'PUT', strike: 30.0, close: 0.30, delta: null as any },
-      { symbol: 'PETR4C380', side: 'CALL', strike: 38.0, close: 0.70, delta: null as any },
-      { symbol: 'PETR4C400', side: 'CALL', strike: 40.0, close: 0.25, delta: null as any },
+      { symbol: 'PETR4P320', underlyingSymbol: 'PETR4', expirationDate: '2026-10-16', side: 'PUT', strike: 32.0, bid: 0.75, ask: 0.85, close: 0.80 },
+      { symbol: 'PETR4P300', underlyingSymbol: 'PETR4', expirationDate: '2026-10-16', side: 'PUT', strike: 30.0, bid: 0.25, ask: 0.35, close: 0.30 },
+      { symbol: 'PETR4C380', underlyingSymbol: 'PETR4', expirationDate: '2026-10-16', side: 'CALL', strike: 38.0, bid: 0.65, ask: 0.75, close: 0.70 },
+      { symbol: 'PETR4C400', underlyingSymbol: 'PETR4', expirationDate: '2026-10-16', side: 'CALL', strike: 40.0, bid: 0.20, ask: 0.30, close: 0.25 },
     ];
 
     const strategies = generateStrategies({
@@ -125,8 +122,8 @@ describe('Auditoria de Integridade 14/09/2026 — Regressão & Remediação', ()
 
     // Deve conter flag eliminatória de lucro negativo
     expect(result.eliminatoryFlags).toContain('LUCRO_NEGATIVO');
-    expect(result.metrics.netIncome.status).toBe('RUIM');
-    expect(result.metrics.netIncome.value).toBe(-800_000_000);
+    expect(result.metrics.netIncome?.status).toBe('RUIM');
+    expect(result.metrics.netIncome?.value).toBe(-800_000_000);
     // Não pode dar status APROVADO
     expect(result.status).toBe('REPROVADO');
   });
@@ -154,12 +151,14 @@ describe('Auditoria de Integridade 14/09/2026 — Regressão & Remediação', ()
     const shortPutStrike = 30.0;
     const shortCallStrike = 36.0;
 
-    const condorResult = electBestOptionStrategy({
-      spotPrice: 33.0,
-      symbol: 'PETR4',
-      trend: 'LATERAL',
-      ivAtm: 26.0,
-      optionAnalysis: {
+    const condorResult = electBestOptionStrategy(
+      'PETR4',
+      33.0,
+      'NEUTRO',
+      'LATERAL',
+      50,
+      26.0,
+      {
         underlyingPrice: 33.0,
         selectedExpiration: '2026-10-16',
         selectedExpirationInfo: { dte: 22 },
@@ -172,7 +171,9 @@ describe('Auditoria de Integridade 14/09/2026 — Regressão & Remediação', ()
           { symbol: 'PETR4P280', strike: 28.0, bid: 0.15, ask: 0.25, close: 0.20, delta: -0.08 },
         ],
       } as any,
-    });
+      'APROVADO',
+      []
+    );
 
     if (condorResult.strategySpec.name === 'Iron Condor') {
       const expectedLower = Number((shortPutStrike - condorResult.netCostOrCredit).toFixed(2));

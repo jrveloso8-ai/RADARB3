@@ -98,11 +98,11 @@ export async function GET(request: NextRequest) {
 
     const barrierAlert = buildOptionBarrierAlert(analysis);
 
-    // 5. Volatilidade e Veredito
-    const realHv21 = calculateHistoricalVolatility(closes, 21) ?? 25.0;
+    // 5. Volatilidade e Veredito (sem fallback arbitrário de 25.0)
+    const realHv21 = calculateHistoricalVolatility(closes, 21);
     const ivAtmRaw = analysis?.ivAtm?.callIv;
     const volRegime =
-      ivAtmRaw !== undefined && ivAtmRaw > 0
+      realHv21 !== null && realHv21 > 0 && ivAtmRaw !== undefined && ivAtmRaw > 0
         ? classifyVolatilityRegime(ivAtmRaw, realHv21)
         : null;
 
