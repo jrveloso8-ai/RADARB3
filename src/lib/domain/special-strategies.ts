@@ -212,8 +212,10 @@ export interface ScreenCashSecuredPutsParams {
   spotPrice: number;
   options: OptionAnalyticsItem[];
   closes: number[];
-  minOtmPercent?: number; // padrão: 1.5%
-  maxOtmPercent?: number; // padrão: 20.0%
+  minOtmPercent?: number; // compatibilidade retroativa
+  maxOtmPercent?: number; // compatibilidade retroativa
+  minDelta?: number; // padrão: 0.10 (POP ~90%)
+  maxDelta?: number; // padrão: 0.35 (POP ~65%)
   targetExpirationDate?: string;
 }
 
@@ -373,12 +375,12 @@ export function screenDITMStockReplacement(
     };
   }
 
-  // Filtrar apenas calls com strike <= 85% do Spot (Lee Lowell preconiza strikes bem abaixo do spot)
+  // Filtrar apenas calls que sejam estritamente Dentro do Dinheiro (ITM)
   const calls = options.filter((o) => {
     if (o.side !== 'call') return false;
     const strike = Number(o.strike);
     if (isNaN(strike) || strike <= 0) return false;
-    return strike <= spotPrice * 0.85; // Mínimo de 15% DITM
+    return strike < spotPrice; // Estritamente ITM
   });
 
   for (const opt of calls) {
@@ -431,6 +433,10 @@ export function screenDITMStockReplacement(
       0.03 // DivYield conservador
     );
 
+    // Ancoragem por DELTA (Lee Lowell): Stock replacement exige Delta >= 0.75 (alvo 0.85 a 0.90)
+    // Se delta < 0.75, a opção não replica a ação com fidelidade e sofre com decaimento de tempo excessivo
+    if (bsResult.delta < 0.75 && strike > spotPrice * 0.85) continue;
+
     const theoreticalExtrinsicValue = Number(Math.max(0.01, bsResult.theoreticalPrice - intrinsicValue).toFixed(2));
     const fairValue = Number((intrinsicValue + theoreticalExtrinsicValue).toFixed(2));
 
@@ -439,7 +445,7 @@ export function screenDITMStockReplacement(
     const ceilingPrice = Number((intrinsicValue + maxAcceptableVE).toFixed(2));
 
     // Delta e Theta analíticos
-    const delta = bsResult.delta >= 0.70 ? Number(bsResult.delta.toFixed(2)) : 0.90;
+    const delta = Number(bsResult.delta.toFixed(2));
     const theta = Number(bsResult.theta.toFixed(4));
 
     // Comparativo de Capital (100 cotas)
@@ -583,7 +589,7 @@ export function screenPoorMansCoveredCall(
   for (const opt of longOptions) {
     if (opt.side !== 'call') continue;
     const strike = Number(opt.strike);
-    if (isNaN(strike) || strike <= 0 || strike > spotPrice * 0.85) continue;
+    if (isNaN(strike) || strike <= 0 || strike >= spotPrice) continue;
 
     const expDate = opt.expirationDate || '';
     const targetDate = new Date(expDate + 'T18:00:00Z');
@@ -598,10 +604,14 @@ export function screenPoorMansCoveredCall(
     const marketPrice = hasPrice ? Number(Number(rawPrice).toFixed(2)) : null;
 
     const bsResult = calculateBlackScholes(spotPrice, strike, tYears, r, hv, 'call', 0.03);
+
+    // Delta alvo para perna longa: Delta >= 0.75 (Lee Lowell Stock Replacement)
+    if (bsResult.delta < 0.75 && strike > spotPrice * 0.85) continue;
+
     const theoreticalExtrinsicValue = Math.max(0.01, bsResult.theoreticalPrice - intrinsicValue);
     const fairValue = Number((intrinsicValue + theoreticalExtrinsicValue).toFixed(2));
     const effectivePrice = marketPrice ?? fairValue;
-    const delta = bsResult.delta >= 0.70 ? Number(bsResult.delta.toFixed(2)) : 0.85;
+    const delta = Number(bsResult.delta.toFixed(2));
 
     const rawOI = opt.openInterest;
     const openInterest = rawOI !== null && rawOI !== undefined && !isNaN(Number(rawOI)) ? Number(rawOI) : null;
@@ -621,13 +631,13 @@ export function screenPoorMansCoveredCall(
     });
   }
 
-  // 2. Filtrar Pernas Curtas Elegíveis (Calls OTM: Strike entre 100% e 115% do Spot)
+  // 2. Filtrar Pernas Curtas Elegíveis (Calls OTM por Delta entre 0.15 e 0.38)
   const processedShortLegs: ProcessedLeg[] = [];
 
   for (const opt of shortOptions) {
     if (opt.side !== 'call') continue;
     const strike = Number(opt.strike);
-    if (isNaN(strike) || strike <= 0 || strike < spotPrice * 1.00 || strike > spotPrice * 1.15) continue;
+    if (isNaN(strike) || strike <= 0 || strike <= spotPrice) continue; // Estritamente OTM
 
     const expDate = opt.expirationDate || shortExpirationDate || '';
     const targetDate = new Date(expDate + 'T18:00:00Z');
@@ -642,9 +652,16 @@ export function screenPoorMansCoveredCall(
     const marketPrice = hasPrice ? Number(Number(rawPrice).toFixed(2)) : null;
 
     const bsResult = calculateBlackScholes(spotPrice, strike, tYears, r, hv, 'call', 0.03);
+    const shortDelta = Number(bsResult.delta.toFixed(2));
+
+    // Ancoragem por DELTA: venda mensal deve ter Delta entre 0.15 e 0.38 (POP 62% a 85% de expirar pó)
+    const isInDeltaRange = shortDelta >= 0.15 && shortDelta <= 0.38;
+    const isInNominalRange = strike >= spotPrice * 1.005 && strike <= spotPrice * 1.15;
+    if (!isInDeltaRange && !isInNominalRange) continue;
+
     const fairValue = Number(Math.max(0.01, bsResult.theoreticalPrice).toFixed(2));
     const effectivePrice = marketPrice ?? fairValue;
-    const delta = Number(bsResult.delta.toFixed(2));
+    const delta = shortDelta;
 
     const rawOI = opt.openInterest;
     const openInterest = rawOI !== null && rawOI !== undefined && !isNaN(Number(rawOI)) ? Number(rawOI) : null;
@@ -855,6 +872,8 @@ export function screenCashSecuredPuts(
     closes,
     minOtmPercent = 1.5,
     maxOtmPercent = 20.0,
+    minDelta = 0.10,
+    maxDelta = 0.38,
     targetExpirationDate,
   } = params;
 
@@ -879,11 +898,10 @@ export function screenCashSecuredPuts(
 
     totalPutsAnalyzed++;
 
-    // Filtro OTM: o strike deve ser MENOR que o spot atual
+    // Filtro OTM estrito: o strike deve ser estritamente MENOR que o spot atual
     if (opt.strike >= spotPrice) continue;
 
     const otmDistancePercent = Number((((spotPrice - opt.strike) / spotPrice) * 100).toFixed(2));
-    if (otmDistancePercent < minOtmPercent || otmDistancePercent > maxOtmPercent) continue;
 
     let dteCalendar = 21;
     if (opt.expirationDate) {
@@ -910,6 +928,15 @@ export function screenCashSecuredPuts(
       'put',
       0.03
     );
+
+    const absDelta = opt.delta !== undefined && opt.delta !== null && opt.delta !== 0
+      ? Math.abs(opt.delta)
+      : Math.abs(bs.delta);
+
+    // Ancoragem por DELTA (Lee Lowell): venda de put conservadora deve ter Delta entre 0.10 e 0.38 (POP 62% a 90%)
+    const isInDeltaRange = absDelta >= minDelta && absDelta <= maxDelta;
+    const isInNominalRange = otmDistancePercent >= minOtmPercent && otmDistancePercent <= maxOtmPercent;
+    if (!isInDeltaRange && !isInNominalRange) continue;
 
     const theoreticalPrice = Number((bs.theoreticalPrice || 0).toFixed(2));
     const effectivePrice = Number((marketPrice ?? theoreticalPrice).toFixed(2));

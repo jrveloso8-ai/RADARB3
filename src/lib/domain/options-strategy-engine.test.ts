@@ -467,4 +467,102 @@ describe('options-strategy-engine: generateStrategies com cadeia real', () => {
     // POP deve ser alto (> 70%)
     expect(lizard?.pop).toBeGreaterThan(0.70);
   });
+
+  it('gera Bull Put Spread e Bear Call Spread com POP calibrado por Delta e pernas estritamente OTM', () => {
+    const chain: OptionChainItem[] = [
+      {
+        symbol: 'PETRJ380',
+        underlyingSymbol: 'PETR4',
+        side: 'CALL',
+        strike: 38.0, // OTM Delta ~0.28
+        expirationDate: '2026-10-16',
+        bid: 0.85,
+        ask: 0.90,
+        close: 0.88,
+      },
+      {
+        symbol: 'PETRJ400',
+        underlyingSymbol: 'PETR4',
+        side: 'CALL',
+        strike: 40.0, // OTM Delta ~0.10
+        expirationDate: '2026-10-16',
+        bid: 0.25,
+        ask: 0.30,
+        close: 0.28,
+      },
+      {
+        symbol: 'PETRV340',
+        underlyingSymbol: 'PETR4',
+        side: 'PUT',
+        strike: 34.0, // OTM Delta ~ -0.28
+        expirationDate: '2026-10-16',
+        bid: 0.70,
+        ask: 0.75,
+        close: 0.72,
+      },
+      {
+        symbol: 'PETRV320',
+        underlyingSymbol: 'PETR4',
+        side: 'PUT',
+        strike: 32.0, // OTM Delta ~ -0.10
+        expirationDate: '2026-10-16',
+        bid: 0.20,
+        ask: 0.25,
+        close: 0.22,
+      },
+    ];
+
+    const input: GenerateStrategiesInput = {
+      regime: {
+        ...mockRegime,
+        spotPrice: 36.0,
+      },
+      expiration: '2026-10-16',
+      dte: 23,
+      hv21: 28.0,
+      dataDate: '2026-09-14',
+      optionsChain: chain,
+    };
+
+    const strategies = generateStrategies(input);
+
+    // 1. Testar Bull Put Spread
+    const bullPut = strategies.find((s) => s.id === 'BULL_PUT_SPREAD');
+    expect(bullPut).toBeDefined();
+    expect(bullPut?.legs).toHaveLength(2);
+    expect(bullPut?.legs[0].action).toBe('VENDER');
+    expect(bullPut?.legs[0].type).toBe('PUT');
+    expect(bullPut?.legs[0].strike).toBeLessThan(36.0); // OTM
+    expect(bullPut?.legs[1].action).toBe('COMPRAR');
+    expect(bullPut?.legs[1].type).toBe('PUT');
+    expect(bullPut?.legs[1].strike).toBeLessThan(bullPut!.legs[0].strike); // Asa de proteção abaixo
+    expect(bullPut?.pop).toBeDefined();
+    expect(bullPut?.pop).toBeGreaterThan(0.60);
+
+    // 2. Testar Bear Call Spread
+    const bearCall = strategies.find((s) => s.id === 'BEAR_CALL_SPREAD');
+    expect(bearCall).toBeDefined();
+    expect(bearCall?.legs).toHaveLength(2);
+    expect(bearCall?.legs[0].action).toBe('VENDER');
+    expect(bearCall?.legs[0].type).toBe('CALL');
+    expect(bearCall?.legs[0].strike).toBeGreaterThan(36.0); // OTM
+    expect(bearCall?.legs[1].action).toBe('COMPRAR');
+    expect(bearCall?.legs[1].type).toBe('CALL');
+    expect(bearCall?.legs[1].strike).toBeGreaterThan(bearCall!.legs[0].strike); // Asa de proteção acima
+    expect(bearCall?.pop).toBeDefined();
+    expect(bearCall?.pop).toBeGreaterThan(0.60);
+
+    // 3. Testar Covered Call c/ Collar
+    const collar = strategies.find((s) => s.id === 'COVERED_CALL_COLLAR');
+    expect(collar).toBeDefined();
+    expect(collar?.legs).toHaveLength(2);
+    expect(collar?.legs[0].action).toBe('VENDER');
+    expect(collar?.legs[0].type).toBe('CALL');
+    expect(collar?.legs[0].strike).toBeGreaterThan(36.0); // OTM
+    expect(collar?.legs[1].action).toBe('COMPRAR');
+    expect(collar?.legs[1].type).toBe('PUT');
+    expect(collar?.legs[1].strike).toBeLessThan(36.0); // OTM
+    expect(collar?.pop).toBeDefined();
+    expect(collar?.pop).toBeGreaterThan(0.60);
+  });
 });

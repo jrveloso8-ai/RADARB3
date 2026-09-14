@@ -541,43 +541,36 @@ function buildBullPutSpread(
 ): StrategyRecommendation {
   const spot = regime.spotPrice;
 
-  // Strike vendido: maior barreira de PUT real (se disponível) ou alvo intermediário
-  const shortPutTarget = regime.topPutBarrierStrike
-    ?? Number((regime.lowerBand2Sigma + (spot - regime.lowerBand2Sigma) / 2).toFixed(2));
-  const shortPutOrigin: StrikeOriginType = regime.topPutBarrierStrike
-    ? 'BARREIRA_PUT_REAL' : 'BANDA_2SIGMA_REAL';
-  const shortPutDesc = regime.topPutBarrierStrike
-    ? `Barreira de PUT com maior OI real B3 (R$${regime.topPutBarrierStrike.toFixed(2)})`
-    : `Alvo Banda -2σ real (R$${regime.lowerBand2Sigma.toFixed(2)})`;
-
+  // 1. Perna Vendida: Barreira de PUT se for estritamente OTM (strike <= spot * 0.995), senão Delta ~ -0.28 (OTM)
   const shortLeg = resolveOptionLeg({
     action: 'VENDER',
     type: 'PUT',
-    targetStrike: shortPutTarget,
-    strikeOrigin: shortPutOrigin,
-    strikeOriginDescription: shortPutDesc,
+    targetDelta: -0.28,
+    mustBeOTM: true,
+    strikeOrigin: 'BANDA_2SIGMA_REAL',
+    strikeOriginDescription: 'PUT vendida OTM (Delta ~ -0.28 — probabilidade ~72% OTM)',
     chain,
     spot,
     dte,
     hv21,
     expiration,
-    legRationale: 'PUT vendida ancorada na barreira real de maior OI — captura prêmio máximo onde o mercado concentrou suporte institucional',
+    legRationale: 'PUT vendida OTM ancorada por delta estatístico — captura taxa máxima fora do dinheiro',
   });
 
-  // Strike comprado: banda -2σ real (proteção de cauda e limitação de risco)
-  const longPutTarget = Number(regime.lowerBand2Sigma.toFixed(2));
+  // 2. Perna Comprada: Delta ~ -0.10 OTM (proteção de cauda e limitação de risco)
   const longLeg = resolveOptionLeg({
     action: 'COMPRAR',
     type: 'PUT',
-    targetStrike: Math.min(longPutTarget, shortLeg.strike * 0.97),
+    targetDelta: -0.10,
+    mustBeOTM: true,
     strikeOrigin: 'BANDA_2SIGMA_REAL',
-    strikeOriginDescription: `Banda -2σ real (R$${regime.lowerBand2Sigma.toFixed(2)})`,
+    strikeOriginDescription: 'PUT comprada OTM (Delta ~ -0.10 — proteção de risco)',
     chain,
     spot,
     dte,
     hv21,
     expiration,
-    legRationale: 'PUT comprada na banda -2σ real — limita o risco máximo ao spread entre as pernas',
+    legRationale: 'PUT comprada OTM — limita o risco máximo ao spread entre as pernas',
     constraint: 'STRICTLY_LESS_THAN',
     constraintStrike: shortLeg.strike,
   });
@@ -590,15 +583,19 @@ function buildBullPutSpread(
   const maxReturnPerLot = netCredit > 0 ? netCredit * 100 : null;
   const breakEven = shortLeg.strike - netCredit;
 
-  // Perna de cauda: se Z < -2σ, ativa compra adicional de PUT de cauda (-3σ)
-  const tailStrikeTarget = Number(regime.lowerBand3Sigma.toFixed(2));
+  // POP por Delta da PUT vendida: probabilidade de expirar OTM (acima do strike da put)
+  const shortDelta = Math.abs(shortLeg.delta ?? 0.28);
+  const pop = Number(Math.min(0.95, Math.max(0.50, 1 - shortDelta)).toFixed(4));
+
+  // Perna de cauda: se Z < -2σ, ativa compra adicional de PUT de cauda (-3σ / Delta ~ -0.04)
   const tailIsActive = regime.zScore < -2.0;
   const tailLegResolved = resolveOptionLeg({
     action: 'COMPRAR',
     type: 'PUT',
-    targetStrike: tailStrikeTarget,
+    targetDelta: -0.04,
+    mustBeOTM: true,
     strikeOrigin: 'BANDA_3SIGMA_REAL',
-    strikeOriginDescription: `Banda -3σ real (R$${tailStrikeTarget.toFixed(2)})`,
+    strikeOriginDescription: 'PUT de cauda profunda (Delta ~ -0.04 — proteção de crash)',
     chain,
     spot,
     dte,
@@ -618,7 +615,7 @@ function buildBullPutSpread(
     legs: [tailLegResolved],
     rationale: tailIsActive
       ? `⚠️ CAUDA ATIVA: Z-Score atual de ${regime.zScore.toFixed(2)}σ está em extensão de queda. O acréscimo desta PUT em ${tailLegResolved.strikeOriginLabel} transforma a estrutura de Trava de Alta em "Trava com Seguro de Cauda", pagando de forma assimétrica em eventos extremos raros.`
-      : `ℹ️ Cauda não ativa (Z = ${regime.zScore.toFixed(2)}σ, acima do gatilho de -2.0σ). Disponível para ativação manual se o mercado deteriorar para extensão de queda.`,
+      : `ℹ️ Seguro de cauda inativo (Z-Score = ${regime.zScore.toFixed(2)}σ dentro da normalidade estatística). Se o papel romper -2.0σ de desvio, a recomendação sugerirá compra de PUT de proteção barata.`,
   };
 
   const convictionFactors = computeConvictionScore(regime, 'ALTA', true);
@@ -634,19 +631,22 @@ function buildBullPutSpread(
   const payoffReliability = buildPayoffReliability(legs, hv21, dataDate);
 
   const alertas: string[] = [];
-  if (regime.tailRiskIndex >= 70)
-    alertas.push('⚠️ Índice de Risco de Cauda elevado: considere adicionar a perna de Black Swan Hedge');
-  if (netCredit <= 0)
-    alertas.push('⛔ Crédito líquido indisponível com dados atuais — verificar prêmios reais de mercado');
-  if (regime.isInsufficient)
-    alertas.push('⚠️ Amostra estatística insuficiente (< 30 fechamentos reais) — bandas menos confiáveis');
+  if (regime.zScore > 2.0) {
+    alertas.push('⚠️ Alerta: Spot em extensão de alta (+2σ) — risco de reversão à média contra a ponta vendida.');
+  }
+  if (regime.flowSignal === 'ACCUMULATION_PUT') {
+    alertas.push('⚡ Atenção ao Fluxo 5D: institucional acumulando PUTs nos últimos 5 pregões.');
+  }
+  if (shortLeg.premiumReliability === 'SEM_DADOS' || longLeg.premiumReliability === 'SEM_DADOS') {
+    alertas.push('⛔ Sem dados de book para precificação real de mercado — consulte seu Home Broker antes de operar.');
+  }
 
   return {
     id: 'BULL_PUT_SPREAD',
-    name: 'Trava de Alta com PUT (Bull Put Spread)',
-    nameEn: 'Bull Put Spread',
-    category: 'TATICA',
-    targetProfiles: ['TATICO', 'CONSERVADOR'],
+    name: 'Trava de Alta com Put',
+    nameEn: 'Bull Put Spread (Crédito)',
+    category: 'RENDA_PROTECAO',
+    targetProfiles: ['CONSERVADOR', 'TATICO'],
     convictionScore,
     convictionFactors,
     regime: regime.regime,
@@ -661,6 +661,7 @@ function buildBullPutSpread(
         : null,
     payoffPoints,
     payoffReliability,
+    pop,
     rationale: `📊 TRAVA DE ALTA COM PUT (BULL PUT SPREAD)
 
 Regime Estatístico: ${regime.regimeLabel}
@@ -670,9 +671,10 @@ LÓGICA DA ESTRUTURA:
 Vendemos a PUT no strike R$${shortLeg.strike.toFixed(2)} (${shortLeg.strikeOriginLabel}) e compramos proteção no R$${longLeg.strike.toFixed(2)} (${longLeg.strikeOriginLabel}). Esta é uma estrutura de crédito: recebemos o prêmio líquido de entrada e o lucro máximo é obtido se o ativo fechar ACIMA de R$${shortLeg.strike.toFixed(2)} no vencimento.
 
 ANCORAGEM EM DADOS REAIS:
-• Strike vendido: ${shortLeg.strikeOriginLabel} (${shortLeg.symbol ?? 'B3'})
-• Strike comprado: ${longLeg.strikeOriginLabel} (${longLeg.symbol ?? 'B3'})
+• Strike vendido: ${shortLeg.strikeOriginLabel} (${shortLeg.symbol ?? 'B3'}) — Δ ${shortLeg.delta?.toFixed(2) ?? 'N/D'}
+• Strike comprado: ${longLeg.strikeOriginLabel} (${longLeg.symbol ?? 'B3'}) — Δ ${longLeg.delta?.toFixed(2) ?? 'N/D'}
 • Prêmios: ${shortLeg.premiumReliabilityLabel} / ${longLeg.premiumReliabilityLabel}
+• POP Estimado: ${(pop * 100).toFixed(1)}%
 
 RAZÃO PUT/CALL REAL: ${regime.pcr.toFixed(2)} (${regime.pcrLabel})
 FLUXO INSTITUCIONAL 5D: ${regime.flowLabel}
@@ -696,41 +698,36 @@ function buildBearCallSpread(
 ): StrategyRecommendation {
   const spot = regime.spotPrice;
 
-  const shortCallTarget = regime.topCallBarrierStrike
-    ?? Number(regime.upperBand2Sigma.toFixed(2));
-  const shortCallOrigin: StrikeOriginType = regime.topCallBarrierStrike
-    ? 'BARREIRA_CALL_REAL' : 'BANDA_2SIGMA_REAL';
-  const shortCallDesc = regime.topCallBarrierStrike
-    ? `Barreira de CALL com maior OI real B3 (R$${regime.topCallBarrierStrike.toFixed(2)})`
-    : `Banda +2σ real: R$${regime.upperBand2Sigma.toFixed(2)} (200 fechamentos BRAPI)`;
-
+  // 1. Perna Vendida: Delta ~ +0.28 (OTM)
   const shortLeg = resolveOptionLeg({
     action: 'VENDER',
     type: 'CALL',
-    targetStrike: shortCallTarget,
-    strikeOrigin: shortCallOrigin,
-    strikeOriginDescription: shortCallDesc,
+    targetDelta: 0.28,
+    mustBeOTM: true,
+    strikeOrigin: 'BANDA_2SIGMA_REAL',
+    strikeOriginDescription: 'CALL vendida OTM (Delta ~ +0.28 — probabilidade ~72% OTM)',
     chain,
     spot,
     dte,
     hv21,
     expiration,
-    legRationale: 'CALL vendida na maior barreira real — concentração máxima de resistência institucional',
+    legRationale: 'CALL vendida OTM na resistência institucional — captura prêmio máximo fora do dinheiro ancorada em delta estatístico',
   });
 
-  const longCallTarget = Number(Math.max(shortLeg.strike * 1.03, regime.upperBand3Sigma).toFixed(2));
+  // 2. Perna Comprada: Delta ~ +0.10 OTM (proteção contra rally extremo)
   const longLeg = resolveOptionLeg({
     action: 'COMPRAR',
     type: 'CALL',
-    targetStrike: longCallTarget,
+    targetDelta: 0.10,
+    mustBeOTM: true,
     strikeOrigin: 'BANDA_3SIGMA_REAL',
-    strikeOriginDescription: `Banda +3σ real: R$${regime.upperBand3Sigma.toFixed(2)}`,
+    strikeOriginDescription: 'CALL comprada OTM (Delta ~ +0.10 — proteção de cauda)',
     chain,
     spot,
     dte,
     hv21,
     expiration,
-    legRationale: 'CALL comprada na banda +3σ real — proteção contra rally de cauda (melt-up)',
+    legRationale: 'CALL comprada OTM — proteção contra rally de cauda (melt-up) e teto de risco',
     constraint: 'STRICTLY_GREATER_THAN',
     constraintStrike: shortLeg.strike,
   });
@@ -742,15 +739,19 @@ function buildBearCallSpread(
   const maxRiskPerLot = netCredit >= 0 ? (spreadWidth - netCredit) * 100 : null;
   const maxReturnPerLot = netCredit > 0 ? netCredit * 100 : null;
 
+  // POP por Delta da CALL vendida: probabilidade de expirar OTM (abaixo do strike da call)
+  const shortDelta = Math.abs(shortLeg.delta ?? 0.28);
+  const pop = Number(Math.min(0.95, Math.max(0.50, 1 - shortDelta)).toFixed(4));
+
   // Cauda CALL: ativa em regime EXTREMO_ALTA para surfar melt-up
   const tailIsActive = regime.regime === 'EXTREMO_ALTA' || regime.regime === 'EXTENSAO_ALTA';
-  const tailCallTarget = Number((spot * 1.05).toFixed(2));
   const tailCallResolved = resolveOptionLeg({
     action: 'COMPRAR',
     type: 'CALL',
-    targetStrike: tailCallTarget,
+    targetDelta: 0.04,
+    mustBeOTM: true,
     strikeOrigin: 'SPREAD_CALCULADO',
-    strikeOriginDescription: `+5% do spot real (R$${tailCallTarget.toFixed(2)})`,
+    strikeOriginDescription: 'CALL de cauda profunda (Delta ~ +0.04 — proteção outlier)',
     chain,
     spot,
     dte,
@@ -793,8 +794,8 @@ function buildBearCallSpread(
 
   return {
     id: 'BEAR_CALL_SPREAD',
-    name: 'Trava de Baixa com CALL (Bear Call Spread)',
-    nameEn: 'Bear Call Spread',
+    name: 'Trava de Baixa com Call',
+    nameEn: 'Bear Call Spread (Crédito)',
     category: 'TATICA',
     targetProfiles: ['TATICO', 'ESPECULATIVO'],
     convictionScore,
@@ -811,13 +812,15 @@ function buildBearCallSpread(
         : null,
     payoffPoints,
     payoffReliability,
+    pop,
     rationale: `📊 TRAVA DE BAIXA COM CALL (BEAR CALL SPREAD) — Regime: ${regime.regimeLabel}
 
-LÓGICA: Vendemos a barreira de CALL de maior resistência real (R$${shortLeg.strike.toFixed(2)}) e compramos cobertura na banda +3σ real (R$${longLeg.strike.toFixed(2)}). Estrutura de crédito baixista — lucro máximo se o ativo fechar ABAIXO de R$${shortLeg.strike.toFixed(2)}.
+LÓGICA: Vendemos a CALL OTM no strike R$${shortLeg.strike.toFixed(2)} (${shortLeg.strikeOriginLabel}) e compramos cobertura na ponta longa R$${longLeg.strike.toFixed(2)} (${longLeg.strikeOriginLabel}). Estrutura de crédito baixista — lucro máximo se o ativo fechar ABAIXO de R$${shortLeg.strike.toFixed(2)}.
 
 ANCORAGEM REAL:
-• Strike vendido: ${shortLeg.strikeOriginLabel} (${shortLeg.symbol ?? 'B3'})
-• Strike comprado: ${longLeg.strikeOriginLabel} (${longLeg.symbol ?? 'B3'})
+• Strike vendido: ${shortLeg.strikeOriginLabel} (${shortLeg.symbol ?? 'B3'}) — Δ ${shortLeg.delta?.toFixed(2) ?? 'N/D'}
+• Strike comprado: ${longLeg.strikeOriginLabel} (${longLeg.symbol ?? 'B3'}) — Δ ${longLeg.delta?.toFixed(2) ?? 'N/D'}
+• POP Estimado: ${(pop * 100).toFixed(1)}%
 
 PCR real: ${regime.pcr.toFixed(2)} (${regime.pcrLabel})
 Fluxo 5D: ${regime.flowLabel}`,
@@ -836,24 +839,16 @@ function buildIronCondor(
 ): StrategyRecommendation {
   const spot = regime.spotPrice;
 
-  // 1. Short Call: barreira se for estritamente OTM (strike >= spot * 1.005), senão Delta ~ 0.16
-  const hasOtmCallBarrier = regime.topCallBarrierStrike !== null && regime.topCallBarrierStrike >= spot * 1.005;
-  const scTargetStrike = hasOtmCallBarrier ? regime.topCallBarrierStrike : undefined;
-  const scOrigin: StrikeOriginType = hasOtmCallBarrier ? 'BARREIRA_CALL_REAL' : 'BANDA_2SIGMA_REAL';
-  const scDesc = hasOtmCallBarrier
-    ? `Barreira CALL real maior OI (R$${regime.topCallBarrierStrike!.toFixed(2)})`
-    : `CALL vendida OTM (Delta ~ 0.16 — 1σ estatístico)`;
-
+  // 1. Short Call: Delta ~ 0.25 OTM (faixa ideal 20-30 delta)
   const scLeg = resolveOptionLeg({
     action: 'VENDER',
     type: 'CALL',
-    targetStrike: scTargetStrike,
-    targetDelta: 0.16,
+    targetDelta: 0.25,
     mustBeOTM: true,
-    strikeOrigin: scOrigin,
-    strikeOriginDescription: scDesc,
+    strikeOrigin: 'BANDA_2SIGMA_REAL',
+    strikeOriginDescription: 'CALL vendida OTM (Delta ~ 0.25 — probabilidade ~75% OTM)',
     chain, spot, dte, hv21, expiration,
-    legRationale: 'CALL curta no topo do range OTM — máxima probabilidade de expirar fora do dinheiro',
+    legRationale: 'CALL curta no topo do range OTM — máxima probabilidade de expirar fora do dinheiro ancorada em delta',
   });
 
   // 2. Long Call (protege melt-up): Delta ~ 0.05 OTM
@@ -870,24 +865,16 @@ function buildIronCondor(
     constraintStrike: scLeg.strike,
   });
 
-  // 3. Short Put: barreira se for estritamente OTM (strike <= spot * 0.995), senão Delta ~ -0.16
-  const hasOtmPutBarrier = regime.topPutBarrierStrike !== null && regime.topPutBarrierStrike <= spot * 0.995;
-  const spTargetStrike = hasOtmPutBarrier ? regime.topPutBarrierStrike : undefined;
-  const spOrigin: StrikeOriginType = hasOtmPutBarrier ? 'BARREIRA_PUT_REAL' : 'BANDA_2SIGMA_REAL';
-  const spDesc = hasOtmPutBarrier
-    ? `Barreira PUT real maior OI (R$${regime.topPutBarrierStrike!.toFixed(2)})`
-    : `PUT vendida OTM (Delta ~ -0.16 — 1σ estatístico)`;
-
+  // 3. Short Put: Delta ~ -0.25 OTM (faixa ideal 20-30 delta)
   const spLeg = resolveOptionLeg({
     action: 'VENDER',
     type: 'PUT',
-    targetStrike: spTargetStrike,
-    targetDelta: -0.16,
+    targetDelta: -0.25,
     mustBeOTM: true,
-    strikeOrigin: spOrigin,
-    strikeOriginDescription: spDesc,
+    strikeOrigin: 'BANDA_2SIGMA_REAL',
+    strikeOriginDescription: 'PUT vendida OTM (Delta ~ -0.25 — probabilidade ~75% OTM)',
     chain, spot, dte, hv21, expiration,
-    legRationale: 'PUT curta no suporte do range OTM — máxima probabilidade de expirar fora do dinheiro',
+    legRationale: 'PUT curta no suporte do range OTM — máxima probabilidade de expirar fora do dinheiro ancorada em delta',
   });
 
   // 4. Long Put (protege crash): Delta ~ -0.05 OTM
@@ -993,32 +980,32 @@ function buildCoveredCallWithCollar(
 ): StrategyRecommendation {
   const spot = regime.spotPrice;
 
-  // CALL vendida: acima da barreira real de CALL ou +2σ
-  const callTarget = regime.topCallBarrierStrike ?? Number(regime.upperBand2Sigma.toFixed(2));
-  const callOrigin: StrikeOriginType = regime.topCallBarrierStrike ? 'BARREIRA_CALL_REAL' : 'BANDA_2SIGMA_REAL';
-  const callDesc = regime.topCallBarrierStrike
-    ? `Barreira de CALL real maior OI B3 (R$${callTarget.toFixed(2)})`
-    : `Banda +2σ real (R$${callTarget.toFixed(2)})`;
-
+  // 1. CALL vendida: Delta ~ +0.28 OTM (renda mensal sem ser exercido prematuramente)
   const callLeg = resolveOptionLeg({
-    action: 'VENDER', type: 'CALL', targetStrike: callTarget,
-    strikeOrigin: callOrigin, strikeOriginDescription: callDesc,
+    action: 'VENDER',
+    type: 'CALL',
+    targetDelta: 0.28,
+    mustBeOTM: true,
+    strikeOrigin: 'BANDA_2SIGMA_REAL',
+    strikeOriginDescription: 'CALL vendida OTM (Delta ~ +0.28 — taxa mensal)',
     chain, spot, dte, hv21, expiration,
-    legRationale: 'CALL vendida contra posição comprada no ativo — gera renda mensal com teto de ganho na barreira real',
+    legRationale: 'CALL vendida contra posição comprada no ativo — gera renda mensal ancorada em delta estatístico',
     constraint: 'STRICTLY_GREATER_THAN',
-    constraintStrike: spot * 0.98,
+    constraintStrike: spot,
   });
 
-  // PUT comprada: banda -2σ real (seguro)
-  const putTarget = Number(regime.lowerBand2Sigma.toFixed(2));
+  // 2. PUT comprada: Delta ~ -0.16 OTM (seguro de cauda / piso de perda)
   const putLeg = resolveOptionLeg({
-    action: 'COMPRAR', type: 'PUT', targetStrike: putTarget,
+    action: 'COMPRAR',
+    type: 'PUT',
+    targetDelta: -0.16,
+    mustBeOTM: true,
     strikeOrigin: 'BANDA_2SIGMA_REAL',
-    strikeOriginDescription: `Banda -2σ real (R$${putTarget.toFixed(2)})`,
+    strikeOriginDescription: 'PUT comprada OTM (Delta ~ -0.16 — seguro contra quedas)',
     chain, spot, dte, hv21, expiration,
-    legRationale: 'PUT comprada como seguro da posição spot — protege a carteira abaixo da banda -2σ real',
+    legRationale: 'PUT comprada como seguro da posição spot — protege a carteira ancorada em delta estatístico',
     constraint: 'STRICTLY_LESS_THAN',
-    constraintStrike: spot * 1.02,
+    constraintStrike: spot,
   });
 
   const legs: OptionLeg[] = [callLeg, putLeg];
@@ -1029,10 +1016,10 @@ function buildCoveredCallWithCollar(
   const monthlyYield = spot > 0 ? Number(((netCredit / spot) * 100).toFixed(2)) : null;
 
   // POP do Collar: probabilidade de não ser exercido na CALL vendida
-  const callDelta = Math.abs(callLeg.delta ?? 0.25);
-  const pop = Math.min(95, Math.max(50, Math.round((1 - callDelta) * 100)));
+  const callDelta = Math.abs(callLeg.delta ?? 0.28);
+  const pop = Number(Math.min(0.95, Math.max(0.50, 1 - callDelta)).toFixed(4));
 
-  // Cauda: se Z < -2.5σ, elevar a PUT de seguro para mais próxima do spot
+  // Cauda: se Z < -2.0σ, elevar a PUT de seguro para mais próxima do spot (Delta ~ -0.30)
   const tailIsActive = regime.zScore < -2.0;
   const closerPutTarget = Number((spot * 0.95).toFixed(2));
   const tailPutResolved = resolveOptionLeg({

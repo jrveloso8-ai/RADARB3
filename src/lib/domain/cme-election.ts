@@ -750,10 +750,20 @@ export function electBestOptionStrategy(
       },
     };
 
-    // 5. Estrutura alternativa a débito (Bull Call Spread - Spec v3.1 Item 10)
+    // 5. Estrutura alternativa a débito (Bull Call Spread - Ancoragem por Delta: Compra ATM Δ 0.35-0.70, Venda OTM Δ 0.15-0.35)
     const callSeries = analyticsList.filter((a) => a.side.toLowerCase() === 'call');
-    const eligibleBuyCalls = callSeries.filter((c) => isEligibleLeg(c, 'LONG', spot, snapshotDate) && c.strike <= spot * 1.02);
-    const eligibleSellCalls = callSeries.filter((c) => isEligibleLeg(c, 'SHORT', spot, snapshotDate) && c.strike > spot);
+    const eligibleBuyCalls = callSeries.filter((c) => {
+      if (!isEligibleLeg(c, 'LONG', spot, snapshotDate)) return false;
+      const d = c.delta !== undefined && c.delta !== null ? Math.abs(c.delta) : null;
+      if (d !== null) return (d >= 0.35 && d <= 0.70) || c.strike <= spot * 1.02;
+      return c.strike <= spot * 1.02;
+    });
+    const eligibleSellCalls = callSeries.filter((c) => {
+      if (!isEligibleLeg(c, 'SHORT', spot, snapshotDate) || c.strike <= spot) return false;
+      const d = c.delta !== undefined && c.delta !== null ? Math.abs(c.delta) : null;
+      if (d !== null) return d >= 0.15 && d <= 0.38;
+      return c.strike > spot;
+    });
 
     let bestDebitPair: { longLeg: OptionAnalyticsItem; shortLeg: OptionAnalyticsItem; width: number; netDebit: number } | null = null;
     for (const longCall of eligibleBuyCalls) {
@@ -1111,10 +1121,20 @@ export function electBestOptionStrategy(
       },
     };
 
-    // Alternativa a débito na baixa (Bear Put Spread)
+    // Alternativa a débito na baixa (Bear Put Spread - Ancoragem por Delta: Compra ATM Δ 0.35-0.70, Venda OTM Δ 0.15-0.38)
     const putSeries = analyticsList.filter((a) => a.side.toLowerCase() === 'put');
-    const eligibleBuyPuts = putSeries.filter((p) => isEligibleLeg(p, 'LONG', spot, snapshotDate) && p.strike >= spot * 0.98);
-    const eligibleSellPuts = putSeries.filter((p) => isEligibleLeg(p, 'SHORT', spot, snapshotDate) && p.strike < spot);
+    const eligibleBuyPuts = putSeries.filter((p) => {
+      if (!isEligibleLeg(p, 'LONG', spot, snapshotDate)) return false;
+      const d = p.delta !== undefined && p.delta !== null ? Math.abs(p.delta) : null;
+      if (d !== null) return (d >= 0.35 && d <= 0.70) || p.strike >= spot * 0.98;
+      return p.strike >= spot * 0.98;
+    });
+    const eligibleSellPuts = putSeries.filter((p) => {
+      if (!isEligibleLeg(p, 'SHORT', spot, snapshotDate) || p.strike >= spot) return false;
+      const d = p.delta !== undefined && p.delta !== null ? Math.abs(p.delta) : null;
+      if (d !== null) return d >= 0.15 && d <= 0.38;
+      return p.strike < spot;
+    });
 
     let bestDebitPutPair: { longLeg: OptionAnalyticsItem; shortLeg: OptionAnalyticsItem; width: number; netDebit: number } | null = null;
     for (const longPut of eligibleBuyPuts) {
