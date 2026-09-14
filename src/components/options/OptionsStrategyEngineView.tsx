@@ -420,7 +420,7 @@ function StrategyCard({ strategy, spot }: { strategy: StrategyRecommendation; sp
                     : 'bg-red-500/5 border-red-500/30'
                 }`}>
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-bold text-sm ${leg.action === 'COMPRAR' ? 'text-emerald-400' : 'text-red-400'}`}>
                         {leg.action}
                       </span>
@@ -429,13 +429,28 @@ function StrategyCard({ strategy, spot }: { strategy: StrategyRecommendation; sp
                       }`}>
                         {leg.type}
                       </span>
-                      <span className="font-black text-white">R$ {leg.strike.toFixed(2)}</span>
-                      <span className="text-gray-400">• {leg.expiration} ({leg.dte}d)</span>
+                      {leg.symbol && (
+                        <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 font-mono font-black text-xs tracking-wider">
+                          {leg.symbol}
+                        </span>
+                      )}
+                      <span className="font-black text-white text-sm">R$ {leg.strike.toFixed(2)}</span>
+                      <span className="text-gray-400 text-xs">• {leg.expiration} ({leg.dte}d)</span>
+                      {leg.bid !== null && leg.bid !== undefined && leg.bid > 0 && (
+                        <span className="text-[10px] text-emerald-400/90 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                          Bid: R${leg.bid.toFixed(2)}
+                        </span>
+                      )}
+                      {leg.ask !== null && leg.ask !== undefined && leg.ask > 0 && (
+                        <span className="text-[10px] text-amber-400/90 font-mono bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                          Ask: R${leg.ask.toFixed(2)}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {leg.premiumUsed !== null ? (
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          leg.premiumReliability === 'REAL_MERCADO'
+                          leg.premiumReliability === 'REAL_BOOK_BID' || leg.premiumReliability === 'REAL_BOOK_ASK' || leg.premiumReliability === 'REAL_MERCADO'
                             ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                             : leg.premiumReliability === 'TEORICO_BS_HV_REAL'
                             ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'

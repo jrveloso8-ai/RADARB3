@@ -23,13 +23,205 @@ import {
   OperatorProfile,
   StrikeOriginType,
   PremiumReliabilityType,
+  OptionChainItem,
 } from '../types/financial';
 import { calculateBlackScholes } from './black-scholes';
 import { getRiskFreeRate } from '../config/macro';
 
 // ─────────────────────────────────────────────────────────────
-// HELPERS: Cálculo de prêmio com rotulagem de confiabilidade
+// HELPERS: Resolução de Opção Real B3 com Book (Bid/Ask/Close)
 // ─────────────────────────────────────────────────────────────
+
+export interface ResolveOptionLegParams {
+  action: 'COMPRAR' | 'VENDER';
+  type: 'CALL' | 'PUT';
+  targetStrike: number;
+  strikeOrigin: StrikeOriginType;
+  strikeOriginDescription: string;
+  chain?: OptionChainItem[];
+  spot: number;
+  dte: number;
+  hv21: number | null;
+  expiration: string;
+  legRationale: string;
+  constraint?: 'STRICTLY_GREATER_THAN' | 'STRICTLY_LESS_THAN';
+  constraintStrike?: number;
+}
+
+/**
+ * Mapeia o strike alvo (estatístico ou de barreira) para a opção REAL mais próxima
+ * listada na B3 e no Profit, capturando Bid, Ask e Último Negócio reais da BRAPI.
+ */
+export function resolveOptionLeg(params: ResolveOptionLegParams): OptionLeg {
+  const {
+    action,
+    type,
+    targetStrike,
+    strikeOrigin,
+    strikeOriginDescription,
+    chain = [],
+    spot,
+    dte,
+    hv21,
+    expiration,
+    legRationale,
+    constraint,
+    constraintStrike,
+  } = params;
+
+  // 1. Filtrar opções reais da chain da B3 com o tipo correto ('CALL' ou 'PUT')
+  let available = chain.filter(
+    (item) => item.side.toUpperCase() === type.toUpperCase() && item.strike > 0
+  );
+
+  // Aplicar restrição estrutural entre pernas se solicitada (ex: long leg > short leg)
+  if (constraint === 'STRICTLY_GREATER_THAN' && typeof constraintStrike === 'number') {
+    const strictlyGreater = available.filter((o) => o.strike > constraintStrike);
+    if (strictlyGreater.length > 0) {
+      available = strictlyGreater;
+    }
+  } else if (constraint === 'STRICTLY_LESS_THAN' && typeof constraintStrike === 'number') {
+    const strictlyLess = available.filter((o) => o.strike < constraintStrike);
+    if (strictlyLess.length > 0) {
+      available = strictlyLess;
+    }
+  }
+
+  let matchedOption: OptionChainItem | null = null;
+  if (available.length > 0) {
+    let minDiff = Infinity;
+    for (const opt of available) {
+      const diff = Math.abs(opt.strike - targetStrike);
+      if (diff < minDiff) {
+        minDiff = diff;
+        matchedOption = opt;
+      }
+    }
+  }
+
+  const effectiveStrike = matchedOption ? matchedOption.strike : Number(targetStrike.toFixed(2));
+  const symbol = matchedOption?.symbol;
+  const bid = matchedOption && matchedOption.bid > 0 ? Number(matchedOption.bid.toFixed(2)) : null;
+  const ask = matchedOption && matchedOption.ask > 0 ? Number(matchedOption.ask.toFixed(2)) : null;
+  const close = matchedOption && matchedOption.close > 0 ? Number(matchedOption.close.toFixed(2)) : null;
+
+  // 2. Determinar o melhor preço de mercado real (conservador e executável)
+  let marketPremium: number | null = null;
+  let reliability: PremiumReliabilityType = 'SEM_DADOS';
+  let reliabilityLabel = '';
+
+  if (action === 'VENDER') {
+    if (bid !== null && bid > 0) {
+      marketPremium = bid;
+      reliability = 'REAL_BOOK_BID';
+      reliabilityLabel = `✅ Real B3 Book (Bid: R$${bid.toFixed(2)})`;
+    } else if (close !== null && close > 0) {
+      marketPremium = close;
+      reliability = 'REAL_MERCADO';
+      reliabilityLabel = `✅ Real B3 (Último negócio: R$${close.toFixed(2)})`;
+    }
+  } else {
+    // COMPRAR
+    if (ask !== null && ask > 0) {
+      marketPremium = ask;
+      reliability = 'REAL_BOOK_ASK';
+      reliabilityLabel = `✅ Real B3 Book (Ask: R$${ask.toFixed(2)})`;
+    } else if (close !== null && close > 0) {
+      marketPremium = close;
+      reliability = 'REAL_MERCADO';
+      reliabilityLabel = `✅ Real B3 (Último negócio: R$${close.toFixed(2)})`;
+    }
+  }
+
+  // Delta informativo
+  let delta: number | null = null;
+  if (hv21 && hv21 > 0 && dte > 0 && spot > 0 && effectiveStrike > 0) {
+    const T = dte / 252;
+    const sigma = hv21 / 100;
+    const r = getRiskFreeRate();
+    const bs = calculateBlackScholes(spot, effectiveStrike, T, r, sigma, type === 'CALL' ? 'call' : 'put');
+    delta = Number(bs.delta.toFixed(4));
+  }
+
+  const strikeOriginLabel = matchedOption
+    ? `${strikeOriginDescription} → Strike real B3: R$${effectiveStrike.toFixed(2)} (${matchedOption.symbol})`
+    : strikeOriginDescription;
+
+  // Se temos preço real de mercado disponível na B3
+  if (marketPremium !== null && marketPremium > 0) {
+    return {
+      symbol,
+      action,
+      type,
+      strike: effectiveStrike,
+      strikeOrigin,
+      strikeOriginLabel,
+      dte,
+      expiration,
+      bid,
+      ask,
+      close,
+      theoreticalPremium: null,
+      marketPremium,
+      premiumUsed: marketPremium,
+      premiumReliability: reliability,
+      premiumReliabilityLabel: reliabilityLabel,
+      delta,
+      legRationale,
+    };
+  }
+
+  // Se book/negócio estiver vazio (liquidez nula no dia), modelo Black-Scholes com HV21 real
+  if (!hv21 || hv21 <= 0 || dte <= 0 || spot <= 0 || effectiveStrike <= 0) {
+    return {
+      symbol,
+      action,
+      type,
+      strike: effectiveStrike,
+      strikeOrigin,
+      strikeOriginLabel,
+      dte,
+      expiration,
+      bid,
+      ask,
+      close,
+      theoreticalPremium: null,
+      marketPremium: null,
+      premiumUsed: null,
+      premiumReliability: 'SEM_DADOS',
+      premiumReliabilityLabel: '⛔ Sem Dados — Prêmio Indisponível',
+      delta: null,
+      legRationale,
+    };
+  }
+
+  const T = dte / 252;
+  const sigma = hv21 / 100;
+  const r = getRiskFreeRate();
+  const bs = calculateBlackScholes(spot, effectiveStrike, T, r, sigma, type === 'CALL' ? 'call' : 'put');
+  const theoretical = Number(Math.max(0, bs.theoreticalPrice).toFixed(2));
+
+  return {
+    symbol,
+    action,
+    type,
+    strike: effectiveStrike,
+    strikeOrigin,
+    strikeOriginLabel,
+    dte,
+    expiration,
+    bid,
+    ask,
+    close,
+    theoreticalPremium: theoretical,
+    marketPremium: null,
+    premiumUsed: theoretical,
+    premiumReliability: 'TEORICO_BS_HV_REAL',
+    premiumReliabilityLabel: `⚡ Teórico B-S (HV21=${hv21.toFixed(1)}%, DTE=${dte}d, Selic=${(r * 100).toFixed(2)}%)`,
+    delta: Number(bs.delta.toFixed(4)),
+    legRationale,
+  };
+}
 
 function calcPremium(
   spot: number,
@@ -309,62 +501,78 @@ function buildBullPutSpread(
   expiration: string,
   dte: number,
   hv21: number | null,
-  dataDate: string
+  dataDate: string,
+  chain?: OptionChainItem[]
 ): StrategyRecommendation {
   const spot = regime.spotPrice;
 
-  // Strike vendido: maior barreira de PUT real (se disponível) ou -1σ
-  const shortPutStrike = regime.topPutBarrierStrike
+  // Strike vendido: maior barreira de PUT real (se disponível) ou alvo intermediário
+  const shortPutTarget = regime.topPutBarrierStrike
     ?? Number((regime.lowerBand2Sigma + (spot - regime.lowerBand2Sigma) / 2).toFixed(2));
   const shortPutOrigin: StrikeOriginType = regime.topPutBarrierStrike
     ? 'BARREIRA_PUT_REAL' : 'BANDA_2SIGMA_REAL';
-  const shortPutOriginLabel = regime.topPutBarrierStrike
-    ? `Barreira de PUT com maior OI real da B3 (${regime.topPutBarrierStrike.toFixed(2)})`
-    : 'Calculado a partir da Banda -2σ real (200 fechamentos BRAPI)';
+  const shortPutDesc = regime.topPutBarrierStrike
+    ? `Barreira de PUT com maior OI real B3 (R$${regime.topPutBarrierStrike.toFixed(2)})`
+    : `Alvo Banda -2σ real (R$${regime.lowerBand2Sigma.toFixed(2)})`;
 
-  // Strike comprado: banda -2σ real (proteção de cauda)
-  const longPutStrike = Number(regime.lowerBand2Sigma.toFixed(2));
-  const longPutStrikeUsed = Math.min(longPutStrike, shortPutStrike * 0.97);
+  const shortLeg = resolveOptionLeg({
+    action: 'VENDER',
+    type: 'PUT',
+    targetStrike: shortPutTarget,
+    strikeOrigin: shortPutOrigin,
+    strikeOriginDescription: shortPutDesc,
+    chain,
+    spot,
+    dte,
+    hv21,
+    expiration,
+    legRationale: 'PUT vendida ancorada na barreira real de maior OI — captura prêmio máximo onde o mercado concentrou suporte institucional',
+  });
 
-  const shortLeg = calcPremium(spot, shortPutStrike, dte, hv21, 'PUT');
-  const longLeg = calcPremium(spot, longPutStrikeUsed, dte, hv21, 'PUT');
+  // Strike comprado: banda -2σ real (proteção de cauda e limitação de risco)
+  const longPutTarget = Number(regime.lowerBand2Sigma.toFixed(2));
+  const longLeg = resolveOptionLeg({
+    action: 'COMPRAR',
+    type: 'PUT',
+    targetStrike: Math.min(longPutTarget, shortLeg.strike * 0.97),
+    strikeOrigin: 'BANDA_2SIGMA_REAL',
+    strikeOriginDescription: `Banda -2σ real (R$${regime.lowerBand2Sigma.toFixed(2)})`,
+    chain,
+    spot,
+    dte,
+    hv21,
+    expiration,
+    legRationale: 'PUT comprada na banda -2σ real — limita o risco máximo ao spread entre as pernas',
+    constraint: 'STRICTLY_LESS_THAN',
+    constraintStrike: shortLeg.strike,
+  });
 
-  const legs: OptionLeg[] = [
-    {
-      action: 'VENDER',
-      type: 'PUT',
-      strike: shortPutStrike,
-      strikeOrigin: shortPutOrigin,
-      strikeOriginLabel: shortPutOriginLabel,
-      dte,
-      expiration,
-      ...shortLeg,
-      legRationale: `PUT vendida ancorada na barreira real de maior OI — captura prêmio máximo onde o mercado concentrou proteção institucional real`,
-    },
-    {
-      action: 'COMPRAR',
-      type: 'PUT',
-      strike: longPutStrikeUsed,
-      strikeOrigin: 'BANDA_2SIGMA_REAL',
-      strikeOriginLabel: `Banda -2σ real: R$${regime.lowerBand2Sigma.toFixed(2)} (200 fechamentos reais BRAPI)`,
-      dte,
-      expiration,
-      ...longLeg,
-      legRationale: `PUT comprada na banda -2σ real — limita o risco máximo ao spread entre as bandas, tornando a estrutura de risco limitado`,
-    },
-  ];
+  const legs: OptionLeg[] = [shortLeg, longLeg];
 
-  const netCredit =
-    (shortLeg.premiumUsed ?? 0) - (longLeg.premiumUsed ?? 0);
-  const spreadWidth = shortPutStrike - longPutStrikeUsed;
+  const netCredit = (shortLeg.premiumUsed ?? 0) - (longLeg.premiumUsed ?? 0);
+  const spreadWidth = shortLeg.strike - longLeg.strike;
   const maxRiskPerLot = spreadWidth > netCredit ? (spreadWidth - netCredit) * 100 : null;
   const maxReturnPerLot = netCredit > 0 ? netCredit * 100 : null;
-  const breakEven = shortPutStrike - netCredit;
+  const breakEven = shortLeg.strike - netCredit;
 
   // Perna de cauda: se Z < -2σ, ativa compra adicional de PUT de cauda (-3σ)
-  const tailStrike = Number(regime.lowerBand3Sigma.toFixed(2));
-  const tailPremium = calcPremium(spot, tailStrike, dte, hv21, 'PUT');
+  const tailStrikeTarget = Number(regime.lowerBand3Sigma.toFixed(2));
   const tailIsActive = regime.zScore < -2.0;
+  const tailLegResolved = resolveOptionLeg({
+    action: 'COMPRAR',
+    type: 'PUT',
+    targetStrike: tailStrikeTarget,
+    strikeOrigin: 'BANDA_3SIGMA_REAL',
+    strikeOriginDescription: `Banda -3σ real (R$${tailStrikeTarget.toFixed(2)})`,
+    chain,
+    spot,
+    dte,
+    hv21,
+    expiration,
+    legRationale: 'PUT de cauda na banda -3σ real — custo pequeno, retorno assimétrico em eventos de pânico extremo',
+    constraint: 'STRICTLY_LESS_THAN',
+    constraintStrike: longLeg.strike,
+  });
 
   const tailLeg: TailRiskLeg = {
     type: 'PROTECAO_CAUDA',
@@ -372,21 +580,9 @@ function buildBullPutSpread(
     triggerZScore: -2.0,
     triggerCondition: `Ativa quando Z-Score < -2.0σ (Regime atual: ${regime.zScore.toFixed(2)}σ)`,
     isCurrentlyActive: tailIsActive,
-    legs: [
-      {
-        action: 'COMPRAR',
-        type: 'PUT',
-        strike: tailStrike,
-        strikeOrigin: 'BANDA_3SIGMA_REAL',
-        strikeOriginLabel: `Banda -3σ real: R$${tailStrike.toFixed(2)} (extrapolada dos 200 fechamentos reais)`,
-        dte,
-        expiration,
-        ...tailPremium,
-        legRationale: `PUT de cauda na banda -3σ real — custo pequeno, retorno assimétrico em eventos de pânico extremo (ex: crash, notícia sistêmica)`,
-      },
-    ],
+    legs: [tailLegResolved],
     rationale: tailIsActive
-      ? `⚠️ CAUDA ATIVA: Z-Score atual de ${regime.zScore.toFixed(2)}σ está em extensão de queda. O acréscimo desta PUT em -3σ real (R$${tailStrike.toFixed(2)}) transforma a estrutura de Trava de Alta em "Trava com Seguro de Cauda", pagando de forma assimétrica em eventos extremos raros.`
+      ? `⚠️ CAUDA ATIVA: Z-Score atual de ${regime.zScore.toFixed(2)}σ está em extensão de queda. O acréscimo desta PUT em ${tailLegResolved.strikeOriginLabel} transforma a estrutura de Trava de Alta em "Trava com Seguro de Cauda", pagando de forma assimétrica em eventos extremos raros.`
       : `ℹ️ Cauda não ativa (Z = ${regime.zScore.toFixed(2)}σ, acima do gatilho de -2.0σ). Disponível para ativação manual se o mercado deteriorar para extensão de queda.`,
   };
 
@@ -436,11 +632,11 @@ Regime Estatístico: ${regime.regimeLabel}
 Preço SPOT Real (BRAPI): R$${spot.toFixed(2)} | Média 200P Real: R$${regime.spotPrice.toFixed(2)} | Z-Score: ${regime.zScore.toFixed(2)}σ
 
 LÓGICA DA ESTRUTURA:
-Vendemos a PUT no strike R$${shortPutStrike.toFixed(2)} (${shortPutOriginLabel}) e compramos proteção no R$${longPutStrikeUsed.toFixed(2)} (banda -2σ real de 200 fechamentos BRAPI). Esta é uma estrutura de crédito: recebemos o prêmio líquido de entrada e o lucro máximo é obtido se o ativo fechar ACIMA de R$${shortPutStrike.toFixed(2)} no vencimento.
+Vendemos a PUT no strike R$${shortLeg.strike.toFixed(2)} (${shortLeg.strikeOriginLabel}) e compramos proteção no R$${longLeg.strike.toFixed(2)} (${longLeg.strikeOriginLabel}). Esta é uma estrutura de crédito: recebemos o prêmio líquido de entrada e o lucro máximo é obtido se o ativo fechar ACIMA de R$${shortLeg.strike.toFixed(2)} no vencimento.
 
 ANCORAGEM EM DADOS REAIS:
-• Strike vendido: ${shortPutOriginLabel}
-• Strike comprado: Banda -2σ real (${regime.lowerBand2Sigma.toFixed(2)}) — calculada com ${regime.sampleSize} fechamentos reais BRAPI
+• Strike vendido: ${shortLeg.strikeOriginLabel} (${shortLeg.symbol ?? 'B3'})
+• Strike comprado: ${longLeg.strikeOriginLabel} (${longLeg.symbol ?? 'B3'})
 • Prêmios: ${shortLeg.premiumReliabilityLabel} / ${longLeg.premiumReliabilityLabel}
 
 RAZÃO PUT/CALL REAL: ${regime.pcr.toFixed(2)} (${regime.pcrLabel})
@@ -460,57 +656,75 @@ function buildBearCallSpread(
   expiration: string,
   dte: number,
   hv21: number | null,
-  dataDate: string
+  dataDate: string,
+  chain?: OptionChainItem[]
 ): StrategyRecommendation {
   const spot = regime.spotPrice;
 
-  const shortCallStrike = regime.topCallBarrierStrike
+  const shortCallTarget = regime.topCallBarrierStrike
     ?? Number(regime.upperBand2Sigma.toFixed(2));
   const shortCallOrigin: StrikeOriginType = regime.topCallBarrierStrike
     ? 'BARREIRA_CALL_REAL' : 'BANDA_2SIGMA_REAL';
-  const shortCallOriginLabel = regime.topCallBarrierStrike
-    ? `Barreira de CALL com maior OI real da B3 (R$${regime.topCallBarrierStrike.toFixed(2)})`
+  const shortCallDesc = regime.topCallBarrierStrike
+    ? `Barreira de CALL com maior OI real B3 (R$${regime.topCallBarrierStrike.toFixed(2)})`
     : `Banda +2σ real: R$${regime.upperBand2Sigma.toFixed(2)} (200 fechamentos BRAPI)`;
 
-  const longCallStrike = Number(Math.max(shortCallStrike * 1.03, regime.upperBand3Sigma).toFixed(2));
+  const shortLeg = resolveOptionLeg({
+    action: 'VENDER',
+    type: 'CALL',
+    targetStrike: shortCallTarget,
+    strikeOrigin: shortCallOrigin,
+    strikeOriginDescription: shortCallDesc,
+    chain,
+    spot,
+    dte,
+    hv21,
+    expiration,
+    legRationale: 'CALL vendida na maior barreira real — concentração máxima de resistência institucional',
+  });
 
-  const shortLeg = calcPremium(spot, shortCallStrike, dte, hv21, 'CALL');
-  const longLeg = calcPremium(spot, longCallStrike, dte, hv21, 'CALL');
+  const longCallTarget = Number(Math.max(shortLeg.strike * 1.03, regime.upperBand3Sigma).toFixed(2));
+  const longLeg = resolveOptionLeg({
+    action: 'COMPRAR',
+    type: 'CALL',
+    targetStrike: longCallTarget,
+    strikeOrigin: 'BANDA_3SIGMA_REAL',
+    strikeOriginDescription: `Banda +3σ real: R$${regime.upperBand3Sigma.toFixed(2)}`,
+    chain,
+    spot,
+    dte,
+    hv21,
+    expiration,
+    legRationale: 'CALL comprada na banda +3σ real — proteção contra rally de cauda (melt-up)',
+    constraint: 'STRICTLY_GREATER_THAN',
+    constraintStrike: shortLeg.strike,
+  });
 
-  const legs: OptionLeg[] = [
-    {
-      action: 'VENDER',
-      type: 'CALL',
-      strike: shortCallStrike,
-      strikeOrigin: shortCallOrigin,
-      strikeOriginLabel: shortCallOriginLabel,
-      dte,
-      expiration,
-      ...shortLeg,
-      legRationale: 'CALL vendida na maior barreira real — concentração máxima de resistência institucional',
-    },
-    {
-      action: 'COMPRAR',
-      type: 'CALL',
-      strike: longCallStrike,
-      strikeOrigin: 'BANDA_3SIGMA_REAL',
-      strikeOriginLabel: `Banda +3σ real: R$${regime.upperBand3Sigma.toFixed(2)} — limita risco em rally extremo`,
-      dte,
-      expiration,
-      ...longLeg,
-      legRationale: 'CALL comprada na banda +3σ real — proteção contra rally de cauda (melt-up)',
-    },
-  ];
+  const legs: OptionLeg[] = [shortLeg, longLeg];
 
   const netCredit = (shortLeg.premiumUsed ?? 0) - (longLeg.premiumUsed ?? 0);
-  const spreadWidth = longCallStrike - shortCallStrike;
+  const spreadWidth = longLeg.strike - shortLeg.strike;
   const maxRiskPerLot = netCredit >= 0 ? (spreadWidth - netCredit) * 100 : null;
   const maxReturnPerLot = netCredit > 0 ? netCredit * 100 : null;
 
   // Cauda CALL: ativa em regime EXTREMO_ALTA para surfar melt-up
   const tailIsActive = regime.regime === 'EXTREMO_ALTA' || regime.regime === 'EXTENSAO_ALTA';
-  const callBackspreadStrike = Number((spot * 1.05).toFixed(2));
-  const tailCallPremium = calcPremium(spot, callBackspreadStrike, dte, hv21, 'CALL');
+  const tailCallTarget = Number((spot * 1.05).toFixed(2));
+  const tailCallResolved = resolveOptionLeg({
+    action: 'COMPRAR',
+    type: 'CALL',
+    targetStrike: tailCallTarget,
+    strikeOrigin: 'SPREAD_CALCULADO',
+    strikeOriginDescription: `+5% do spot real (R$${tailCallTarget.toFixed(2)})`,
+    chain,
+    spot,
+    dte,
+    hv21,
+    expiration,
+    legRationale: 'CALL adicional comprada para capturar melt-up em regime de extensão — retorno assimétrico',
+    constraint: 'STRICTLY_GREATER_THAN',
+    constraintStrike: longLeg.strike,
+  });
 
   const tailLeg: TailRiskLeg = {
     type: 'OPORTUNIDADE_OUTLIER',
@@ -518,28 +732,20 @@ function buildBearCallSpread(
     triggerZScore: 2.0,
     triggerCondition: `Ativa quando Z-Score > +2.0σ (Regime atual: ${regime.zScore.toFixed(2)}σ)`,
     isCurrentlyActive: tailIsActive,
-    legs: [
-      {
-        action: 'COMPRAR',
-        type: 'CALL',
-        strike: callBackspreadStrike,
-        strikeOrigin: 'SPREAD_CALCULADO',
-        strikeOriginLabel: `+5% do spot real (R$${callBackspreadStrike.toFixed(2)}) — capturar continuidade de rally extremo`,
-        dte,
-        expiration,
-        ...tailCallPremium,
-        legRationale: 'CALL adicional comprada para capturar melt-up em regime de extensão — retorno assimétrico se o rali continuar acima da barreira',
-      },
-    ],
+    legs: [tailCallResolved],
     rationale: tailIsActive
-      ? `⚡ OUTLIER ATIVO: Z = ${regime.zScore.toFixed(2)}σ em extensão de alta. A adição de CALL comprada cria um CALL Backspread híbrido: o spread base protege contra queda, mas a CALL adicional captura exponencialmente se o mercado continuar em melt-up acima de R$${callBackspreadStrike.toFixed(2)}.`
+      ? `⚡ OUTLIER ATIVO: Z = ${regime.zScore.toFixed(2)}σ em extensão de alta. A adição de CALL comprada (${tailCallResolved.strikeOriginLabel}) cria um CALL Backspread híbrido: o spread base protege contra queda, mas a CALL adicional captura exponencialmente se o mercado continuar em melt-up.`
       : `ℹ️ Outlier não ativo (Z = ${regime.zScore.toFixed(2)}σ, abaixo do gatilho de +2.0σ). Disponível para ativação se mercado entrar em extensão de alta.`,
   };
 
   const convictionFactors = computeConvictionScore(regime, 'BAIXA', true);
-  const convictionScore = Math.min(100,
-    convictionFactors.zScoreAlignment + convictionFactors.flowAlignment +
-    convictionFactors.barrierAlignment + convictionFactors.pcrAlignment);
+  const convictionScore = Math.min(
+    100,
+    convictionFactors.zScoreAlignment +
+      convictionFactors.flowAlignment +
+      convictionFactors.barrierAlignment +
+      convictionFactors.pcrAlignment
+  );
 
   const payoffPoints = generatePayoffPoints(legs, spot, hv21, dte);
   const payoffReliability = buildPayoffReliability(legs, hv21, dataDate);
@@ -563,7 +769,7 @@ function buildBearCallSpread(
     tailRisk: tailLeg,
     maxRiskPerLot,
     maxReturnPerLot,
-    breakEvenAtExpiry: Number((shortCallStrike + netCredit).toFixed(2)),
+    breakEvenAtExpiry: Number((shortLeg.strike + netCredit).toFixed(2)),
     returnOnRiskPercent:
       maxRiskPerLot && maxReturnPerLot
         ? Number(((maxReturnPerLot / maxRiskPerLot) * 100).toFixed(1))
@@ -572,11 +778,11 @@ function buildBearCallSpread(
     payoffReliability,
     rationale: `📊 TRAVA DE BAIXA COM CALL (BEAR CALL SPREAD) — Regime: ${regime.regimeLabel}
 
-LÓGICA: Vendemos a barreira de CALL de maior resistência real (R$${shortCallStrike.toFixed(2)}) e compramos cobertura na banda +3σ real. Estrutura de crédito baixista — lucro máximo se o ativo fechar ABAIXO de R$${shortCallStrike.toFixed(2)}.
+LÓGICA: Vendemos a barreira de CALL de maior resistência real (R$${shortLeg.strike.toFixed(2)}) e compramos cobertura na banda +3σ real (R$${longLeg.strike.toFixed(2)}). Estrutura de crédito baixista — lucro máximo se o ativo fechar ABAIXO de R$${shortLeg.strike.toFixed(2)}.
 
 ANCORAGEM REAL:
-• Strike vendido: ${shortCallOriginLabel}
-• Strike comprado: Banda +3σ real (R$${regime.upperBand3Sigma.toFixed(2)})
+• Strike vendido: ${shortLeg.strikeOriginLabel} (${shortLeg.symbol ?? 'B3'})
+• Strike comprado: ${longLeg.strikeOriginLabel} (${longLeg.symbol ?? 'B3'})
 
 PCR real: ${regime.pcr.toFixed(2)} (${regime.pcrLabel})
 Fluxo 5D: ${regime.flowLabel}`,
@@ -590,57 +796,68 @@ function buildIronCondor(
   expiration: string,
   dte: number,
   hv21: number | null,
-  dataDate: string
+  dataDate: string,
+  chain?: OptionChainItem[]
 ): StrategyRecommendation {
   const spot = regime.spotPrice;
 
-  // Pernas do Condor: ancoramos em bandas estatísticas reais
-  const shortCallStrike = regime.topCallBarrierStrike ?? Number(regime.upperBand2Sigma.toFixed(2));
-  const longCallStrike = Number(regime.upperBand3Sigma.toFixed(2));
-  const shortPutStrike = regime.topPutBarrierStrike ?? Number(regime.lowerBand2Sigma.toFixed(2));
-  const longPutStrike = Number(regime.lowerBand3Sigma.toFixed(2));
+  // Short Call
+  const scTarget = regime.topCallBarrierStrike ?? Number(regime.upperBand2Sigma.toFixed(2));
+  const scOrigin: StrikeOriginType = regime.topCallBarrierStrike ? 'BARREIRA_CALL_REAL' : 'BANDA_2SIGMA_REAL';
+  const scDesc = regime.topCallBarrierStrike
+    ? `Barreira CALL real maior OI (R$${scTarget.toFixed(2)})`
+    : `Banda +2σ real (R$${scTarget.toFixed(2)})`;
+  const scLeg = resolveOptionLeg({
+    action: 'VENDER', type: 'CALL', targetStrike: scTarget,
+    strikeOrigin: scOrigin, strikeOriginDescription: scDesc,
+    chain, spot, dte, hv21, expiration,
+    legRationale: 'CALL curta no topo da banda — máxima concentração de resistência real',
+  });
 
-  const scLeg = calcPremium(spot, shortCallStrike, dte, hv21, 'CALL');
-  const lcLeg = calcPremium(spot, longCallStrike, dte, hv21, 'CALL');
-  const spLeg = calcPremium(spot, shortPutStrike, dte, hv21, 'PUT');
-  const lpLeg = calcPremium(spot, longPutStrike, dte, hv21, 'PUT');
+  // Long Call (protege melt-up)
+  const lcTarget = Number(regime.upperBand3Sigma.toFixed(2));
+  const lcLeg = resolveOptionLeg({
+    action: 'COMPRAR', type: 'CALL', targetStrike: lcTarget,
+    strikeOrigin: 'BANDA_3SIGMA_REAL',
+    strikeOriginDescription: `Banda +3σ real (R$${lcTarget.toFixed(2)})`,
+    chain, spot, dte, hv21, expiration,
+    legRationale: 'Cobertura de cauda superior (+3σ real) — risco limitado em rally extremo',
+    constraint: 'STRICTLY_GREATER_THAN',
+    constraintStrike: scLeg.strike,
+  });
 
-  const legs: OptionLeg[] = [
-    {
-      action: 'VENDER', type: 'CALL', strike: shortCallStrike,
-      strikeOrigin: regime.topCallBarrierStrike ? 'BARREIRA_CALL_REAL' : 'BANDA_2SIGMA_REAL',
-      strikeOriginLabel: regime.topCallBarrierStrike ? `Barreira CALL real maior OI (R$${shortCallStrike.toFixed(2)})` : `Banda +2σ real (R$${shortCallStrike.toFixed(2)})`,
-      dte, expiration, ...scLeg,
-      legRationale: 'CALL curta no topo da banda — máxima concentração de resistência real',
-    },
-    {
-      action: 'COMPRAR', type: 'CALL', strike: longCallStrike,
-      strikeOrigin: 'BANDA_3SIGMA_REAL',
-      strikeOriginLabel: `Banda +3σ real (R$${longCallStrike.toFixed(2)}) — protege contra melt-up`,
-      dte, expiration, ...lcLeg,
-      legRationale: 'Cobertura de cauda superior (+3σ real) — risco limitado em rally extremo',
-    },
-    {
-      action: 'VENDER', type: 'PUT', strike: shortPutStrike,
-      strikeOrigin: regime.topPutBarrierStrike ? 'BARREIRA_PUT_REAL' : 'BANDA_2SIGMA_REAL',
-      strikeOriginLabel: regime.topPutBarrierStrike ? `Barreira PUT real maior OI (R$${shortPutStrike.toFixed(2)})` : `Banda -2σ real (R$${shortPutStrike.toFixed(2)})`,
-      dte, expiration, ...spLeg,
-      legRationale: 'PUT curta no suporte da banda — máxima concentração de suporte real',
-    },
-    {
-      action: 'COMPRAR', type: 'PUT', strike: longPutStrike,
-      strikeOrigin: 'BANDA_3SIGMA_REAL',
-      strikeOriginLabel: `Banda -3σ real (R$${longPutStrike.toFixed(2)}) — protege contra black swan`,
-      dte, expiration, ...lpLeg,
-      legRationale: 'Cobertura de cauda inferior (-3σ real) — risco limitado em crash extremo',
-    },
-  ];
+  // Short Put
+  const spTarget = regime.topPutBarrierStrike ?? Number(regime.lowerBand2Sigma.toFixed(2));
+  const spOrigin: StrikeOriginType = regime.topPutBarrierStrike ? 'BARREIRA_PUT_REAL' : 'BANDA_2SIGMA_REAL';
+  const spDesc = regime.topPutBarrierStrike
+    ? `Barreira PUT real maior OI (R$${spTarget.toFixed(2)})`
+    : `Banda -2σ real (R$${spTarget.toFixed(2)})`;
+  const spLeg = resolveOptionLeg({
+    action: 'VENDER', type: 'PUT', targetStrike: spTarget,
+    strikeOrigin: spOrigin, strikeOriginDescription: spDesc,
+    chain, spot, dte, hv21, expiration,
+    legRationale: 'PUT curta no suporte da banda — máxima concentração de suporte real',
+  });
+
+  // Long Put (protege crash)
+  const lpTarget = Number(regime.lowerBand3Sigma.toFixed(2));
+  const lpLeg = resolveOptionLeg({
+    action: 'COMPRAR', type: 'PUT', targetStrike: lpTarget,
+    strikeOrigin: 'BANDA_3SIGMA_REAL',
+    strikeOriginDescription: `Banda -3σ real (R$${lpTarget.toFixed(2)})`,
+    chain, spot, dte, hv21, expiration,
+    legRationale: 'Cobertura de cauda inferior (-3σ real) — risco limitado em crash extremo',
+    constraint: 'STRICTLY_LESS_THAN',
+    constraintStrike: spLeg.strike,
+  });
+
+  const legs: OptionLeg[] = [scLeg, lcLeg, spLeg, lpLeg];
 
   const netCredit =
     (scLeg.premiumUsed ?? 0) - (lcLeg.premiumUsed ?? 0) +
     (spLeg.premiumUsed ?? 0) - (lpLeg.premiumUsed ?? 0);
-  const callSpread = longCallStrike - shortCallStrike;
-  const putSpread = shortPutStrike - longPutStrike;
+  const callSpread = lcLeg.strike - scLeg.strike;
+  const putSpread = spLeg.strike - lpLeg.strike;
   const maxRisk = Math.max(callSpread, putSpread) - netCredit;
 
   // Cauda do Iron Condor: alertar se Z for muito extremo
@@ -654,7 +871,7 @@ function buildIronCondor(
     legs: [],
     rationale: tailIsActive
       ? `⚠️ ALERTA: Z = ${regime.zScore.toFixed(2)}σ indica que o spot já está em zona de extensão. Iron Condor em regime de extensão tem probabilidade reduzida de sucesso — considere fechar a perna vendida na direção da extensão e manter apenas a perna oposta como spread direcional.`
-      : `Iron Condor estruturado nas bandas reais de ±2σ e ±3σ. Proteção de cauda embutida nas pernas compradas de CALL (+3σ) e PUT (-3σ) reais. Fechamento sugerido se spot romper qualquer banda -2σ real.`,
+      : `Iron Condor estruturado nas bandas reais de ±2σ e ±3σ com opções reais da B3. Proteção de cauda embutida nas pernas compradas de CALL e PUT. Fechamento sugerido se spot romper qualquer banda -2σ real.`,
   };
 
   const convictionFactors = computeConvictionScore(regime, 'NEUTRO', true);
@@ -691,13 +908,13 @@ function buildIronCondor(
     payoffReliability,
     rationale: `📊 IRON CONDOR NAS BANDAS REAIS — Regime: ${regime.regimeLabel}
 
-LÓGICA: Vendemos os extremos de ±2σ reais (onde estatisticamente o mercado reverte ~95% dos pregões) e compramos cobertura nos extremos de ±3σ (evento de cauda). Estrutura de quatro pernas de crédito total, máximo ganho se o ativo permanecer entre as bandas vendidas.
+LÓGICA: Vendemos os extremos de ±2σ reais (onde estatisticamente o mercado reverte ~95% dos pregões) e compramos cobertura nos extremos de ±3σ (evento de cauda). Estrutura de quatro pernas de crédito total com opções 100% reais listadas na B3.
 
-ANCORAGEM ESTATÍSTICA REAL:
-• CALL vendida: R$${shortCallStrike.toFixed(2)} (banda +2σ ou barreira real)
-• CALL comprada: R$${longCallStrike.toFixed(2)} (banda +3σ real — proteção de melt-up)
-• PUT vendida: R$${shortPutStrike.toFixed(2)} (banda -2σ ou barreira real)
-• PUT comprada: R$${longPutStrike.toFixed(2)} (banda -3σ real — proteção de black swan)
+ANCORAGEM ESTATÍSTICA REAL (B3):
+• CALL vendida: R$${scLeg.strike.toFixed(2)} (${scLeg.symbol ?? 'B3'})
+• CALL comprada: R$${lcLeg.strike.toFixed(2)} (${lcLeg.symbol ?? 'B3'} — proteção de melt-up)
+• PUT vendida: R$${spLeg.strike.toFixed(2)} (${spLeg.symbol ?? 'B3'})
+• PUT comprada: R$${lpLeg.strike.toFixed(2)} (${lpLeg.symbol ?? 'B3'} — proteção de black swan)
 • Base estatística: ${regime.sampleSize} fechamentos reais BRAPI
 
 PCR real: ${regime.pcr.toFixed(2)} | Fluxo 5D: ${regime.flowLabel}`,
@@ -711,38 +928,40 @@ function buildCoveredCallWithCollar(
   expiration: string,
   dte: number,
   hv21: number | null,
-  dataDate: string
+  dataDate: string,
+  chain?: OptionChainItem[]
 ): StrategyRecommendation {
   const spot = regime.spotPrice;
 
   // CALL vendida: acima da barreira real de CALL ou +2σ
-  const callStrike = regime.topCallBarrierStrike ?? Number(regime.upperBand2Sigma.toFixed(2));
+  const callTarget = regime.topCallBarrierStrike ?? Number(regime.upperBand2Sigma.toFixed(2));
   const callOrigin: StrikeOriginType = regime.topCallBarrierStrike ? 'BARREIRA_CALL_REAL' : 'BANDA_2SIGMA_REAL';
-  const callOriginLabel = regime.topCallBarrierStrike
-    ? `Barreira de CALL real maior OI — acima desta barreira, o ativo tende a ter forte resistência de mercado makers`
-    : `Banda +2σ real (R$${callStrike.toFixed(2)}) — zona estatística de reversão com 95% de probabilidade histórica`;
+  const callDesc = regime.topCallBarrierStrike
+    ? `Barreira de CALL real maior OI B3 (R$${callTarget.toFixed(2)})`
+    : `Banda +2σ real (R$${callTarget.toFixed(2)})`;
+
+  const callLeg = resolveOptionLeg({
+    action: 'VENDER', type: 'CALL', targetStrike: callTarget,
+    strikeOrigin: callOrigin, strikeOriginDescription: callDesc,
+    chain, spot, dte, hv21, expiration,
+    legRationale: 'CALL vendida contra posição comprada no ativo — gera renda mensal com teto de ganho na barreira real',
+    constraint: 'STRICTLY_GREATER_THAN',
+    constraintStrike: spot * 0.98,
+  });
 
   // PUT comprada: banda -2σ real (seguro)
-  const putStrike = Number(regime.lowerBand2Sigma.toFixed(2));
+  const putTarget = Number(regime.lowerBand2Sigma.toFixed(2));
+  const putLeg = resolveOptionLeg({
+    action: 'COMPRAR', type: 'PUT', targetStrike: putTarget,
+    strikeOrigin: 'BANDA_2SIGMA_REAL',
+    strikeOriginDescription: `Banda -2σ real (R$${putTarget.toFixed(2)})`,
+    chain, spot, dte, hv21, expiration,
+    legRationale: 'PUT comprada como seguro da posição spot — protege a carteira abaixo da banda -2σ real',
+    constraint: 'STRICTLY_LESS_THAN',
+    constraintStrike: spot * 1.02,
+  });
 
-  const callLeg = calcPremium(spot, callStrike, dte, hv21, 'CALL');
-  const putLeg = calcPremium(spot, putStrike, dte, hv21, 'PUT');
-
-  const legs: OptionLeg[] = [
-    {
-      action: 'VENDER', type: 'CALL', strike: callStrike,
-      strikeOrigin: callOrigin, strikeOriginLabel: callOriginLabel,
-      dte, expiration, ...callLeg,
-      legRationale: 'CALL vendida contra posição comprada no ativo — gera renda mensal (dividendo sintético) com teto de ganho acima da barreira real',
-    },
-    {
-      action: 'COMPRAR', type: 'PUT', strike: putStrike,
-      strikeOrigin: 'BANDA_2SIGMA_REAL',
-      strikeOriginLabel: `Banda -2σ real (R$${putStrike.toFixed(2)}) — piso de proteção estatístico para carteira existente`,
-      dte, expiration, ...putLeg,
-      legRationale: 'PUT comprada como seguro da posição spot — protege a carteira abaixo da banda -2σ real sem custo adicional se financiada pela CALL vendida',
-    },
-  ];
+  const legs: OptionLeg[] = [callLeg, putLeg];
 
   const callPremium = callLeg.premiumUsed ?? 0;
   const putPremium = putLeg.premiumUsed ?? 0;
@@ -751,8 +970,16 @@ function buildCoveredCallWithCollar(
 
   // Cauda: se Z < -2.5σ, elevar a PUT de seguro para mais próxima do spot
   const tailIsActive = regime.zScore < -2.0;
-  const closerPutStrike = Number((spot * 0.95).toFixed(2));
-  const tailPutPremium = calcPremium(spot, closerPutStrike, dte, hv21, 'PUT');
+  const closerPutTarget = Number((spot * 0.95).toFixed(2));
+  const tailPutResolved = resolveOptionLeg({
+    action: 'COMPRAR', type: 'PUT', targetStrike: closerPutTarget,
+    strikeOrigin: 'SPREAD_CALCULADO',
+    strikeOriginDescription: `5% abaixo do spot real (R$${closerPutTarget.toFixed(2)})`,
+    chain, spot, dte, hv21, expiration,
+    legRationale: 'PUT mais próxima para proteção reforçada em regime de extensão de queda',
+    constraint: 'STRICTLY_LESS_THAN',
+    constraintStrike: spot,
+  });
 
   const tailLeg: TailRiskLeg = {
     type: 'PROTECAO_CAUDA',
@@ -760,17 +987,9 @@ function buildCoveredCallWithCollar(
     triggerZScore: -2.0,
     triggerCondition: `Ativa quando Z-Score < -2.0σ (Regime atual: ${regime.zScore.toFixed(2)}σ)`,
     isCurrentlyActive: tailIsActive,
-    legs: [
-      {
-        action: 'COMPRAR', type: 'PUT', strike: closerPutStrike,
-        strikeOrigin: 'SPREAD_CALCULADO',
-        strikeOriginLabel: `5% abaixo do spot real (R$${closerPutStrike.toFixed(2)}) — PUT mais próxima para proteção reforçada em regime de extensão de queda`,
-        dte, expiration, ...tailPutPremium,
-        legRationale: 'Em extensão de queda (Z < -2σ), substituir a PUT de -2σ por esta PUT mais próxima reduz o risco de gap de proteção num evento brusco',
-      },
-    ],
+    legs: [tailPutResolved],
     rationale: tailIsActive
-      ? `⚠️ REGIME DE EXTENSÃO: Z = ${regime.zScore.toFixed(2)}σ. Recomenda-se elevar o piso de proteção de R$${putStrike.toFixed(2)} para R$${closerPutStrike.toFixed(2)} (5% abaixo do spot real). O custo adicional é parcialmente financiado pelo maior prêmio da CALL em cenário de vol elevada.`
+      ? `⚠️ REGIME DE EXTENSÃO: Z = ${regime.zScore.toFixed(2)}σ. Recomenda-se elevar o piso de proteção para ${tailPutResolved.strikeOriginLabel}. O custo adicional é parcialmente financiado pelo maior prêmio da CALL em cenário de vol elevada.`
       : `ℹ️ Collar operando com piso padrão na banda -2σ real. Se o mercado entrar em extensão de queda (Z < -2σ), o sistema sugerirá elevação do piso de proteção.`,
   };
 
@@ -783,7 +1002,7 @@ function buildCoveredCallWithCollar(
   const payoffReliability = buildPayoffReliability(legs, hv21, dataDate);
 
   const alertas: string[] = [];
-  if (callStrike < spot)
+  if (callLeg.strike < spot)
     alertas.push('⛔ Strike da CALL abaixo do spot: posição em risco imediato de exercício — verificar preços reais');
   if (netCredit < 0)
     alertas.push(`ℹ️ Collar com custo líquido de R$${Math.abs(netCredit).toFixed(2)} — seguro pago pelo investidor (não zero-cost)`);
@@ -802,7 +1021,7 @@ function buildCoveredCallWithCollar(
     legs,
     tailRisk: tailLeg,
     maxRiskPerLot: null, // Depende do preço de compra do ativo spot
-    maxReturnPerLot: callStrike > spot ? (callStrike - spot + netCredit) * 100 : null,
+    maxReturnPerLot: callLeg.strike > spot ? (callLeg.strike - spot + netCredit) * 100 : null,
     breakEvenAtExpiry: Number((spot - netCredit).toFixed(2)),
     returnOnRiskPercent: monthlyYield,
     payoffPoints,
@@ -811,9 +1030,9 @@ function buildCoveredCallWithCollar(
 
 LÓGICA: Para o investidor que já detém o ativo spot (PETR4, VALE3, BOVA11 etc.), esta estrutura gera renda mensal (dividendo sintético) pela venda da CALL na barreira real de resistência, enquanto financia parcial ou totalmente um seguro de carteira (PUT comprada na banda -2σ real).
 
-ANCORAGEM EM DADOS REAIS:
-• CALL vendida: ${callOriginLabel}
-• PUT comprada (seguro): Banda -2σ real (R$${putStrike.toFixed(2)}) — calculada com ${regime.sampleSize} fechamentos reais BRAPI
+ANCORAGEM EM DADOS REAIS (B3):
+• CALL vendida: ${callLeg.strikeOriginLabel} (${callLeg.symbol ?? 'B3'})
+• PUT comprada (seguro): ${putLeg.strikeOriginLabel} (${putLeg.symbol ?? 'B3'}) — calculada com ${regime.sampleSize} fechamentos reais BRAPI
 
 RENDA GERADA: ${netCredit > 0 ? `Crédito líquido: R$${netCredit.toFixed(2)} por ação (${callLeg.premiumReliabilityLabel})` : `Custo líquido: R$${Math.abs(netCredit).toFixed(2)} por ação — seguro pago`}
 
@@ -834,20 +1053,21 @@ export interface GenerateStrategiesInput {
   hv21: number | null;
   profile?: OperatorProfile;
   dataDate: string;
+  optionsChain?: OptionChainItem[];
 }
 
 export function generateStrategies(input: GenerateStrategiesInput): StrategyRecommendation[] {
-  const { regime, expiration, dte, hv21, profile, dataDate } = input;
+  const { regime, expiration, dte, hv21, profile, dataDate, optionsChain } = input;
 
   if (regime.isInsufficient) {
     return [];
   }
 
   const all: StrategyRecommendation[] = [
-    buildBullPutSpread(regime, expiration, dte, hv21, dataDate),
-    buildBearCallSpread(regime, expiration, dte, hv21, dataDate),
-    buildIronCondor(regime, expiration, dte, hv21, dataDate),
-    buildCoveredCallWithCollar(regime, expiration, dte, hv21, dataDate),
+    buildBullPutSpread(regime, expiration, dte, hv21, dataDate, optionsChain),
+    buildBearCallSpread(regime, expiration, dte, hv21, dataDate, optionsChain),
+    buildIronCondor(regime, expiration, dte, hv21, dataDate, optionsChain),
+    buildCoveredCallWithCollar(regime, expiration, dte, hv21, dataDate, optionsChain),
   ];
 
   // Filtrar por perfil se informado

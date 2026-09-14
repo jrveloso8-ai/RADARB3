@@ -52,16 +52,18 @@ export async function GET(request: NextRequest) {
     const dateD1 = getPreviousB3BusinessDay(today, 1);
     const dateD5 = getPreviousB3BusinessDay(today, 5);
 
-    // 4. Buscar posições reais: Atual, D-1, D-5
-    const [currentPosRes, prev1DPosRes, prev5DPosRes] = await Promise.all([
+    // 4. Buscar posições reais (Atual, D-1, D-5) e Cadeia de Opções com Book (Bid/Ask/Close)
+    const [currentPosRes, prev1DPosRes, prev5DPosRes, chainRes] = await Promise.all([
       brapiService.getOptionPositions(cleanSymbol, selectedExpiration).catch(() => ({ positions: [] })),
       brapiService.getOptionPositions(cleanSymbol, selectedExpiration, dateD1).catch(() => ({ positions: [] })),
       brapiService.getOptionPositions(cleanSymbol, selectedExpiration, dateD5).catch(() => ({ positions: [] })),
+      brapiService.getOptionChain(cleanSymbol, selectedExpiration).catch(() => ({ series: [] })),
     ]);
 
     const currentPositions = currentPosRes?.positions || [];
     const prev1DPositions = prev1DPosRes?.positions || [];
     const prev5DPositions = prev5DPosRes?.positions || [];
+    const optionsChain = chainRes?.series || [];
 
     // 5. Construir dados de rastreamento (bandas, barreiras, strikesTable)
     const trackingResult = buildOITracking({
@@ -99,7 +101,7 @@ export async function GET(request: NextRequest) {
       hv21,
     });
 
-    // 8. Gerar estratégias (com payoff real e scoring auditável)
+    // 8. Gerar estratégias (com payoff real, strikes reais B3, book bid/ask e scoring auditável)
     const strategies = generateStrategies({
       regime: { ...regime, spotPrice },
       expiration: selectedExpiration,
@@ -107,6 +109,7 @@ export async function GET(request: NextRequest) {
       hv21,
       profile,
       dataDate: new Date().toISOString().split('T')[0],
+      optionsChain,
     });
 
     const result: StrategyEngineResult = {

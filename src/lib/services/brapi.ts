@@ -1,6 +1,7 @@
 import {
   HistoricalPrice,
   OptionAnalyticsItem,
+  OptionChainItem,
   OptionPositionItem,
   QuoteDetails,
 } from '../types/financial';
@@ -490,6 +491,88 @@ export class BrapiService {
         expirationDate,
         date: '',
         analytics: [],
+      };
+    }
+  }
+
+  /**
+   * Consulta nova rota oficial v2: Cadeia completa de Opções com Book (Bid/Ask) e Cotações Reais B3.
+   * GET /api/v2/options/chain?underlying=VALE3&expirationDate=YYYY-MM-DD
+   */
+  async getOptionChain(
+    underlying: string,
+    expirationDate: string
+  ): Promise<{
+    underlying: string;
+    expirationDate: string;
+    date: string;
+    series: OptionChainItem[];
+  }> {
+    const cleanUnderlying = underlying.trim().toUpperCase();
+    const params: Record<string, string> = {
+      underlying: cleanUnderlying,
+      expirationDate,
+    };
+
+    const url = this.buildUrl('/v2/options/chain', params);
+    const cacheKey = `options_chain_${cleanUnderlying}_${expirationDate}`;
+
+    try {
+      const data = await this.fetchWithTimeout<{
+        underlying?: string;
+        expirationDate?: string;
+        date?: string;
+        series?: Array<{
+          symbol: string;
+          underlyingSymbol: string;
+          side: string;
+          strike: number;
+          expirationDate: string;
+          bid?: number;
+          ask?: number;
+          close?: number;
+          trades?: number;
+          volume?: number;
+          financialVolume?: number;
+          openInterest?: number;
+        }>;
+      }>(url, cacheKey, 60);
+
+      const series: OptionChainItem[] = (data.series || [])
+        .filter((s) => s.symbol && typeof s.strike === 'number' && s.strike > 0)
+        .map((s) => ({
+          symbol: s.symbol.trim().toUpperCase(),
+          underlyingSymbol: s.underlyingSymbol || cleanUnderlying,
+          side: s.side?.toLowerCase().includes('call') ? 'CALL' : 'PUT',
+          strike: Number(s.strike),
+          expirationDate: s.expirationDate || expirationDate,
+          bid: typeof s.bid === 'number' ? Number(s.bid) : 0,
+          ask: typeof s.ask === 'number' ? Number(s.ask) : 0,
+          close: typeof s.close === 'number' ? Number(s.close) : 0,
+          trades: typeof s.trades === 'number' ? s.trades : 0,
+          volume: typeof s.volume === 'number' ? s.volume : 0,
+          financialVolume: typeof s.financialVolume === 'number' ? s.financialVolume : 0,
+          openInterest: typeof s.openInterest === 'number' ? s.openInterest : 0,
+        }));
+
+      return {
+        underlying: data.underlying || cleanUnderlying,
+        expirationDate: data.expirationDate || expirationDate,
+        date: data.date || '',
+        series,
+      };
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : '';
+      if (errMsg.includes('Token de autenticação não fornecido') || errMsg.includes('MISSING_TOKEN')) {
+        throw new Error(
+          `A consulta à cadeia de opções de '${cleanUnderlying}' requer token da BRAPI. Por favor, adicione sua chave em .env.local (BRAPI_API_KEY).`
+        );
+      }
+      return {
+        underlying: cleanUnderlying,
+        expirationDate,
+        date: '',
+        series: [],
       };
     }
   }

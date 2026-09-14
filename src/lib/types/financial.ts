@@ -527,12 +527,30 @@ export type StrikeOriginType =
   | 'ATM_REAL'
   | 'SPREAD_CALCULADO';
 
+export interface OptionChainItem {
+  symbol: string;
+  underlyingSymbol: string;
+  side: 'call' | 'put' | 'CALL' | 'PUT';
+  strike: number;
+  expirationDate: string;
+  bid: number;
+  ask: number;
+  close: number;
+  trades?: number;
+  volume?: number;
+  financialVolume?: number;
+  openInterest?: number;
+}
+
 export type PremiumReliabilityType =
+  | 'REAL_BOOK_BID'
+  | 'REAL_BOOK_ASK'
   | 'REAL_MERCADO'
   | 'TEORICO_BS_HV_REAL'
   | 'SEM_DADOS';
 
 export interface OptionLeg {
+  symbol?: string;
   action: 'COMPRAR' | 'VENDER';
   type: 'CALL' | 'PUT';
   strike: number;
@@ -540,6 +558,9 @@ export interface OptionLeg {
   strikeOriginLabel: string;
   dte: number;
   expiration: string;
+  bid?: number | null;
+  ask?: number | null;
+  close?: number | null;
   theoreticalPremium: number | null;
   marketPremium: number | null;
   premiumUsed: number | null;
