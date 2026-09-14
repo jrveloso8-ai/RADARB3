@@ -469,3 +469,155 @@ export interface Top10OIResult {
     d5: string;
   };
 }
+
+// ─────────────────────────────────────────────────────────────
+// MESA DE ESTRATÉGIAS AI — TIPOS CENTRAIS
+// ─────────────────────────────────────────────────────────────
+
+export type MarketRegimeType =
+  | 'EQUILIBRIO'
+  | 'NORMAL_ALTA'
+  | 'NORMAL_BAIXA'
+  | 'EXTENSAO_ALTA'
+  | 'EXTENSAO_BAIXA'
+  | 'EXTREMO_ALTA'
+  | 'EXTREMO_BAIXA';
+
+export type FlowSignalType =
+  | 'ACCUMULATION_CALL'
+  | 'ACCUMULATION_PUT'
+  | 'UNWINDING'
+  | 'NEUTRAL';
+
+export type PCRSignalType =
+  | 'BEARISH_EXTREMO'
+  | 'BEARISH'
+  | 'NEUTRO'
+  | 'BULLISH'
+  | 'BULLISH_EXTREMO';
+
+export interface MarketRegime {
+  zScore: number;
+  regime: MarketRegimeType;
+  regimeLabel: string;
+  tailRiskIndex: number;
+  tailRiskLabel: string;
+  flowSignal: FlowSignalType;
+  flowLabel: string;
+  pcr: number;
+  pcrSignal: PCRSignalType;
+  pcrLabel: string;
+  topCallBarrierStrike: number | null;
+  topPutBarrierStrike: number | null;
+  upperBand2Sigma: number;
+  lowerBand2Sigma: number;
+  upperBand3Sigma: number;
+  lowerBand3Sigma: number;
+  spotPrice: number;
+  hv21: number | null;
+  sampleSize: number;
+  isInsufficient: boolean;
+}
+
+export type StrikeOriginType =
+  | 'BARREIRA_CALL_REAL'
+  | 'BARREIRA_PUT_REAL'
+  | 'BANDA_2SIGMA_REAL'
+  | 'BANDA_3SIGMA_REAL'
+  | 'ATM_REAL'
+  | 'SPREAD_CALCULADO';
+
+export type PremiumReliabilityType =
+  | 'REAL_MERCADO'
+  | 'TEORICO_BS_HV_REAL'
+  | 'SEM_DADOS';
+
+export interface OptionLeg {
+  action: 'COMPRAR' | 'VENDER';
+  type: 'CALL' | 'PUT';
+  strike: number;
+  strikeOrigin: StrikeOriginType;
+  strikeOriginLabel: string;
+  dte: number;
+  expiration: string;
+  theoreticalPremium: number | null;
+  marketPremium: number | null;
+  premiumUsed: number | null;
+  premiumReliability: PremiumReliabilityType;
+  premiumReliabilityLabel: string;
+  delta: number | null;
+  legRationale: string;
+}
+
+export interface TailRiskLeg {
+  type: 'PROTECAO_CAUDA' | 'OPORTUNIDADE_OUTLIER';
+  typeLabel: string;
+  triggerZScore: number;
+  triggerCondition: string;
+  isCurrentlyActive: boolean;
+  legs: OptionLeg[];
+  rationale: string;
+}
+
+export interface PayoffPoint {
+  spotAtExpiry: number;
+  netPayoff: number;
+  currentPnL: number | null;
+}
+
+export interface PayoffReliability {
+  expiryPayoffIsReal: boolean;
+  expiryPayoffExplanation: string;
+  currentPnLIsTheoretical: boolean;
+  currentPnLExplanation: string;
+  premiumWarnings: string[];
+  hv21Used: number | null;
+  riskFreeRateUsed: number;
+  dataDate: string;
+}
+
+export interface ConvictionFactors {
+  zScoreAlignment: number;
+  flowAlignment: number;
+  barrierAlignment: number;
+  pcrAlignment: number;
+  explanation: string[];
+}
+
+export type StrategyCategory = 'TATICA' | 'FLUXO' | 'RENDA_PROTECAO';
+export type OperatorProfile = 'TATICO' | 'ESPECULATIVO' | 'CONSERVADOR';
+
+export interface StrategyRecommendation {
+  id: string;
+  name: string;
+  nameEn: string;
+  category: StrategyCategory;
+  targetProfiles: OperatorProfile[];
+  convictionScore: number;
+  convictionFactors: ConvictionFactors;
+  regime: MarketRegimeType;
+  legs: OptionLeg[];
+  tailRisk: TailRiskLeg;
+  maxRiskPerLot: number | null;
+  maxReturnPerLot: number | null;
+  breakEvenAtExpiry: number | null;
+  returnOnRiskPercent: number | null;
+  payoffPoints: PayoffPoint[];
+  payoffReliability: PayoffReliability;
+  rationale: string;
+  alertas: string[];
+  isDataInsufficient: boolean;
+  insufficientDataReason?: string;
+}
+
+export interface StrategyEngineResult {
+  symbol: string;
+  spotPrice: number;
+  selectedExpiration: string;
+  selectedDte: number;
+  isRolloverPeriod: boolean;
+  hv21: number | null;
+  regime: MarketRegime;
+  strategies: StrategyRecommendation[];
+  generatedAt: string;
+}

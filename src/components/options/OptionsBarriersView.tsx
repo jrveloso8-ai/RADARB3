@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   HelpCircle,
   Award,
+  Zap,
 } from 'lucide-react';
 import { OptionAnalysisResult } from '@/lib/types/financial';
 import { safeFetchJson } from '@/lib/utils/api-client';
@@ -26,6 +27,7 @@ import { isActionableStrategy } from '@/lib/domain/cme-election';
 import { DataValue } from '../shared/DataValue';
 import { OptionsTracking5DView } from './OptionsTracking5DView';
 import { OptionsTop10View } from './OptionsTop10View';
+import { OptionsStrategyEngineView } from './OptionsStrategyEngineView';
 
 interface OptionsBarriersViewProps {
   initialSymbol?: string;
@@ -36,7 +38,7 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
   initialSymbol = 'PETR4',
   hideTopNav = false,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'OVERVIEW' | 'TRACKING_5D' | 'TOP_10_OI'>('OVERVIEW');
+  const [activeSubTab, setActiveSubTab] = useState<'OVERVIEW' | 'TRACKING_5D' | 'TOP_10_OI' | 'STRATEGY_ENGINE'>('OVERVIEW');
   const [symbol, setSymbol] = useState(initialSymbol);
   const [searchInput, setSearchInput] = useState(initialSymbol);
   const [selectedExpiration, setSelectedExpiration] = useState<string>('');
@@ -131,6 +133,19 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
             <Award className="w-4 h-4 text-cyan-400" />
             <span>3) Top 10 OI Líquidas</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('STRATEGY_ENGINE')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold font-mono transition shadow-sm ${
+              activeSubTab === 'STRATEGY_ENGINE'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-amber-500/10 font-bold'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800/60 border border-transparent'
+            }`}
+          >
+            <Zap className="w-4 h-4 text-amber-400" />
+            <span>4) Mesa de Estratégias AI</span>
+          </button>
         </div>
 
         <span className="text-[11px] text-gray-500 font-mono hidden sm:inline mr-2">
@@ -142,6 +157,8 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
         <OptionsTracking5DView initialSymbol={symbol} />
       ) : activeSubTab === 'TOP_10_OI' ? (
         <OptionsTop10View initialSymbol={symbol} />
+      ) : activeSubTab === 'STRATEGY_ENGINE' ? (
+        <OptionsStrategyEngineView initialSymbol={symbol} />
       ) : (
         <>
           {/* 1. TOP BAR / PROVENIÊNCIA DOS PILARES (quando exibido globalmente) */}
