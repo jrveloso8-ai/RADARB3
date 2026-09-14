@@ -118,3 +118,41 @@ export function calculateB3BusinessDays(startDate: Date | string, endDate: Date 
 
   return businessDays;
 }
+
+/**
+ * Retorna a data (YYYY-MM-DD) de N dias úteis anteriores na B3,
+ * descontando fins de semana e feriados oficiais.
+ */
+export function getPreviousB3BusinessDay(fromDate: Date | string = new Date(), businessDaysAgo: number = 1): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const current = normalizeDate(fromDate);
+
+  if (businessDaysAgo <= 0) {
+    return `${current.getFullYear()}-${pad(current.getMonth() + 1)}-${pad(current.getDate())}`;
+  }
+
+  const holidaysByYear = new Map<number, Set<string>>();
+  const getHolidays = (y: number) => {
+    if (!holidaysByYear.has(y)) {
+      holidaysByYear.set(y, getB3Holidays(y));
+    }
+    return holidaysByYear.get(y)!;
+  };
+
+  let count = 0;
+  while (count < businessDaysAgo) {
+    current.setDate(current.getDate() - 1);
+    const dayOfWeek = current.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      const y = current.getFullYear();
+      const dateStr = `${y}-${pad(current.getMonth() + 1)}-${pad(current.getDate())}`;
+      const yearHolidays = getHolidays(y);
+      if (!yearHolidays.has(dateStr)) {
+        count++;
+      }
+    }
+  }
+
+  return `${current.getFullYear()}-${pad(current.getMonth() + 1)}-${pad(current.getDate())}`;
+}
+

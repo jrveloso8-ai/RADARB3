@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Navbar, ActiveTab } from '@/components/layout/Navbar';
+import { HomeHubView } from '@/components/home/HomeHubView';
 import { TradingViewOverview } from '@/components/tradingview/TradingViewOverview';
 import { OpportunityRadarView } from '@/components/opportunities/OpportunityRadarView';
 import { QuoteView } from '@/components/quote/QuoteView';
@@ -14,7 +15,7 @@ import { Shield, Sparkles, TrendingUp, Users } from 'lucide-react';
 import { safeFetchJson } from '@/lib/utils/api-client';
 
 export default function HomePage() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('opportunities');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [selectedSymbol, setSelectedSymbol] = useState<string>('PETR4');
   const [uniqueVisitors, setUniqueVisitors] = useState<number | null>(null);
 
@@ -45,6 +46,25 @@ export default function HomePage() {
 
       {/* Conteúdo Principal com declaração semântica de tabpanel */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Painel Inicial: Central de Inteligência B3 (Hub) */}
+        <div
+          id="panel-home"
+          role="tabpanel"
+          aria-labelledby="nav-tab-home"
+          className={activeTab === 'home' ? 'block' : 'hidden'}
+        >
+          {activeTab === 'home' && (
+            <HomeHubView
+              onSelectModule={(tab, symbol) => {
+                if (symbol) {
+                  setSelectedSymbol(symbol);
+                }
+                setActiveTab(tab);
+              }}
+            />
+          )}
+        </div>
+
         <div
           id="panel-overview"
           role="tabpanel"

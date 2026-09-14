@@ -23,6 +23,7 @@ import { safeFetchJson } from '@/lib/utils/api-client';
 import { OptionPayoffChart } from './OptionPayoffChart';
 import { isActionableStrategy } from '@/lib/domain/cme-election';
 import { DataValue } from '../shared/DataValue';
+import { OptionsTracking5DView } from './OptionsTracking5DView';
 
 interface OptionsBarriersViewProps {
   initialSymbol?: string;
@@ -33,6 +34,7 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
   initialSymbol = 'PETR4',
   hideTopNav = false,
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'OVERVIEW' | 'TRACKING_5D'>('OVERVIEW');
   const [symbol, setSymbol] = useState(initialSymbol);
   const [searchInput, setSearchInput] = useState(initialSymbol);
   const [selectedExpiration, setSelectedExpiration] = useState<string>('');
@@ -86,18 +88,57 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
 
   return (
     <div className="space-y-5 text-gray-200 font-sans">
-      {/* 1. TOP BAR / PROVENIÊNCIA DOS PILARES (quando exibido globalmente) */}
-      {!hideTopNav && (
+      {/* SELETOR DE SUBMÓDULOS DE DERIVATIVOS */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0b101b] border border-gray-800 rounded-2xl p-2 shadow-lg">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('OVERVIEW')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold font-mono transition shadow-sm ${
+              activeSubTab === 'OVERVIEW'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-cyan-500/10'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800/60 border border-transparent'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-cyan-400" />
+            <span>1) Visão Geral & Payoff</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('TRACKING_5D')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold font-mono transition shadow-sm ${
+              activeSubTab === 'TRACKING_5D'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-emerald-500/10'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800/60 border border-transparent'
+            }`}
+          >
+            <Activity className="w-4 h-4 text-emerald-400" />
+            <span>2) Rastreamento 5D & Bandas 200P</span>
+          </button>
+        </div>
+
+        <span className="text-[11px] text-gray-500 font-mono hidden sm:inline mr-2">
+          B3 S.A. • Matriz Oficial de Derivativos
+        </span>
+      </div>
+
+      {activeSubTab === 'TRACKING_5D' ? (
+        <OptionsTracking5DView initialSymbol={symbol} />
+      ) : (
         <>
-          <div className="bg-[#0b101b] border border-gray-800/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-md">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold text-cyan-400 font-mono tracking-wider">
-                (≈) PROVENIÊNCIA DOS 4 PILARES:
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
-                100% BASE REAL BRAPI
-              </span>
-            </div>
+          {/* 1. TOP BAR / PROVENIÊNCIA DOS PILARES (quando exibido globalmente) */}
+          {!hideTopNav && (
+            <>
+              <div className="bg-[#0b101b] border border-gray-800/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-md">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-cyan-400 font-mono tracking-wider">
+                    (≈) PROVENIÊNCIA DOS 4 PILARES:
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
+                    100% BASE REAL BRAPI
+                  </span>
+                </div>
 
             <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
               <span className="px-2 py-0.5 rounded bg-slate-900 border border-emerald-500/30 text-gray-300 flex items-center gap-1">
@@ -767,6 +808,8 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
           <p className="text-xs text-gray-400">{error}</p>
         </div>
       )}
-    </div>
-  );
+    </>
+  )}
+</div>
+);
 };

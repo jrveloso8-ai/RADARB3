@@ -368,3 +368,65 @@ export interface QuoteDetails {
   tradePlan?: import('../domain/trade-plan').TradePlan | null;
   electedOptionStrategy?: import('../domain/cme-election').ElectedOptionStrategy | null;
 }
+
+export interface SpotStatisticalBands {
+  spotPrice: number;
+  mean200: number;
+  stdDev200: number;
+  lowerBand2Sigma: number;
+  upperBand2Sigma: number;
+  sampleSize: number;
+  zScore: number | null;
+}
+
+export interface BarrierTrackingItem {
+  strike: number;
+  type: 'CALL' | 'PUT';
+  symbol: string;
+  currentOI: number;
+  prev1DOI: number | null;
+  prev5DOI: number | null;
+  change1DPercent: number | null;
+  change5DPercent: number | null;
+  isWithin2Sigma: boolean;
+  distanceFromSpotPercent: number;
+  flowSignal: 'ACCUMULATION' | 'UNWINDING' | 'STABLE' | 'NO_HISTORY';
+}
+
+export interface BarrierSummaryCard {
+  strike: number;
+  symbol: string;
+  currentOI: number;
+  prev1DOI: number | null;
+  prev5DOI: number | null;
+  change1DPercent: number | null;
+  change5DPercent: number | null;
+  distanceFromSpotPercent: number;
+  flowSignal: 'ACCUMULATION' | 'UNWINDING' | 'STABLE' | 'NO_HISTORY';
+}
+
+export interface OITrackingCandle {
+  date: number;
+  dateFormatted: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface OITrackingResult {
+  symbol: string;
+  selectedExpiration: string;
+  selectedDte: number;
+  isRolloverPeriod: boolean;
+  availableExpirations: B3ExpirationInfo[];
+  spotBands: SpotStatisticalBands;
+  topCallOverall: BarrierSummaryCard | null;
+  topCallWithin2Sigma: BarrierSummaryCard | null;
+  topPutOverall: BarrierSummaryCard | null;
+  topPutWithin2Sigma: BarrierSummaryCard | null;
+  strikesTable: BarrierTrackingItem[];
+  candles: OITrackingCandle[];
+}
+
