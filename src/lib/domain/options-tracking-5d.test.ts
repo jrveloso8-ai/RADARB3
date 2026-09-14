@@ -111,6 +111,20 @@ describe('Motor Quantitativo: options-tracking-5d', () => {
       expect(result.topPutOverall?.strike).toBe(32.0);
       expect(result.topPutOverall?.currentOI).toBe(60000);
 
+      // Verificar Top 3 de variações 5D de CALL
+      expect(result.top3CallGains5D.length).toBeGreaterThan(0);
+      expect(result.top3CallGains5D[0].change5DPercent).toBeGreaterThan(0);
+      expect(result.top3CallLosses5D.length).toBeGreaterThan(0);
+
+      // Verificar Top 3 de variações 5D de PUT
+      expect(result.top3PutGains5D.length).toBeGreaterThan(0);
+      expect(result.top3PutLosses5D.length).toBeGreaterThan(0);
+
+      // Verificar Top 3 globais
+      expect(result.top3Gains5D.length).toBeLessThanOrEqual(3);
+      expect(result.top3Losses5D.length).toBeLessThanOrEqual(3);
+      expect(result.top3Gains5D[0].change5DPercent).toBeGreaterThanOrEqual(result.top3Losses5D[0].change5DPercent ?? 0);
+
       // Verificar se a tabela está ordenada da menor para a maior variação 5D
       expect(result.strikesTable.length).toBe(5);
       for (let i = 0; i < result.strikesTable.length - 1; i++) {

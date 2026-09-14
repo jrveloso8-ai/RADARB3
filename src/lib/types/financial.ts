@@ -426,7 +426,14 @@ export interface OITrackingResult {
   topCallWithin2Sigma: BarrierSummaryCard | null;
   topPutOverall: BarrierSummaryCard | null;
   topPutWithin2Sigma: BarrierSummaryCard | null;
+  top3CallGains5D: BarrierTrackingItem[];
+  top3CallLosses5D: BarrierTrackingItem[];
+  top3PutGains5D: BarrierTrackingItem[];
+  top3PutLosses5D: BarrierTrackingItem[];
+  top3Gains5D: BarrierTrackingItem[];
+  top3Losses5D: BarrierTrackingItem[];
   strikesTable: BarrierTrackingItem[];
   candles: OITrackingCandle[];
 }
+
 

@@ -37,6 +37,8 @@ export const OptionsTracking5DView: React.FC<OptionsTracking5DViewProps> = ({
   const [filterOnly2Sigma, setFilterOnly2Sigma] = useState(false);
   const [sortOrder, setSortOrder] = useState<'5D_ASC' | '5D_DESC' | '1D_ASC' | '1D_DESC' | 'OI_DESC' | 'STRIKE_ASC'>('5D_ASC');
   const [hoveredCandle, setHoveredCandle] = useState<OITrackingCandle | null>(null);
+  const [showAllRows, setShowAllRows] = useState(false);
+  const [heatmapFilter, setHeatmapFilter] = useState<'ALL' | 'CALL' | 'PUT'>('ALL');
 
   const popularAssets = ['PETR4', 'VALE3', 'BOVA11', 'BBAS3', 'ITUB4', 'BBDC4', 'SBSP3'];
 
@@ -391,6 +393,54 @@ export const OptionsTracking5DView: React.FC<OptionsTracking5DViewProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Top 3 Variações de CALL (5 Dias) */}
+              <div className="pt-3 border-t border-gray-800/80 mt-4 space-y-2">
+                <span className="text-[11px] font-mono text-gray-400 uppercase tracking-wider font-semibold block">
+                  Top Movimentações de CALL (5D):
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
+                  {/* 3 Maiores Montagens */}
+                  <div className="space-y-1 bg-gray-900/60 p-2.5 rounded-xl border border-gray-800/80">
+                    <span className="text-emerald-400 font-bold block text-[10px] flex items-center gap-1">
+                      <ArrowUpRight className="w-3 h-3" />
+                      3 Maiores Montagens
+                    </span>
+                    {data.top3CallGains5D && data.top3CallGains5D.length > 0 ? (
+                      data.top3CallGains5D.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between py-0.5 border-b border-gray-800/40 last:border-0">
+                          <span className="text-white font-bold">R$ {item.strike.toFixed(2)}</span>
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                            +{item.change5DPercent}%
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-gray-500 text-[10px]">Sem histórico suficiente</span>
+                    )}
+                  </div>
+
+                  {/* 3 Maiores Desmontes */}
+                  <div className="space-y-1 bg-gray-900/60 p-2.5 rounded-xl border border-gray-800/80">
+                    <span className="text-red-400 font-bold block text-[10px] flex items-center gap-1">
+                      <ArrowDownRight className="w-3 h-3" />
+                      3 Maiores Desmontes
+                    </span>
+                    {data.top3CallLosses5D && data.top3CallLosses5D.length > 0 ? (
+                      data.top3CallLosses5D.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between py-0.5 border-b border-gray-800/40 last:border-0">
+                          <span className="text-white font-bold">R$ {item.strike.toFixed(2)}</span>
+                          <span className="px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 font-bold">
+                            {item.change5DPercent}%
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-gray-500 text-[10px]">Sem histórico suficiente</span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Card PUTs */}
@@ -442,16 +492,272 @@ export const OptionsTracking5DView: React.FC<OptionsTracking5DViewProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Top 3 Variações de PUT (5 Dias) */}
+              <div className="pt-3 border-t border-gray-800/80 mt-4 space-y-2">
+                <span className="text-[11px] font-mono text-gray-400 uppercase tracking-wider font-semibold block">
+                  Top Movimentações de PUT (5D):
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
+                  {/* 3 Maiores Montagens */}
+                  <div className="space-y-1 bg-gray-900/60 p-2.5 rounded-xl border border-gray-800/80">
+                    <span className="text-emerald-400 font-bold block text-[10px] flex items-center gap-1">
+                      <ArrowUpRight className="w-3 h-3" />
+                      3 Maiores Montagens
+                    </span>
+                    {data.top3PutGains5D && data.top3PutGains5D.length > 0 ? (
+                      data.top3PutGains5D.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between py-0.5 border-b border-gray-800/40 last:border-0">
+                          <span className="text-white font-bold">R$ {item.strike.toFixed(2)}</span>
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                            +{item.change5DPercent}%
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-gray-500 text-[10px]">Sem histórico suficiente</span>
+                    )}
+                  </div>
+
+                  {/* 3 Maiores Desmontes */}
+                  <div className="space-y-1 bg-gray-900/60 p-2.5 rounded-xl border border-gray-800/80">
+                    <span className="text-red-400 font-bold block text-[10px] flex items-center gap-1">
+                      <ArrowDownRight className="w-3 h-3" />
+                      3 Maiores Desmontes
+                    </span>
+                    {data.top3PutLosses5D && data.top3PutLosses5D.length > 0 ? (
+                      data.top3PutLosses5D.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between py-0.5 border-b border-gray-800/40 last:border-0">
+                          <span className="text-white font-bold">R$ {item.strike.toFixed(2)}</span>
+                          <span className="px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 font-bold">
+                            {item.change5DPercent}%
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-gray-500 text-[10px]">Sem histórico suficiente</span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* 4. Tabela de Variação de Open Interest (1D e 5D) */}
+          {/* 4. Resumo Executivo: 3 Maiores e 3 Menores Movimentos Globais (5D) */}
+          <div className="rounded-2xl border border-gray-800/90 bg-[#0b101b] p-5 shadow-xl space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-800">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider">
+                  Destaques Globais de Fluxo na B3 (Últimos 5 Dias)
+                </h3>
+              </div>
+              <span className="text-[11px] text-gray-400 font-mono">
+                Extremos de Montagem e Desmonte de Contratos
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 3 Maiores Entradas Globais */}
+              <div className="p-3.5 rounded-xl bg-[#090e18] border border-emerald-500/30 space-y-2">
+                <div className="flex items-center justify-between text-xs font-mono font-bold text-emerald-400">
+                  <span className="flex items-center gap-1.5">
+                    <ArrowUpRight className="w-4 h-4" />
+                    3 Maiores Entradas / Montagens Globais
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20">Fluxo Comprador</span>
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  {data.top3Gains5D && data.top3Gains5D.length > 0 ? (
+                    data.top3Gains5D.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 rounded-lg bg-gray-900/80 border border-gray-800 text-xs font-mono"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                              item.type === 'CALL'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : 'bg-red-500/20 text-red-400'
+                            }`}
+                          >
+                            {item.type}
+                          </span>
+                          <span className="text-white font-bold">R$ {item.strike.toFixed(2)}</span>
+                          <span className="text-gray-400 text-[10px]">({item.symbol})</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-400 text-[10px]">
+                            OI: <strong className="text-gray-200">{item.currentOI.toLocaleString('pt-BR')}</strong>
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/25 text-emerald-300 font-bold border border-emerald-500/40">
+                            +{item.change5DPercent}%
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <span className="text-gray-500 text-xs font-mono">Sem dados comparativos suficientes</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 3 Maiores Saídas Globais */}
+              <div className="p-3.5 rounded-xl bg-[#090e18] border border-red-500/30 space-y-2">
+                <div className="flex items-center justify-between text-xs font-mono font-bold text-red-400">
+                  <span className="flex items-center gap-1.5">
+                    <ArrowDownRight className="w-4 h-4" />
+                    3 Maiores Saídas / Desmontes Globais
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20">Desmonte / Rolagem</span>
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  {data.top3Losses5D && data.top3Losses5D.length > 0 ? (
+                    data.top3Losses5D.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 rounded-lg bg-gray-900/80 border border-gray-800 text-xs font-mono"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                              item.type === 'CALL'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : 'bg-red-500/20 text-red-400'
+                            }`}
+                          >
+                            {item.type}
+                          </span>
+                          <span className="text-white font-bold">R$ {item.strike.toFixed(2)}</span>
+                          <span className="text-gray-400 text-[10px]">({item.symbol})</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-400 text-[10px]">
+                            OI: <strong className="text-gray-200">{item.currentOI.toLocaleString('pt-BR')}</strong>
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-red-500/25 text-red-300 font-bold border border-red-500/40">
+                            {item.change5DPercent}%
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <span className="text-gray-500 text-xs font-mono">Sem dados comparativos suficientes</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 5. Mapa de Calor Visual de Variação de OI (Heatmap de Strikes) */}
+          <div className="rounded-2xl border border-gray-800/90 bg-[#0b101b] p-5 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-800">
+              <div className="flex items-center gap-2">
+                <BarChart2 className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    Mapa de Calor Visual das Variações de OI (5 Dias)
+                  </h3>
+                  <p className="text-xs text-gray-400 font-mono">
+                    Distribuição visual imediata de montagens e desmontes por strike
+                  </p>
+                </div>
+              </div>
+
+              {/* Filtro do Heatmap: Todos / Apenas CALLs / Apenas PUTs */}
+              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-gray-900 border border-gray-800 text-xs font-mono">
+                <button
+                  type="button"
+                  onClick={() => setHeatmapFilter('ALL')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    heatmapFilter === 'ALL'
+                      ? 'bg-gray-800 text-white font-bold'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Todos ({data.strikesTable.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHeatmapFilter('CALL')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    heatmapFilter === 'CALL'
+                      ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  CALLs ({data.strikesTable.filter((r) => r.type === 'CALL').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHeatmapFilter('PUT')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    heatmapFilter === 'PUT'
+                      ? 'bg-red-500/20 text-red-300 font-bold border border-red-500/30'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  PUTs ({data.strikesTable.filter((r) => r.type === 'PUT').length})
+                </button>
+              </div>
+            </div>
+
+            {/* Grid Térmico de Blocos */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+              {data.strikesTable
+                .filter((item) => (heatmapFilter === 'ALL' ? true : item.type === heatmapFilter))
+                .sort((a, b) => a.strike - b.strike)
+                .map((item) => {
+                  const pct = item.change5DPercent;
+                  return (
+                    <div
+                      key={`${item.type}_${item.strike}`}
+                      title={`Strike R$ ${item.strike.toFixed(2)} (${item.type})\nOI Atual: ${item.currentOI.toLocaleString('pt-BR')}\nVariação 5D: ${pct !== null ? `${pct > 0 ? '+' : ''}${pct}%` : 'N/D'}\n${item.isWithin2Sigma ? 'Dentro do Range 2σ' : 'Fora do Range 2σ'}`}
+                      className={`p-2.5 rounded-xl border transition-all hover:scale-105 cursor-pointer font-mono flex flex-col justify-between ${
+                        item.isWithin2Sigma ? 'ring-1 ring-cyan-500/40' : ''
+                      } ${getThermalStyle(pct)}`}
+                    >
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold">
+                          {item.type === 'CALL' ? 'CALL' : 'PUT'}
+                        </span>
+                        {item.isWithin2Sigma && (
+                          <span className="text-[9px] px-1 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
+                            2σ
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="my-1 text-center">
+                        <span className="text-xs font-black block text-white">
+                          R$ {item.strike.toFixed(2)}
+                        </span>
+                        <span className="text-[11px] font-bold block mt-0.5">
+                          {pct !== null ? `${pct > 0 ? '+' : ''}${pct}%` : 'N/D'}
+                        </span>
+                      </div>
+
+                      <div className="text-[9px] text-center opacity-80">
+                        {item.currentOI >= 1000000
+                          ? `${(item.currentOI / 1000000).toFixed(1)}M`
+                          : item.currentOI >= 1000
+                          ? `${(item.currentOI / 1000).toFixed(0)}K`
+                          : item.currentOI}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          {/* 6. Tabela Detalhada de Variação de Open Interest (1D e 5D) */}
           <div className="bg-[#0b101b] border border-gray-800/90 rounded-2xl p-5 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-800">
               <div className="flex items-center gap-2">
                 <BarChart2 className="w-5 h-5 text-cyan-400" />
                 <h3 className="text-base font-bold text-white">
-                  Tabela Térmica de Variação de Open Interest (1D & 5D)
+                  Tabela Detalhada por Strike (Variação 1D & 5D)
                 </h3>
               </div>
 
@@ -522,7 +828,7 @@ export const OptionsTracking5DView: React.FC<OptionsTracking5DViewProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    displayedRows.map((row) => (
+                    displayedRows.slice(0, showAllRows ? undefined : 15).map((row) => (
                       <tr key={`${row.type}_${row.strike}`} className="hover:bg-gray-800/40 transition">
                         <td className="py-2.5 px-3 font-bold text-white">
                           R$ {row.strike.toFixed(2)}
@@ -584,6 +890,21 @@ export const OptionsTracking5DView: React.FC<OptionsTracking5DViewProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Controle de Expansão / Recolhimento da Tabela */}
+            {displayedRows.length > 15 && (
+              <div className="pt-3 text-center border-t border-gray-800/60">
+                <button
+                  type="button"
+                  onClick={() => setShowAllRows(!showAllRows)}
+                  className="px-4 py-2 rounded-xl bg-gray-900 border border-gray-700 hover:border-gray-500 text-xs font-mono text-cyan-400 hover:text-cyan-300 font-semibold transition shadow-sm"
+                >
+                  {showAllRows
+                    ? '▲ Recolher para os 15 primeiros strikes'
+                    : `▼ Exibir todos os ${displayedRows.length} strikes da série (+${displayedRows.length - 15} restantes)`}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 5. Gráfico de Candlestick do Ativo Spot com Linhas de Barreiras */}

@@ -299,7 +299,33 @@ export function buildOITracking({
       return max;
     }, null);
 
-  // 6. Preparar os últimos candles para o gráfico (últimos 50 pregões)
+  // 6. Top 3 Maiores e Menores Variações de 5D (Call, Put e Geral)
+  const itemsWith5D = strikesTable.filter((i) => typeof i.change5DPercent === 'number');
+
+  const callsWith5D = itemsWith5D.filter((i) => i.type === 'CALL');
+  const top3CallGains5D = [...callsWith5D]
+    .sort((a, b) => (b.change5DPercent ?? 0) - (a.change5DPercent ?? 0))
+    .slice(0, 3);
+  const top3CallLosses5D = [...callsWith5D]
+    .sort((a, b) => (a.change5DPercent ?? 0) - (b.change5DPercent ?? 0))
+    .slice(0, 3);
+
+  const putsWith5D = itemsWith5D.filter((i) => i.type === 'PUT');
+  const top3PutGains5D = [...putsWith5D]
+    .sort((a, b) => (b.change5DPercent ?? 0) - (a.change5DPercent ?? 0))
+    .slice(0, 3);
+  const top3PutLosses5D = [...putsWith5D]
+    .sort((a, b) => (a.change5DPercent ?? 0) - (b.change5DPercent ?? 0))
+    .slice(0, 3);
+
+  const top3Gains5D = [...itemsWith5D]
+    .sort((a, b) => (b.change5DPercent ?? 0) - (a.change5DPercent ?? 0))
+    .slice(0, 3);
+  const top3Losses5D = [...itemsWith5D]
+    .sort((a, b) => (a.change5DPercent ?? 0) - (b.change5DPercent ?? 0))
+    .slice(0, 3);
+
+  // 7. Preparar os últimos candles para o gráfico (últimos 50 pregões)
   const recentCandles = historicalCandles.slice(-50);
   const candles: OITrackingCandle[] = recentCandles.map((c) => {
     const d = new Date(c.date * 1000);
@@ -327,6 +353,12 @@ export function buildOITracking({
     topCallWithin2Sigma: toSummaryCard(topCallWithin2SigmaItem),
     topPutOverall: toSummaryCard(topPutOverallItem),
     topPutWithin2Sigma: toSummaryCard(topPutWithin2SigmaItem),
+    top3CallGains5D,
+    top3CallLosses5D,
+    top3PutGains5D,
+    top3PutLosses5D,
+    top3Gains5D,
+    top3Losses5D,
     strikesTable,
     candles,
   };
