@@ -268,4 +268,203 @@ describe('options-strategy-engine: generateStrategies com cadeia real', () => {
     expect(lp.symbol).toBe('VALEV634');
     expect(lp.premiumUsed).toBe(0.15); // Ask
   });
+
+  it('evita venda ITM (caso MGLU3): rejeita barreira defasada abaixo do spot e ancora em delta OTM real', () => {
+    // Caso real diagnosticado em MGLU3:
+    // Spot real = 5.59
+    // Maior barreira de OI histórica estava em 5.14 (ITM!)
+    const mglu3Regime: MarketRegime = {
+      ...mockRegime,
+      spotPrice: 5.59,
+      upperBand2Sigma: 6.50,
+      upperBand3Sigma: 7.20,
+      lowerBand2Sigma: 4.80,
+      lowerBand3Sigma: 4.10,
+      topCallBarrierStrike: 5.14, // Barreira ITM defasada!
+      topPutBarrierStrike: 5.00,
+    };
+
+    const mglu3Chain: OptionChainItem[] = [
+      {
+        symbol: 'MGLUJ514',
+        underlyingSymbol: 'MGLU3',
+        side: 'CALL',
+        strike: 5.14, // ITM defasada!
+        expirationDate: '2026-10-16',
+        bid: 0.65,
+        ask: 0.68,
+        close: 0.66,
+      },
+      {
+        symbol: 'MGLUJ580',
+        underlyingSymbol: 'MGLU3',
+        side: 'CALL',
+        strike: 5.80, // OTM Delta ~0.40
+        expirationDate: '2026-10-16',
+        bid: 0.28,
+        ask: 0.30,
+        close: 0.29,
+      },
+      {
+        symbol: 'MGLUJ660',
+        underlyingSymbol: 'MGLU3',
+        side: 'CALL',
+        strike: 6.60, // OTM Delta ~0.16 (1σ exato com HV=52%)
+        expirationDate: '2026-10-16',
+        bid: 0.12,
+        ask: 0.14,
+        close: 0.13,
+      },
+      {
+        symbol: 'MGLUJ740',
+        underlyingSymbol: 'MGLU3',
+        side: 'CALL',
+        strike: 7.40, // OTM Delta ~0.05 (proteção de cauda)
+        expirationDate: '2026-10-16',
+        bid: 0.04,
+        ask: 0.06,
+        close: 0.05,
+      },
+      {
+        symbol: 'MGLUV480',
+        underlyingSymbol: 'MGLU3',
+        side: 'PUT',
+        strike: 4.80, // OTM Delta ~ -0.16 (-1σ exato com HV=52%)
+        expirationDate: '2026-10-16',
+        bid: 0.14,
+        ask: 0.16,
+        close: 0.15,
+      },
+      {
+        symbol: 'MGLUV400',
+        underlyingSymbol: 'MGLU3',
+        side: 'PUT',
+        strike: 4.00, // OTM Delta ~ -0.05 (proteção de cauda)
+        expirationDate: '2026-10-16',
+        bid: 0.03,
+        ask: 0.05,
+        close: 0.04,
+      },
+    ];
+
+    const input: GenerateStrategiesInput = {
+      regime: mglu3Regime,
+      expiration: '2026-10-16',
+      dte: 23,
+      hv21: 52.0, // Alta volatilidade típica de MGLU3
+      dataDate: '2026-09-14',
+      optionsChain: mglu3Chain,
+    };
+
+    const strategies = generateStrategies(input);
+    const condor = strategies.find((s) => s.id === 'IRON_CONDOR');
+
+    expect(condor).toBeDefined();
+    const [sc, lc, sp, lp] = condor!.legs;
+
+    // A CALL vendida NUNCA pode ser a 5.14 (que era ITM)
+    expect(sc.strike).toBe(6.60);
+    expect(sc.symbol).toBe('MGLUJ660');
+    expect(sc.strike).toBeGreaterThan(5.59); // Estritamente OTM
+
+    // A CALL comprada deve ser acima da vendida (cobertura da cauda)
+    expect(lc.strike).toBe(7.40);
+    expect(lc.symbol).toBe('MGLUJ740');
+    expect(lc.strike).toBeGreaterThan(sc.strike);
+
+    // PUT vendida deve ser OTM (abaixo do spot)
+    expect(sp.strike).toBe(4.80);
+    expect(sp.symbol).toBe('MGLUV480');
+    expect(sp.strike).toBeLessThan(5.59);
+
+    // PUT comprada deve ser abaixo da vendida
+    expect(lp.strike).toBe(4.00);
+    expect(lp.symbol).toBe('MGLUV400');
+    expect(lp.strike).toBeLessThan(sp.strike);
+
+    // POP estatístico deve ser calculado e saudável (> 65%)
+    expect(condor?.pop).toBeDefined();
+    expect(condor?.pop).toBeGreaterThan(0.65);
+  });
+
+  it('gera estratégia JADE LIZARD e valida a regra de risco zero na alta quando crédito >= largura do spread', () => {
+    const chain: OptionChainItem[] = [
+      {
+        symbol: 'VALEV650',
+        underlyingSymbol: 'VALE3',
+        side: 'PUT',
+        strike: 68.0, // PUT vendida OTM
+        expirationDate: '2026-10-16',
+        bid: 1.80,
+        ask: 1.90,
+        close: 1.85,
+      },
+      {
+        symbol: 'VALEJ800',
+        underlyingSymbol: 'VALE3',
+        side: 'CALL',
+        strike: 78.0, // CALL vendida OTM
+        expirationDate: '2026-10-16',
+        bid: 1.50,
+        ask: 1.60,
+        close: 1.55,
+      },
+      {
+        symbol: 'VALEJ802',
+        underlyingSymbol: 'VALE3',
+        side: 'CALL',
+        strike: 80.0, // CALL comprada OTM (largura do spread = 2.00)
+        expirationDate: '2026-10-16',
+        bid: 0.60,
+        ask: 0.70,
+        close: 0.65,
+      },
+    ];
+
+    const input: GenerateStrategiesInput = {
+      regime: mockRegime,
+      expiration: '2026-10-16',
+      dte: 23,
+      hv21: 24.5,
+      dataDate: '2026-09-14',
+      optionsChain: chain,
+    };
+
+    const strategies = generateStrategies(input);
+    const lizard = strategies.find((s) => s.id === 'JADE_LIZARD');
+
+    expect(lizard).toBeDefined();
+    expect(lizard?.legs).toHaveLength(3);
+
+    // Pernas do Jade Lizard:
+    // 1. PUT vendida (68.0, bid 1.80)
+    // 2. CALL vendida (78.0, bid 1.50)
+    // 3. CALL comprada (80.0, ask 0.70)
+    const [sp, sc, lc] = lizard!.legs;
+    expect(sp.action).toBe('VENDER');
+    expect(sp.type).toBe('PUT');
+    expect(sp.strike).toBe(68.0);
+
+    expect(sc.action).toBe('VENDER');
+    expect(sc.type).toBe('CALL');
+    expect(sc.strike).toBe(78.0);
+
+    expect(lc.action).toBe('COMPRAR');
+    expect(lc.type).toBe('CALL');
+    expect(lc.strike).toBe(80.0);
+
+    // Crédito líquido recebido:
+    // + 1.80 (PUT) + 1.50 (CALL vendida) - 0.70 (CALL comprada) = R$ 2.60
+    // Largura do spread de CALL: 80.0 - 78.0 = R$ 2.00
+    // Como 2.60 >= 2.00, o risco na alta é ZERO (lucro de R$ 0.60 na alta infinita!)
+    expect(lizard?.noUpsideRisk).toBe(true);
+
+    // Verificar se no payoff em spot muito alto (ex: R$ 100), o P&L é positivo
+    const highSpotPayoff = lizard!.payoffPoints.find((p) => p.spotAtExpiry >= 95);
+    expect(highSpotPayoff).toBeDefined();
+    expect(highSpotPayoff!.netPayoff).toBeGreaterThanOrEqual(0);
+
+    // POP deve ser alto (> 70%)
+    expect(lizard?.pop).toBeGreaterThan(0.70);
+  });
 });

@@ -360,12 +360,25 @@ function StrategyCard({ strategy, spot }: { strategy: StrategyRecommendation; sp
                     ⚡ Cauda Ativa
                   </span>
                 )}
+                {strategy.noUpsideRisk && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-1">
+                    🛡️ Risco Zero na Alta
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           {/* Métricas resumo */}
           <div className="flex items-center gap-4 text-right shrink-0">
+            {strategy.pop !== null && strategy.pop !== undefined && (
+              <div>
+                <div className="text-[10px] text-gray-500 font-mono">POP (Est.)</div>
+                <div className="text-cyan-400 font-bold font-mono text-sm">
+                  {(strategy.pop * 100).toFixed(0)}%
+                </div>
+              </div>
+            )}
             {strategy.maxReturnPerLot !== null && (
               <div>
                 <div className="text-[10px] text-gray-500 font-mono">Retorno Máx.</div>
@@ -436,6 +449,11 @@ function StrategyCard({ strategy, spot }: { strategy: StrategyRecommendation; sp
                       )}
                       <span className="font-black text-white text-sm">R$ {leg.strike.toFixed(2)}</span>
                       <span className="text-gray-400 text-xs">• {leg.expiration} ({leg.dte}d)</span>
+                      {leg.delta !== null && leg.delta !== undefined && (
+                        <span className="text-[10px] text-cyan-300 font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/60 font-semibold">
+                          Δ {leg.delta > 0 ? `+${leg.delta.toFixed(2)}` : leg.delta.toFixed(2)}
+                        </span>
+                      )}
                       {leg.bid !== null && leg.bid !== undefined && leg.bid > 0 && (
                         <span className="text-[10px] text-emerald-400/90 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                           Bid: R${leg.bid.toFixed(2)}

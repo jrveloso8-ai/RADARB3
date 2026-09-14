@@ -627,6 +627,8 @@ export interface StrategyRecommendation {
   payoffReliability: PayoffReliability;
   rationale: string;
   alertas: string[];
+  pop?: number | null;
+  noUpsideRisk?: boolean;
   isDataInsufficient: boolean;
   insufficientDataReason?: string;
 }
