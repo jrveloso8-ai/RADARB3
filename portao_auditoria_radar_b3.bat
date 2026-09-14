@@ -125,8 +125,18 @@ if %GATE_RESULT% NEQ 0 (
 
 echo.
 echo ===================================================
-echo Esta janela NAO vai fechar sozinha.
-echo Copie o resultado acima e feche manualmente quando terminar.
+echo Auditoria finalizada.
 echo ===================================================
 echo.
+if "%~1"=="--headless" goto :done
+if "%~1"=="--ci" goto :done
+echo Esta janela NAO vai fechar sozinha no modo interativo.
+echo Copie o resultado acima e feche manualmente quando terminar.
 cmd /k
+
+:done
+if %GATE_RESULT% NEQ 0 exit /b 1
+if %FABRICATED_RESULT% NEQ 0 exit /b 1
+if %ESLINT_RESULT% NEQ 0 exit /b 1
+if %TSC_RESULT% NEQ 0 exit /b 1
+exit /b 0
