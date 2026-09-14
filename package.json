@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "backup": "node scripts/backup-manager.js backup",
+    "backup:list": "node scripts/backup-manager.js list",
+    "rollback": "node scripts/backup-manager.js rollback"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

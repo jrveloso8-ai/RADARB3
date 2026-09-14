@@ -39,3 +39,6 @@ next-env.d.ts
 
 # Runtime data
 /data/*.json
+
+# Backups locais seletivos
+/_backups/
