@@ -111,9 +111,9 @@ export function analyzeFundamentals(
   let hasImpairmentOrNonCashDistortion = false;
   if (raw.nonRecurringItems && Math.abs(raw.nonRecurringItems) > 0) {
     hasImpairmentOrNonCashDistortion = true;
-  } else if (fcoVal !== null && fcoVal > 0 && netIncomeVal !== null) {
-    // Se FCO TTM for muito superior ao Lucro Líquido contábil (>= 1.8x) ou se Lucro contábil foi comprimido por baixas não-caixa
-    if (fcoVal >= 1.8 * netIncomeVal || (netIncomeVal <= 0 && fcoVal > 1_000_000_000)) {
+  } else if (fcoVal !== null && fcoVal > 0 && netIncomeVal !== null && netIncomeVal > 0) {
+    // Apenas quando o lucro contábil é positivo, verifica se FCO TTM supera substancialmente o Lucro (>= 1.8x)
+    if (fcoVal >= 1.8 * netIncomeVal) {
       hasImpairmentOrNonCashDistortion = true;
     }
   }
@@ -160,34 +160,17 @@ export function analyzeFundamentals(
       };
       reasons.push(`Lucro Líquido positivo de ${formatCurrencyBrl(effectiveNetIncome)} nos últimos 12 meses.`);
     } else {
-      // Prejuízo real (não-caixa ou sem FCO positivo de mitigação)
-      if (hasImpairmentOrNonCashDistortion && fcoVal !== null && fcoVal > 0) {
-        // Prejuízo puramente contábil por baixa não-caixa com forte geração de caixa
-        netIncomeMetric = {
-          name: 'Lucro Líquido 12M',
-          value: effectiveNetIncome,
-          formatted: formatCurrencyBrl(effectiveNetIncome),
-          benchmark: '> R$ 0',
-          status: 'NEUTRO',
-          description: `Prejuízo contábil (${formatCurrencyBrl(effectiveNetIncome)}) decorrente de baixa não-caixa com FCO positivo de ${formatCurrencyBrl(fcoVal)}.`,
-          isAdjusted: true,
-          rawAccountingValue: netIncomeVal,
-          rawAccountingFormatted: netIncomeVal !== null ? formatCurrencyBrl(netIncomeVal) : undefined,
-          source: 'NORMALIZADO_FCO',
-        };
-        flags.push(`Lucro contábil negativo, porém com caixa operacional (FCO) positivo de ${formatCurrencyBrl(fcoVal)}.`);
-      } else {
-        netIncomeMetric = {
-          name: 'Lucro Líquido 12M',
-          value: effectiveNetIncome,
-          formatted: formatCurrencyBrl(effectiveNetIncome),
-          benchmark: '> R$ 0',
-          status: 'RUIM',
-          description: 'Empresa acumulando prejuízo contábil nos últimos 12 meses.',
-        };
-        eliminatoryFlags.push('LUCRO_NEGATIVO');
-        flags.push(`Prejuízo contábil de ${formatCurrencyBrl(effectiveNetIncome)} nos últimos 12 meses.`);
-      }
+      // Prejuízo real
+      netIncomeMetric = {
+        name: 'Lucro Líquido 12M',
+        value: effectiveNetIncome,
+        formatted: formatCurrencyBrl(effectiveNetIncome),
+        benchmark: '> R$ 0',
+        status: 'RUIM',
+        description: 'Empresa acumulando prejuízo contábil nos últimos 12 meses.',
+      };
+      eliminatoryFlags.push('LUCRO_NEGATIVO');
+      flags.push(`Prejuízo contábil de ${formatCurrencyBrl(effectiveNetIncome)} nos últimos 12 meses.`);
     }
   } else {
     netIncomeMetric = {
@@ -206,8 +189,6 @@ export function analyzeFundamentals(
   let roeMetric: FundamentalMetric;
   const effectiveRoe = (hasImpairmentOrNonCashDistortion && normalizedRoeVal !== null)
     ? normalizedRoeVal
-    : (hasImpairmentOrNonCashDistortion && rawRoeVal !== null && rawRoeVal < rules.ROE_MIN && fcoVal !== null && fcoVal > 0)
-    ? (normalizedRoeVal ?? Math.min(18.0, Number((rawRoeVal * (fcoVal / Math.max(1, netIncomeVal || 1))).toFixed(2))))
     : rawRoeVal;
 
   if (effectiveRoe !== null) {

@@ -584,8 +584,8 @@ function buildBullPutSpread(
   const breakEven = shortLeg.strike - netCredit;
 
   // POP por Delta da PUT vendida: probabilidade de expirar OTM (acima do strike da put)
-  const shortDelta = Math.abs(shortLeg.delta ?? 0.28);
-  const pop = Number(Math.min(0.95, Math.max(0.50, 1 - shortDelta)).toFixed(4));
+  const shortDelta = shortLeg.delta !== null && shortLeg.delta !== undefined ? Math.abs(shortLeg.delta) : null;
+  const pop = shortDelta !== null ? Number(Math.min(0.95, Math.max(0.50, 1 - shortDelta)).toFixed(4)) : null;
 
   // Perna de cauda: se Z < -2σ, ativa compra adicional de PUT de cauda (-3σ / Delta ~ -0.04)
   const tailIsActive = regime.zScore < -2.0;
@@ -674,7 +674,7 @@ ANCORAGEM EM DADOS REAIS:
 • Strike vendido: ${shortLeg.strikeOriginLabel} (${shortLeg.symbol ?? 'B3'}) — Δ ${shortLeg.delta?.toFixed(2) ?? 'N/D'}
 • Strike comprado: ${longLeg.strikeOriginLabel} (${longLeg.symbol ?? 'B3'}) — Δ ${longLeg.delta?.toFixed(2) ?? 'N/D'}
 • Prêmios: ${shortLeg.premiumReliabilityLabel} / ${longLeg.premiumReliabilityLabel}
-• POP Estimado: ${(pop * 100).toFixed(1)}%
+• POP Estimado: ${pop !== null ? `${(pop * 100).toFixed(1)}%` : 'N/D (Delta da opção indisponível)'}
 
 RAZÃO PUT/CALL REAL: ${regime.pcr.toFixed(2)} (${regime.pcrLabel})
 FLUXO INSTITUCIONAL 5D: ${regime.flowLabel}
@@ -740,8 +740,8 @@ function buildBearCallSpread(
   const maxReturnPerLot = netCredit > 0 ? netCredit * 100 : null;
 
   // POP por Delta da CALL vendida: probabilidade de expirar OTM (abaixo do strike da call)
-  const shortDelta = Math.abs(shortLeg.delta ?? 0.28);
-  const pop = Number(Math.min(0.95, Math.max(0.50, 1 - shortDelta)).toFixed(4));
+  const shortDelta = shortLeg.delta !== null && shortLeg.delta !== undefined ? Math.abs(shortLeg.delta) : null;
+  const pop = shortDelta !== null ? Number(Math.min(0.95, Math.max(0.50, 1 - shortDelta)).toFixed(4)) : null;
 
   // Cauda CALL: ativa em regime EXTREMO_ALTA para surfar melt-up
   const tailIsActive = regime.regime === 'EXTREMO_ALTA' || regime.regime === 'EXTENSAO_ALTA';
@@ -820,7 +820,7 @@ LÓGICA: Vendemos a CALL OTM no strike R$${shortLeg.strike.toFixed(2)} (${shortL
 ANCORAGEM REAL:
 • Strike vendido: ${shortLeg.strikeOriginLabel} (${shortLeg.symbol ?? 'B3'}) — Δ ${shortLeg.delta?.toFixed(2) ?? 'N/D'}
 • Strike comprado: ${longLeg.strikeOriginLabel} (${longLeg.symbol ?? 'B3'}) — Δ ${longLeg.delta?.toFixed(2) ?? 'N/D'}
-• POP Estimado: ${(pop * 100).toFixed(1)}%
+• POP Estimado: ${pop !== null ? `${(pop * 100).toFixed(1)}%` : 'N/D (Delta da opção indisponível)'}
 
 PCR real: ${regime.pcr.toFixed(2)} (${regime.pcrLabel})
 Fluxo 5D: ${regime.flowLabel}`,
@@ -901,9 +901,12 @@ function buildIronCondor(
   const maxRisk = Math.max(callSpread, putSpread) - netCredit;
 
   // Cálculo formal de POP (Probabilidade de Lucro) ancorado pelos Deltas das pernas vendidas:
-  const shortCallDelta = Math.abs(scLeg.delta ?? 0.16);
-  const shortPutDelta = Math.abs(spLeg.delta ?? 0.16);
-  const pop = Math.min(95, Math.max(45, Math.round((1 - (shortCallDelta + shortPutDelta)) * 100)));
+  const shortCallDelta = scLeg.delta !== null && scLeg.delta !== undefined ? Math.abs(scLeg.delta) : null;
+  const shortPutDelta = spLeg.delta !== null && spLeg.delta !== undefined ? Math.abs(spLeg.delta) : null;
+  const pop =
+    shortCallDelta !== null && shortPutDelta !== null
+      ? Math.min(95, Math.max(45, Math.round((1 - (shortCallDelta + shortPutDelta)) * 100)))
+      : null;
 
   // Cauda do Iron Condor: alertar se Z for muito extremo
   const tailIsActive = Math.abs(regime.zScore) > 2.5;
@@ -963,7 +966,7 @@ ANCORAGEM ESTATÍSTICA REAL (B3):
 • PUT comprada: R$${lpLeg.strike.toFixed(2)} (${lpLeg.symbol ?? 'B3'}, Δ ${lpLeg.delta?.toFixed(2) ?? 'N/D'})
 • Base estatística: ${regime.sampleSize} fechamentos reais BRAPI
 
-PROBABILIDADE DE LUCRO (POP): ~${pop}%
+PROBABILIDADE DE LUCRO (POP): ${pop !== null ? `~${pop}%` : 'N/D (Deltas das pernas vendidas indisponíveis)'}
 PCR real: ${regime.pcr.toFixed(2)} | Fluxo 5D: ${regime.flowLabel}`,
     alertas,
     isDataInsufficient: regime.isInsufficient,
@@ -1016,8 +1019,8 @@ function buildCoveredCallWithCollar(
   const monthlyYield = spot > 0 ? Number(((netCredit / spot) * 100).toFixed(2)) : null;
 
   // POP do Collar: probabilidade de não ser exercido na CALL vendida
-  const callDelta = Math.abs(callLeg.delta ?? 0.28);
-  const pop = Number(Math.min(0.95, Math.max(0.50, 1 - callDelta)).toFixed(4));
+  const callDelta = callLeg.delta !== null && callLeg.delta !== undefined ? Math.abs(callLeg.delta) : null;
+  const pop = callDelta !== null ? Number(Math.min(0.95, Math.max(0.50, 1 - callDelta)).toFixed(4)) : null;
 
   // Cauda: se Z < -2.0σ, elevar a PUT de seguro para mais próxima do spot (Delta ~ -0.30)
   const tailIsActive = regime.zScore < -2.0;
@@ -1172,8 +1175,8 @@ function buildJadeLizard(
 
   // POP do Jade Lizard:
   // Como na alta não há perda (ou quase nula), o trade só dá prejuízo se romper a baixa.
-  const putDeltaAbs = Math.abs(putLeg.delta ?? 0.22);
-  const pop = Math.min(95, Math.max(50, Math.round((1 - putDeltaAbs) * 100)));
+  const putDeltaAbs = putLeg.delta !== null && putLeg.delta !== undefined ? Math.abs(putLeg.delta) : null;
+  const pop = putDeltaAbs !== null ? Math.min(95, Math.max(50, Math.round((1 - putDeltaAbs) * 100))) : null;
 
   const tailLeg: TailRiskLeg = {
     type: 'PROTECAO_CAUDA',
@@ -1241,7 +1244,7 @@ ANCORAGEM EM DELTAS REAIS B3:
 • CALL vendida: R$${shortCallLeg.strike.toFixed(2)} (${shortCallLeg.symbol ?? 'B3'}, Δ ${shortCallLeg.delta?.toFixed(2) ?? 'N/D'})
 • CALL comprada: R$${longCallLeg.strike.toFixed(2)} (${longCallLeg.symbol ?? 'B3'}, Δ ${longCallLeg.delta?.toFixed(2) ?? 'N/D'})
 
-PROBABILIDADE DE LUCRO (POP): ~${pop}%
+PROBABILIDADE DE LUCRO (POP): ${pop !== null ? `~${pop}%` : 'N/D (Delta da PUT vendida indisponível)'}
 BREAKEVEN NA BAIXA: R$${breakEvenAtExpiry.toFixed(2)} (suporta queda de até ${spot > 0 ? (((spot - breakEvenAtExpiry) / spot) * 100).toFixed(1) : '0'}% antes de dar prejuízo)`,
     alertas,
     isDataInsufficient: regime.isInsufficient,

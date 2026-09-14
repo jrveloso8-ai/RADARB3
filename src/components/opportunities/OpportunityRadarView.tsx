@@ -381,7 +381,9 @@ export const OpportunityRadarView: React.FC<OpportunityRadarViewProps> = ({ onSe
               <div key={agri.id} className="bg-slate-950/60 border border-slate-800 p-3 rounded-lg space-y-1.5">
                 <div className="flex justify-between font-mono">
                   <span className="font-semibold text-white">{agri.name}</span>
-                  <span className="text-white font-bold">R$ {agri.price.toFixed(2)}</span>
+                  <span className="text-white font-bold">
+                    {agri.price !== null ? `R$ ${agri.price.toFixed(2)}` : 'N/D'}
+                  </span>
                 </div>
                 <div className="text-[11px] text-slate-400 flex justify-between">
                   <span>Fase: <strong className="text-yellow-400 font-mono">{agri.seasonality.seasonPhase}</strong></span>

@@ -60,7 +60,7 @@ export interface StudyAuditReport {
   };
   optionsStrategyJustification: {
     strategyName: string;
-    strategyId: number;
+    strategyId: number | null;
     status: string;
     whenToUse: string;
     whySelected: string;
@@ -75,7 +75,7 @@ export interface StudyAuditReport {
     stopLossRationale: string;
     target1Rationale: string;
     target2Rationale: string;
-    riskRewardRatio: number;
+    riskRewardRatio: number | null;
     trailingStopRule: string;
     summary: string;
   };
@@ -284,7 +284,7 @@ export function generateStudyAudit(quote: QuoteDetails): StudyAuditReport {
 
   // 4. JUSTIFICATIVA DA ESTRATÉGIA DE OPÇÕES
   const strategyTitle = elected?.title || 'Estratégia de Opções Não Eleita';
-  const strategyId = elected?.strategySpec?.id || 11;
+  const strategyId = elected?.strategySpec?.id ?? null;
   const isCredit = elected?.isCredit ?? false;
 
   const optionsJustification = {
@@ -304,7 +304,9 @@ export function generateStudyAudit(quote: QuoteDetails): StudyAuditReport {
     strikeChoiceRationale: elected && elected.legs.length >= 2
       ? `Strikes selecionados (R$ ${elected.legs[0].strike.toFixed(2)} e R$ ${elected.legs[1].strike.toFixed(2)}) com largura de R$ ${elected.spreadWidth.toFixed(2)}. Perna vendida posicionada fora do dinheiro (OTM) para maximizar a probabilidade de lucro e perna comprada garantindo teto estrito de perda.`
       : 'Critério de strikes configurado para manter proteção estrita sem exposição ilimitada.',
-    volatilityRegimeRationale: `Volatilidade Real HV21 compatível com a estrutura; relação risco/retorno calibrada para o vencimento de ${elected?.dte || 15} dias úteis.`,
+    volatilityRegimeRationale: elected
+      ? `Volatilidade Real HV21 compatível com a estrutura; relação risco/retorno calibrada para o vencimento de ${elected.dte} dias úteis.`
+      : 'Ausência de estrutura ativa eleita para cálculo de regime de volatilidade.',
     riskRewardRationale: elected
       ? `Retorno estimado de ${elected.returnOnRiskPct}% sobre a largura do spread (Max Profit: R$ ${elected.maxProfitLot.toFixed(2)} / Max Loss: R$ ${elected.maxLossLot.toFixed(2)} por lote).`
       : 'Risco/retorno estritamente limitado.',
@@ -328,7 +330,7 @@ export function generateStudyAudit(quote: QuoteDetails): StudyAuditReport {
     target2Rationale: plan
       ? `Alvo 2 em R$ ${plan.target2.toFixed(2)} (2ª Resistência Técnica) calibrado para proporcionar assimetria favorável de ${plan.riskRewardRatio.toFixed(2)} : 1 sobre o risco assumido.`
       : 'Alvo 2 na expansão de tendência.',
-    riskRewardRatio: plan?.riskRewardRatio || 1.5,
+    riskRewardRatio: plan?.riskRewardRatio ?? null,
     trailingStopRule: 'Ao atingir o Alvo 1, proteger imediatamente a posição restante no preço de entrada (Stop no 0 a 0).',
     summary: plan
       ? `Plano com Relação Risco/Retorno de ${plan.riskRewardRatio.toFixed(2)} : 1, considerado ${plan.isViable ? 'adequado e matematicamente assimétrico' : 'cauteloso'} para execução.`

@@ -36,9 +36,11 @@ export interface AgriCommodityAnalysis {
   tickerB3: string;
   tickerGlobal: string;
   unit: string;
-  price: number;
-  changePct: number;
-  trend: 'ALTA' | 'BAIXA' | 'LATERAL';
+  price: number | null;
+  changePct: number | null;
+  trend: 'ALTA' | 'BAIXA' | 'LATERAL' | 'INDISPONIVEL';
+  provenance?: 'REAL' | 'ESTIMADO' | 'INDISPONIVEL';
+  isStale?: boolean;
   seasonality: AgriSeasonality;
   exchangeRatio?: AgriExchangeRatio;
   correlatedStocks: {
@@ -212,10 +214,13 @@ export function analyzeAgriCommodities(quotes: {
   const date = quotes.referenceDate || new Date();
 
   // 1. Milho Futuro (CCM)
-  const ccmPrice = quotes.ccmPrice || 62.50;
-  const ccmChange = quotes.ccmChange || 0.45;
+  const hasCcm = typeof quotes.ccmPrice === 'number' && quotes.ccmPrice > 0;
+  const ccmPrice = hasCcm ? (quotes.ccmPrice as number) : null;
+  const ccmChange = typeof quotes.ccmChange === 'number' ? quotes.ccmChange : null;
   const ccmSeasonality = getAgriSeasonality('CCM', date);
-  const ccmTrend = ccmChange > 0.3 ? 'ALTA' : ccmChange < -0.3 ? 'BAIXA' : 'LATERAL';
+  const ccmTrend = ccmChange !== null
+    ? (ccmChange > 0.3 ? 'ALTA' : ccmChange < -0.3 ? 'BAIXA' : 'LATERAL')
+    : 'INDISPONIVEL';
 
   const milhoAnalysis: AgriCommodityAnalysis = {
     id: 'CCM',
@@ -224,8 +229,9 @@ export function analyzeAgriCommodities(quotes: {
     tickerGlobal: 'ZC=F',
     unit: 'R$ / saca 60kg',
     price: ccmPrice,
-    changePct: Number(ccmChange.toFixed(2)),
+    changePct: ccmChange !== null ? Number(ccmChange.toFixed(2)) : null,
     trend: ccmTrend,
+    provenance: hasCcm ? 'REAL' : 'INDISPONIVEL',
     seasonality: ccmSeasonality,
     correlatedStocks: [
       {
@@ -250,19 +256,26 @@ export function analyzeAgriCommodities(quotes: {
     tradeOpportunity: {
       setupName: ccmTrend === 'ALTA' ? 'Rompimento de Pivô & Entressafra' : 'Arbitragem Paridade Exportação',
       bias: ccmSeasonality.bias === 'ALTA' ? 'COMPRA' : 'AGUARDAR',
-      conviction: 'MÉDIA',
-      rationale: `${ccmSeasonality.description} Cotação atual a R$ ${ccmPrice.toFixed(2)}/saca.`,
-      targetPrice: Number((ccmPrice * 1.08).toFixed(2)),
-      stopLoss: Number((ccmPrice * 0.95).toFixed(2)),
+      conviction: hasCcm ? 'MÉDIA' : 'BAIXA',
+      rationale: hasCcm
+        ? `${ccmSeasonality.description} Cotação atual a R$ ${ccmPrice!.toFixed(2)}/saca.`
+        : `${ccmSeasonality.description} Cotação em tempo real indisponível na B3 — alvos e stops não calculados para evitar estimativas sem dados.`,
+      targetPrice: hasCcm ? Number((ccmPrice! * 1.08).toFixed(2)) : undefined,
+      stopLoss: hasCcm ? Number((ccmPrice! * 0.95).toFixed(2)) : undefined,
     },
   };
 
   // 2. Boi Gordo Futuro (BGI)
-  const bgiPrice = quotes.bgiPrice || 242.00;
-  const bgiChange = quotes.bgiChange || 1.15;
+  const hasBgi = typeof quotes.bgiPrice === 'number' && quotes.bgiPrice > 0;
+  const bgiPrice = hasBgi ? (quotes.bgiPrice as number) : null;
+  const bgiChange = typeof quotes.bgiChange === 'number' ? quotes.bgiChange : null;
   const bgiSeasonality = getAgriSeasonality('BGI', date);
-  const bgiTrend = bgiChange > 0.3 ? 'ALTA' : bgiChange < -0.3 ? 'BAIXA' : 'LATERAL';
-  const exchangeRatio = calculateBoiMilhoRatio(bgiPrice, ccmPrice);
+  const bgiTrend = bgiChange !== null
+    ? (bgiChange > 0.3 ? 'ALTA' : bgiChange < -0.3 ? 'BAIXA' : 'LATERAL')
+    : 'INDISPONIVEL';
+  const exchangeRatio = hasBgi && hasCcm
+    ? calculateBoiMilhoRatio(bgiPrice!, ccmPrice!)
+    : undefined;
 
   const boiAnalysis: AgriCommodityAnalysis = {
     id: 'BGI',
@@ -271,8 +284,9 @@ export function analyzeAgriCommodities(quotes: {
     tickerGlobal: 'LE=F',
     unit: 'R$ / @ (arroba 15kg)',
     price: bgiPrice,
-    changePct: Number(bgiChange.toFixed(2)),
+    changePct: bgiChange !== null ? Number(bgiChange.toFixed(2)) : null,
     trend: bgiTrend,
+    provenance: hasBgi ? 'REAL' : 'INDISPONIVEL',
     seasonality: bgiSeasonality,
     exchangeRatio,
     correlatedStocks: [
@@ -298,18 +312,23 @@ export function analyzeAgriCommodities(quotes: {
     tradeOpportunity: {
       setupName: bgiSeasonality.seasonPhase === 'ENTRESSAFRA' ? 'Alta de Entressafra & Retenção de Fêmeas' : 'Pressão de Safra de Pasto',
       bias: bgiSeasonality.bias === 'ALTA' ? 'COMPRA' : 'AGUARDAR',
-      conviction: exchangeRatio.status === 'FAVORAVEL_CONFINADOR' ? 'ALTA' : 'MÉDIA',
-      rationale: `${bgiSeasonality.description} Relação de troca em ${exchangeRatio.ratio} sacas/@.`,
-      targetPrice: Number((bgiPrice * 1.07).toFixed(2)),
-      stopLoss: Number((bgiPrice * 0.96).toFixed(2)),
+      conviction: exchangeRatio && exchangeRatio.status === 'FAVORAVEL_CONFINADOR' ? 'ALTA' : 'MÉDIA',
+      rationale: hasBgi
+        ? `${bgiSeasonality.description}${exchangeRatio ? ` Relação de troca em ${exchangeRatio.ratio} sacas/@.` : ''}`
+        : `${bgiSeasonality.description} Cotação do boi gordo indisponível na B3 — alvos numéricos desativados.`,
+      targetPrice: hasBgi ? Number((bgiPrice! * 1.07).toFixed(2)) : undefined,
+      stopLoss: hasBgi ? Number((bgiPrice! * 0.96).toFixed(2)) : undefined,
     },
   };
 
   // 3. Soja Futuro (SOJA / CBOT)
-  const sojaPrice = quotes.sojaPrice || 132.80;
-  const sojaChange = quotes.sojaChange || -0.65;
+  const hasSoja = typeof quotes.sojaPrice === 'number' && quotes.sojaPrice > 0;
+  const sojaPrice = hasSoja ? (quotes.sojaPrice as number) : null;
+  const sojaChange = typeof quotes.sojaChange === 'number' ? quotes.sojaChange : null;
   const sojaSeasonality = getAgriSeasonality('SOJA', date);
-  const sojaTrend = sojaChange > 0.3 ? 'ALTA' : sojaChange < -0.3 ? 'BAIXA' : 'LATERAL';
+  const sojaTrend = sojaChange !== null
+    ? (sojaChange > 0.3 ? 'ALTA' : sojaChange < -0.3 ? 'BAIXA' : 'LATERAL')
+    : 'INDISPONIVEL';
 
   const sojaAnalysis: AgriCommodityAnalysis = {
     id: 'SOJA',
@@ -318,8 +337,9 @@ export function analyzeAgriCommodities(quotes: {
     tickerGlobal: 'ZS=F',
     unit: 'R$ / saca 60kg Porto',
     price: sojaPrice,
-    changePct: Number(sojaChange.toFixed(2)),
+    changePct: sojaChange !== null ? Number(sojaChange.toFixed(2)) : null,
     trend: sojaTrend,
+    provenance: hasSoja ? 'REAL' : 'INDISPONIVEL',
     seasonality: sojaSeasonality,
     correlatedStocks: [
       {
@@ -344,10 +364,12 @@ export function analyzeAgriCommodities(quotes: {
     tradeOpportunity: {
       setupName: 'Hedge Cambial & Prêmio de Exportação',
       bias: sojaSeasonality.bias === 'ALTA' ? 'COMPRA' : 'AGUARDAR',
-      conviction: 'MÉDIA',
-      rationale: `${sojaSeasonality.description} Cotação base R$ ${sojaPrice.toFixed(2)}/saca.`,
-      targetPrice: Number((sojaPrice * 1.06).toFixed(2)),
-      stopLoss: Number((sojaPrice * 0.96).toFixed(2)),
+      conviction: hasSoja ? 'MÉDIA' : 'BAIXA',
+      rationale: hasSoja
+        ? `${sojaSeasonality.description} Cotação base R$ ${sojaPrice!.toFixed(2)}/saca.`
+        : `${sojaSeasonality.description} Cotação de soja indisponível — alvos desativados.`,
+      targetPrice: hasSoja ? Number((sojaPrice! * 1.06).toFixed(2)) : undefined,
+      stopLoss: hasSoja ? Number((sojaPrice! * 0.96).toFixed(2)) : undefined,
     },
   };
 

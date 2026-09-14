@@ -338,9 +338,15 @@ ${audit.barrierAudit.items.map(i => `• [${i.status}] ${i.title}: ${i.metricVal
                     4. Justificativa da Estratégia de Opções: {audit.optionsStrategyJustification.strategyName}
                   </h4>
                 </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-500/30">
-                  Estratégia #{audit.optionsStrategyJustification.strategyId}
-                </span>
+                {audit.optionsStrategyJustification.strategyId !== null ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-500/30">
+                    Estratégia #{audit.optionsStrategyJustification.strategyId}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-900 text-slate-400 border border-slate-700/50">
+                    Sem Estrutura Eleita
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
@@ -380,7 +386,7 @@ ${audit.barrierAudit.items.map(i => `• [${i.status}] ${i.title}: ${i.metricVal
                   </h4>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/30">
-                  R:R = {audit.spotTradePlanJustification.riskRewardRatio.toFixed(2)} : 1
+                  R:R = {audit.spotTradePlanJustification.riskRewardRatio !== null ? `${audit.spotTradePlanJustification.riskRewardRatio.toFixed(2)} : 1` : 'N/D'}
                 </span>
               </div>
 

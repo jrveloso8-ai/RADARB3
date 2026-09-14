@@ -88,6 +88,7 @@ export const CNPI_RULES = {
     EXPIRATION: {
       MIN_DTE: 12,
       MAX_DTE: 35,
+      DEFAULT_DTE: 15,
     },
 
     // Elegibilidade da série para compor perna de estrutura recomendada (Spec v2.2)

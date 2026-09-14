@@ -1,0 +1,320 @@
+AUDITORIA DE SISTEMA EXISTENTE — RADAR B3 PRO IA
+Projeto: C:\Projetos Antigravity\TESTE_BRAPI
+Data desta auditoria: 14/09/2026
+Base auditada: código em disco no momento da auditoria (bash remoto no PC do usuário
+indisponível por bug do Windows atualizado em 08/09 — auditoria feita por leitura direta
+de código, não por execução de probes como a auditoria anterior)
+Auditoria de referência reconciliada: AUDITORIA_INDEPENDENTE_2026-09-08.md (nota 3,5/10)
+Método: releitura cega dos achados críticos da auditoria anterior contra o código atual
+(byte a byte, não contra resumo) + inventário completo dos módulos criados desde então.
+
+=================================================================
+1. PARECER EXECUTIVO
+=================================================================
+
+Nota de integridade estimada: 3,0 / 10 (piorou, não melhorou, em relação aos 3,5/10 de
+08/09 — ver seção 4).
+
+Em 6 dias, o sistema cresceu de forma substancial: 5 módulos de domínio novos
+(opportunity-radar.ts, options-strategy-engine.ts, options-top10.ts,
+options-tracking-5d.ts, special-strategies.ts) e 5 telas novas correspondentes, mais
+uma cerca estrutural de proveniência (DataValue + provenance.ts) que a auditoria
+anterior recomendou como Bloco 2 do plano de ação.
+
+O diagnóstico central é: a cerca foi construída, mas não foi imposta. Ela existe como
+peça de arquitetura opcional, adotada em 3 das 16+ telas auditadas, sem regra de lint
+que obrigue seu uso e sem CI que bloqueie merge sem ela. Nesse intervalo, o volume de
+código novo que passou por cima dela — 54 KB só em options-strategy-engine.ts — é maior
+do que o volume de código que a auditoria de 08/09 cobriu no motor de opções inteiro.
+Cerca estrutural construída depois do início da expansão, e não antes dela, é
+exatamente o erro de sequência que a skill de arquitetura de proveniência avisa para
+não cometer — e que aqui já se consumou.
+
+Dos 9 achados críticos da auditoria de 08/09 que reverifiquei linha a linha nesta
+auditoria, 3 permanecem idênticos byte a byte (C2, C4, C5), 1 recebeu apenas
+instrumentação cosmética sem mudar o resultado (C3), e 1 foi modificado de um jeito que
+troca uma forma de burlar o crivo fundamentalista por outra, também arbitrária (C1). Não
+verifiquei C6/C7/C8/C9 byte a byte nesta rodada (ver "não verificado" abaixo) — mas as
+constantes de fallback que os causavam (24.5, 26.0, 30.0, 25.0) permanecem no arquivo.
+
+Do lado novo: encontrei um segundo foco de fabricação de dado do mesmo porte que os já
+conhecidos, em dois lugares que a auditoria anterior não podia ver porque não existiam
+ainda — o motor de estratégias de opções (deltas fabricados alimentando probabilidade de
+lucro) e o módulo de commodities agrícolas (preços de milho/boi/soja fabricados
+alimentando alvo de preço e stop de "oportunidades de trade"). Este último é
+particularmente relevante porque incide exatamente na área de foco declarada do usuário
+(Milho Trader / Agro Intelligence B2B).
+
+=================================================================
+2. RECONCILIAÇÃO COM A AUDITORIA DE 08/09 — ACHADOS CRÍTICOS
+=================================================================
+
+Verificação feita por leitura direta do arquivo atual, linha citada incluída — não por
+confiança no relatório anterior nem no que "deveria" ter sido corrigido pelo plano de
+ação dele.
+
+C2 — ROE normalizado é uma constante fabricada (fundamentals.ts)
+STATUS: NÃO CORRIGIDO — código idêntico.
+Linha atual (fundamentals.ts:210):
+  (normalizedRoeVal ?? Math.min(18.0, Number((rawRoeVal * (fcoVal /
+  Math.max(1, netIncomeVal || 1))).toFixed(2))))
+Continua grampeando o ROE exibido em 18,00 quando a empresa tem prejuízo e a
+normalização por FCO/lucro não é uma metodologia de nenhuma certificação (CNPI-P,
+ANBIMA, CFA). O plano de ação da auditoria anterior (Bloco 1, item 6) pedia "remover o
+ramo" — não foi removido.
+
+C4 — Break-even do Iron Condor exibido é o ponto de lucro máximo (cme-election.ts)
+STATUS: NÃO CORRIGIDO — código idêntico.
+Linha atual (cme-election.ts:1496):
+  breakEven: Number(((shortPut.strike + shortCall.strike) / 2).toFixed(2))
+O tipo permanece `breakEven: number` (singular, linha 85) em vez de
+`breakEvenLower`/`breakEvenUpper`. Continua sendo um número com consequência financeira
+direta e errado por definição matemática (é o centro da faixa de lucro máximo, não um
+zero de payoff). Era o item do Bloco 1 com "correção de 20 minutos" segundo o plano
+anterior — 6 dias depois, ainda não feita, apesar de o arquivo ter sido modificado
+depois da auditoria (mtime mais recente que o documento) para outras razões.
+
+C5 — Solvência da VALE3 hardcoded em 0,8x (brapi.ts)
+STATUS: NÃO CORRIGIDO — código idêntico.
+Bloco `if (cleanSymbol === 'VALE3') { ... : 0.8; }` continua em brapi.ts:329-335, com o
+mesmo comentário "Reconciliação oficial para bluechips" e o mesmo padrão de recalcular
+a mesma expressão que acabou de ser rejeitada por estar fora do intervalo aceitável.
+
+C3 — Cotações globais fabricadas exibidas como tempo real (market-quotes.ts)
+STATUS: MELHORADO NA FORMA, INALTERADO NO RESULTADO.
+O que mudou: a interface `CachedQuote` ganhou os campos `source: 'live' | 'fallback'` e
+`provenance: DataProvenance`, e o bloco de fallback ganhou comentários
+`// PROVENANCE: ESTIMADO`. Isso é exatamente a direção certa (Bloco 2 do plano
+anterior).
+O que não mudou: os valores continuam sendo os mesmos 12 preços fixos gravados no
+código (SPY 761,78 · Brent(BZ=F) 94,37 · Ouro(GC=F) 4.321,59 · DXY 99,79 · VALE3.SA
+78,30 · PETR4.SA 46,87 +4,11% — todos idênticos, dígito a dígito, aos citados no
+relatório de 08/09). Não verifiquei nesta rodada se o Termômetro de Sentimento
+(sentiment.ts) e a tela que o consome de fato leem o campo `provenance`/`source` e se
+recusam a pontuar, ou se — como o padrão geral do sistema sugere — o número segue sendo
+consumido igual independente do rótulo. Isso é um item que precisa de verificação
+específica antes de contar como resolvido (ver seção 6, "não verificado").
+
+C1 — Prejuízo com FCO positivo aprovado no crivo (fundamentals.ts)
+STATUS: NÃO CORRIGIDO — E MODIFICADO DE UM JEITO QUE TROCA UM PROBLEMA POR OUTRO.
+Linha atual (fundamentals.ts:116):
+  if (fcoVal >= 1.8 * netIncomeVal || (netIncomeVal <= 0 && fcoVal > 1_000_000_000))
+A condição original (`fcoVal >= 1.8 * netIncomeVal`, que o relatório anterior provou
+sempre verdadeira quando o lucro é negativo) continua lá. Além dela, foi ACRESCENTADA
+uma segunda cláusula que dispensa a mesma verificação sempre que o FCO ultrapassa
+R$ 1 bilhão, não importa o tamanho do prejuízo. R$ 1 bilhão é um limiar novo,
+arbitrário, sem unidade relativa ao porte da empresa (o mesmo R$ 1 bi que é
+absoluto para uma small cap é irrisório para uma blue chip) e sem citação de norma. Não
+é uma correção do C1 — é uma segunda porta de entrada para o mesmo tipo de bypass, ao
+lado da primeira que continua aberta.
+
+C6, C7, C8, C9 (spot/HV/muralhas fabricados quando a fonte falha; indisponibilidade
+virando REPROVADO) — NÃO VERIFICADOS NESTA RODADA POR EXECUÇÃO, mas as constantes
+citadas pela auditoria anterior (`30.0`, `10.0` em cme-election.ts:346 continuam
+presentes; `24.5`/`26.0` eu não localizei mais em options-barriers.ts na leitura atual —
+o arquivo mudou a forma da função de HV, ver "não verificado" na seção 6). Recomendo
+tratar como NÃO CONFIRMADOS COMO RESOLVIDOS até rodar novamente os probes P3/P5/P9 da
+auditoria anterior contra o código de hoje.
+
+Barreiras automáticas (ESLint / CI / regra de proveniência em nível de tipo):
+STATUS: NÃO CORRIGIDO.
+.eslintrc.json contém apenas `{"extends": "next/core-web-vitals"}` — nenhuma regra
+`no-restricted-syntax` proibindo literal numérico em `??`/`||`, nenhum `no-unused-vars`
+customizado. Não existe pasta `.github/` — continua sem CI. O Bloco 0 do plano de ação
+anterior ("antes de qualquer outra coisa") não foi executado em 6 dias, apesar de ser,
+pelo próprio plano, o item de 1 dia de esforço.
+
+version.ts: `environment: "Produção / B3 Realtime"`, build `2026.08.31-1715` — ambos
+inalterados, e agora mais defasados em relação ao código real (que tem arquivos
+modificados vários dias depois dessa data de build).
+
+=================================================================
+3. ACHADOS NOVOS — MÓDULOS QUE NÃO EXISTIAM EM 08/09
+=================================================================
+
+N1 · CRÍTICO — Deltas fabricados alimentam a probabilidade de lucro exibida no motor
+de estratégias de opções
+Arquivo: lib/domain/options-strategy-engine.ts (novo, 54.597 bytes, o maior arquivo de
+domínio do projeto)
+Padrão repetido em pelo menos 6 pontos: `shortLeg.delta ?? 0.28`, `?? 0.16`, `?? 0.22`,
+usados diretamente no cálculo de POP (probabilidade de lucro):
+  const shortDelta = Math.abs(shortLeg.delta ?? 0.28);
+  const pop = Number(Math.min(0.95, Math.max(0.50, 1 - shortDelta)).toFixed(4));
+Quando a perna de opção selecionada não tem delta real vindo da BRAPI, o sistema não
+recusa o cálculo — substitui por uma constante e calcula POP normalmente, sem qualquer
+rótulo de proveniência distinguindo "delta medido" de "delta assumido". É estrutural e
+recorrente, não um descuido isolado: o mesmo padrão aparece para Iron Condor (0,16 nas
+duas pernas), Bull/Bear spreads (0,28) e Put de cauda (delta alvo -0,04, que é um
+target de busca, não um fallback — esse uso é legítimo). Isso é exatamente o padrão que
+a auditoria de 08/09 chamou de "catorze constantes distintas exercendo esse papel" — só
+que este arquivo sozinho, criado depois daquela auditoria, já teria contribuído mais
+umas 5-6 constantes à lista se tivesse existido então.
+Por que importa mais que HV/spot fabricados: aqui a fabricação alimenta diretamente o
+número que o usuário usa para decidir se uma trava vale o risco (POP é o número central
+de decisão em venda de prêmio) — é uma camada a mais de decisão do que HV, que é
+insumo indireto.
+
+N2 · CRÍTICO — Preços de commodities agrícolas fabricados alimentam alvo de preço e
+stop-loss de "oportunidades de trade"
+Arquivo: lib/domain/agri-commodities.ts (mtime anterior à auditoria de 08/09, mas nunca
+auditado — não está em nenhum dos dois laudos anteriores nem no atual até agora)
+  const ccmPrice = quotes.ccmPrice || 62.50;   // Milho
+  const bgiPrice = quotes.bgiPrice || 242.00;  // Boi Gordo
+  const sojaPrice = quotes.sojaPrice || 132.80; // Soja
+Diferente de market-quotes.ts, este arquivo NÃO tem nenhum comentário de proveniência,
+nenhum campo `source`/`provenance` no objeto retornado, e o preço (real ou fabricado,
+indistinguível) alimenta diretamente:
+  targetPrice: Number((ccmPrice * 1.08).toFixed(2)),
+  stopLoss: Number((ccmPrice * 0.95).toFixed(2)),
+Ou seja: se a cotação de milho falhar, o sistema recomenda um alvo de R$ 67,50/saca e
+um stop de R$ 59,38/saca — calculados sobre um preço de R$ 62,50 que não existe no
+mercado agora, sem qualquer indicação disso na tela. Esta é a área de trabalho central
+do usuário (Milho Trader / Agro Intelligence B2B) — é o achado com maior risco de
+decisão real de todo este módulo novo, por atingir diretamente o produto que o usuário
+constrói para terceiros.
+
+N3 · ALTO — Contagion de proveniência quebrada no radar de oportunidades
+Arquivo: lib/domain/opportunity-radar.ts
+  const pop = realOptions?.pop ?? 75;
+  const convictionScore = Math.min(92, Math.max(65, Math.round(72 + (ivAtm ? ...))));
+  ...
+  scoreProvenance: 'DERIVADO'   // sempre 'DERIVADO', mesmo quando pop veio do 75 fixo
+Este arquivo é o único dos novos que importa `DataProvenance` — ou seja, é o que mais
+se esforçou para seguir a cerca estrutural. Mas a regra de contágio que a skill de
+arquitetura de proveniência exige (o resultado herda a PIOR classificação entre os
+insumos) não foi implementada: quando `pop` vem do fallback 75 (deveria contaminar como
+ESTIMADO no mínimo), o `convictionScore` que o usa continua rotulado 'DERIVADO' — o
+rótulo mais confiável dos cinco. É a versão "com boa intenção, mal executada" do mesmo
+problema — pior, em certo sentido, porque o rótulo presente engana mais que a ausência
+total de rótulo (o usuário vê "DERIVADO" e confia).
+
+N4 · MÉDIO — Auditor de qualidade do próprio sistema reintroduz o R:R tautológico 1,5
+e um ID de estratégia fabricado
+Arquivo: lib/domain/study-auditor.ts (o módulo que gera o "selo de auditoria" mostrado
+ao usuário — StudyAuditorCard.tsx)
+  const strategyId = elected?.strategySpec?.id || 11;
+  ...
+  riskRewardRatio: plan?.riskRewardRatio || 1.5,
+`11` é o ID real de "Trava de Alta com Call (Bull Call Spread)" em cme-strategies.ts —
+não um valor neutro tipo 0 ou null. Quando nenhuma estratégia foi eleita (bloqueada ou
+sem match), `strategyId` assume silenciosamente a identidade de uma estratégia
+concreta e nomeada. Não confirmei se algum componente de UI lê `strategyId` isoladamente
+do `strategyTitle` (que corretamente cai para "Estratégia de Opções Não Eleita") — mas
+o padrão de gravar um ID de fallback igual a um ID real, em vez de `null` ou um
+sentinel dedicado, é o tipo exato de armadilha que já causou o C1/C4/C5 noutros
+arquivos. O R:R fixo em 1,5 é a mesma falha já documentada como A11/A12 na auditoria
+anterior (em indicators.ts/trade-plan.ts) — agora duplicada aqui, em vez de centralizada
+numa função só, confirmando o padrão "thresholds duplicados fora de rules.ts" (M3) já
+apontado.
+
+N5 · INFORMATIVO (achado positivo) — Cerca estrutural de proveniência foi construída
+corretamente onde foi aplicada
+lib/types/provenance.ts define a taxonomia de 5 níveis com definições operacionais
+claras (mesmos 5 níveis desta skill) e lib/components/shared/DataValue.tsx implementa
+a obrigação de tipo (`provenance` sem default), trata `INDISPONIVEL`/null como "N/D" de
+primeira classe, e diferencia visualmente ESTIMADO ("est.") de SIMULADO ("ref."). É
+peça de engenharia sólida — o problema não é a peça, é a adoção (seção 4).
+
+=================================================================
+4. ADOÇÃO DA CERCA ESTRUTURAL — MEDIDA, NÃO ESTIMADA
+=================================================================
+
+Contagem de uso de `<DataValue` por arquivo, entre os 16 componentes de tela lidos:
+  QuoteView.tsx.................. 13 usos
+  OptionsBarriersView.tsx......... 7 usos
+  OpportunityRadarView.tsx........ 1 uso
+  OptionsStrategyEngineView.tsx... 0 (novo, 38.911 bytes)
+  OptionsTop10View.tsx............ 0 (novo, 26.914 bytes)
+  OptionsTracking5DView.tsx....... 0 (novo, 61.185 bytes — a maior tela do projeto)
+  SpecialStrategiesView.tsx....... 0 (novo, 82.412 bytes — a segunda maior)
+  SentimentThermometer.tsx........ 0
+  TradingViewOverview.tsx......... 0
+  HomeHubView.tsx.................. 0
+  StudyAuditorCard.tsx............ 0
+  StockTradePlanChart.tsx......... 0
+  OptionPayoffChart.tsx........... 0
+  AIConsultantView.tsx............ 0
+  ScreenerView.tsx................ 0
+
+Interpretação: das quatro telas novas maiores (juntas, mais de 209 KB de JSX — mais
+código de UI do que o projeto inteiro tinha na auditoria de 08/09), nenhuma usa o
+componente estrutural. Isso não é "esquecimento pontual" — é a evidência empírica de
+que uma cerca sem regra de lint que a torne obrigatória não sobrevive ao ritmo normal
+de desenvolvimento, exatamente como a skill de arquitetura de proveniência prevê na
+sua justificativa de por que a Etapa 2 (regra de lint) precisa vir junto com a Etapa 1
+(componente), nunca só a primeira.
+
+=================================================================
+5. PRIORIZAÇÃO POR RISCO DE DECISÃO
+=================================================================
+
+1º — N1 (deltas fabricados → POP fabricado no motor de estratégias). Maior volume de
+     código novo carregando o padrão mais grave já catalogado no projeto.
+2º — N2 (preços agro fabricados → alvo/stop de trade). Maior proximidade com o produto
+     que o usuário efetivamente opera e vende (Milho Trader / Agro B2B).
+3º — C2, C4, C5 (ROE 18, break-even errado, DL/EBITDA VALE3 0,8x). Já eram críticos,
+     seguem intocados, e agora têm 6 dias a mais de uso acumulado sem correção.
+4º — C1 modificado (limiar de R$ 1 bi). Mesmo defeito de fundo, nova porta de entrada.
+5º — N3 (contágio de proveniência quebrado). Risco de confiança indevida — o selo
+     "DERIVADO" hoje engana mais do que a ausência de selo.
+6º — Barreiras automáticas ausentes (ESLint/CI). Não é um bug em si, mas é a razão
+     estrutural pela qual todo o resto acima pôde crescer sem barreira em 6 dias.
+7º — N4 (strategyId 11 fabricado, R:R 1,5 duplicado). Impacto depende de uso downstream
+     não confirmado — ver seção 6.
+
+=================================================================
+6. NÃO VERIFICADO NESTA RODADA (ficam como lista fechada, não como "vou continuar
+   olhando")
+=================================================================
+
+- Se o Termômetro de Sentimento (sentiment.ts) e sua tela hoje respeitam o campo
+  `provenance`/`source` de CachedQuote e se recusam a pontuar com fallback, ou se
+  continuam consumindo o número igual (C3, ver seção 2).
+- Reprodução por execução (como os probes P3/P5/P9 fizeram em 08/09) de C6/C7/C8/C9
+  contra o código de hoje — esta auditoria foi só por leitura, sem `npx tsx` disponível
+  (bash remoto indisponível).
+- Se `strategyId` fabricado (N4) é de fato lido isoladamente em algum componente de UI
+  ou só coexiste com `strategyTitle`, que já trata o caso corretamente.
+- App Router completo (app/api/options/strategy-engine, top10-oi, tracking-5d): rotas
+  foram lidas, mas não tive tempo de auditar autenticação/rate-limit nelas com o mesmo
+  detalhe que A10 documentou para as 8 rotas originais — presumo o mesmo padrão (nenhuma
+  autenticação) até prova em contrário, dado que nenhuma rota do projeto tem.
+- data/subscribers.json e data/analytics.json: não confirmei nesta rodada se ainda
+  estão rastreados no git (A8) — recomendo `git ls-files data/` como primeiro passo de
+  qualquer sessão de correção.
+
+=================================================================
+7. CRITÉRIO DE FECHAMENTO PROPOSTO PARA A PRÓXIMA RODADA
+=================================================================
+
+Defina "pronto" como mensurável e binário, não como "não achei mais nada":
+  (a) ESLint com regra customizada proibindo literal numérico em `??`/`||` dentro de
+      src/lib/domain e src/lib/services ativa e com zero violações — OU cada violação
+      remanescente com `eslint-disable` justificado por escrito, revisável em PR.
+  (b) CI (GitHub Actions) rodando lint + test obrigatório no push, bloqueando merge.
+  (c) 100% das telas que exibem número financeiro usando <DataValue> (hoje: 3 de 16).
+  (d) C1, C2, C4, C5 corrigidos e cobertos por teste de regressão que falha no código
+      de hoje (não um teste sobre a fixture).
+  (e) N1 e N2 com POP/preço fabricados substituídos por `null`/INDISPONIVEL quando o
+      dado real não vem da BRAPI.
+Qualquer achado novo depois que (a)-(e) estiverem cumpridos é bug de manutenção normal,
+não motivo para reabrir esta auditoria como "falhou".
+
+=================================================================
+8. RECOMENDAÇÃO
+=================================================================
+
+Mantida a recomendação da auditoria de 08/09: remediar, não reescrever — o núcleo de
+eleição de estruturas segue sendo o ativo mais valioso do projeto e nada nesta rodada
+o contradisse.
+
+Mas o prazo de 3-4 semanas estimado em 08/09 para o Bloco 2 (proveniência) precisa ser
+revisto para cima, porque a superfície que ele precisa cobrir cresceu: em 08/09 eram
+~18.254 linhas; hoje, considerando só os 5 arquivos de domínio novos, são mais de
+150 KB de código adicional que nunca passou por uma revisão de proveniência.
+
+Recomendação direta, sem meio-termo: pare de adicionar módulo novo (o próximo carrega
+inevitavelmente mais uma classe de constante fabricada) até o Bloco 0 (ESLint +
+CI, item de 1 dia segundo o próprio plano anterior) estar no ar. É a única ação que
+muda o padrão em vez de tratar mais um sintoma dele — e é a mesma conclusão a que a
+auditoria anterior já tinha chegado e que, sozinha, ficou sem executar por 6 dias.

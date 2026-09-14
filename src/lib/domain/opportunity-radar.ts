@@ -549,7 +549,10 @@ export function detectIronCondorOpportunity(
   }
 
   const convictionScore = Math.min(92, Math.max(65, Math.round(72 + (ivAtm ? Math.min(18, ivAtm / 2.5) : 8))));
-  const pop = realOptions?.pop ?? 75;
+  const hasRealPop = typeof realOptions?.pop === 'number';
+  const pop = hasRealPop ? realOptions!.pop : null;
+  const popProvenance: DataProvenance = hasRealPop ? 'DERIVADO' : 'INDISPONIVEL';
+  const scoreProvenance: DataProvenance = hasRealPop ? 'DERIVADO' : 'SIMULADO';
 
   return {
     id: `iron-condor-${symbol}`,
@@ -560,7 +563,7 @@ export function detectIronCondorOpportunity(
     title: `Iron Condor a Crédito — ${symbol}`,
     bias: 'LATERAL',
     convictionScore,
-    scoreProvenance: 'DERIVADO',
+    scoreProvenance,
     confidenceBadge: 'RENDA RECORRENTE',
     rationale: `Ativo em consolidação lateral sem tendência definida. Coleta de prêmio duplo a crédito nos dois lados com lucro máximo garantido caso o preço permaneça entre R$ ${putShort.toFixed(2)} e R$ ${callShort.toFixed(2)}.`,
     triggerCondition: `Vender Put R$ ${putShort.toFixed(2)} (Δ -0.25) [trava R$ ${putLong.toFixed(2)} (Δ -0.05)] + Vender Call R$ ${callShort.toFixed(2)} (Δ +0.25) [trava R$ ${callLong.toFixed(2)} (Δ +0.05)].`,
@@ -572,7 +575,7 @@ export function detectIronCondorOpportunity(
       riskRewardRatio: 1.8,
       timeframe: 'Série Mensal B3 (15 a 35 dias úteis)',
       probabilityOfProfit: pop,
-      popProvenance: pop !== null ? 'DERIVADO' : 'INDISPONIVEL',
+      popProvenance,
       electedStrategy: OPTION_25_STRATEGIES[19], // #20 Short Iron Condor
       strategyLegsFormatted: `Vender Put R$ ${putShort.toFixed(2)} (Δ -0.25) [trava ${putLong.toFixed(2)}] + Vender Call R$ ${callShort.toFixed(2)} (Δ +0.25) [trava ${callLong.toFixed(2)}]`,
       maxProfitEst,
@@ -701,7 +704,11 @@ export function detectMaxPainPinOpportunity(
   const proximityBonus = Math.round((1 - distancePct / 0.04) * 20);
   const convictionScore = Math.min(95, Math.max(65, 75 + proximityBonus));
 
-  const pop = realOptions?.pop ?? Math.round(55 + (1 - distancePct / 0.04) * 15);
+  const hasRealPop = typeof realOptions?.pop === 'number';
+  const pop = hasRealPop ? realOptions!.pop : null;
+  const popProvenance: DataProvenance = hasRealPop ? 'DERIVADO' : 'INDISPONIVEL';
+  const scoreProvenance: DataProvenance = hasRealPop ? 'DERIVADO' : 'SIMULADO';
+
   const maxProfitEst =
     matched.isCredit && realOptions?.netCredit
       ? `Crédito de R$ ${realOptions.netCredit.toFixed(2)} por opção`
@@ -718,7 +725,7 @@ export function detectMaxPainPinOpportunity(
     title: `${matched.strategy.name} (Efeito Max Pain) — ${symbol}`,
     bias: 'LATERAL',
     convictionScore,
-    scoreProvenance: 'DERIVADO',
+    scoreProvenance,
     confidenceBadge: 'ALTA CONVICÇÃO',
     rationale: `Ativo cotado a R$ ${spotPrice.toFixed(2)}, a apenas ${(distancePct * 100).toFixed(1)}% do ponto de menor prejuízo dos formadores de mercado (Max Pain em R$ ${maxPainStrike.toFixed(2)}). Tendência dos formadores defenderem esse strike até o vencimento. ${matched.rationale}`,
     triggerCondition: `Montar estrutura de pin-risk no strike R$ ${maxPainStrike.toFixed(2)}: ${matched.strategyLegsFormatted}.`,
@@ -730,7 +737,7 @@ export function detectMaxPainPinOpportunity(
       riskRewardRatio: 2.2,
       timeframe: 'Vencimento Atual B3',
       probabilityOfProfit: pop,
-      popProvenance: realOptions?.pop ? 'DERIVADO' : 'ESTIMADO',
+      popProvenance,
       electedStrategy: matched.strategy,
       strategyLegsFormatted: matched.strategyLegsFormatted,
       maxProfitEst,

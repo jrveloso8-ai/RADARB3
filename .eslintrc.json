@@ -1,3 +1,32 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "overrides": [
+    {
+      "files": [
+        "src/lib/domain/**/*.ts",
+        "src/lib/services/**/*.ts"
+      ],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "LogicalExpression[operator='??'] > Literal[value>0]",
+            "message": "PROIBIDO FALLBACK FABRICADO: Não utilize literais numéricos positivos como fallback de '??' em regras de negócio. Retorne null, lance exceção ou use constante auditada com proveniência explícita."
+          },
+          {
+            "selector": "LogicalExpression[operator='??'] > Literal[value<0]",
+            "message": "PROIBIDO FALLBACK FABRICADO: Não utilize literais numéricos negativos como fallback de '??' em regras de negócio. Retorne null, lance exceção ou use constante auditada com proveniência explícita."
+          },
+          {
+            "selector": "LogicalExpression[operator='||'] > Literal[value>0]",
+            "message": "PROIBIDO FALLBACK FABRICADO: Não utilize literais numéricos positivos como fallback de '||' em regras de negócio. Retorne null, lance exceção ou use constante auditada com proveniência explícita."
+          },
+          {
+            "selector": "LogicalExpression[operator='||'] > Literal[value<0]",
+            "message": "PROIBIDO FALLBACK FABRICADO: Não utilize literais numéricos negativos como fallback de '||' em regras de negócio. Retorne null, lance exceção ou use constante auditada com proveniência explícita."
+          }
+        ]
+      }
+    }
+  ]
 }

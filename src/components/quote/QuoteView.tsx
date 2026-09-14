@@ -1103,7 +1103,9 @@ export const QuoteView: React.FC<QuoteViewProps> = ({ initialSymbol = 'PETR4' })
                       <div className="p-3.5 bg-[#111827] rounded-xl border border-gray-800">
                         <span className="text-[10px] text-gray-400 block font-sans">PONTO DE EQUILÍBRIO</span>
                         <span className="text-lg font-bold text-amber-400 mt-1 block">
-                          R$ {elected.breakEven.toFixed(2)}
+                          {elected.breakEvenLower !== undefined && elected.breakEvenUpper !== undefined
+                            ? `R$ ${elected.breakEvenLower.toFixed(2)} | R$ ${elected.breakEvenUpper.toFixed(2)}`
+                            : `R$ ${elected.breakEven.toFixed(2)}`}
                         </span>
                         <span className="text-[10px] text-gray-500 block font-sans">
                           Break-even no vencimento

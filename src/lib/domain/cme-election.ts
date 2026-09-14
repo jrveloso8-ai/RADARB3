@@ -83,6 +83,8 @@ export interface ElectedOptionStrategy {
   totalCostOrCreditForLot: number; // Para 1 lote padrão (1.000 cotas)
   spreadWidth: number;
   breakEven: number;
+  breakEvenLower?: number;
+  breakEvenUpper?: number;
   maxProfit: number;
   maxProfitLot: number;
   maxLoss: number;
@@ -343,8 +345,8 @@ export function electBestOptionStrategy(
   fundamentalStatus?: 'APROVADO' | 'REPROVADO',
   analyticsList: OptionAnalyticsItem[] = []
 ): ElectedOptionStrategy {
-  const spot = spotPrice > 0 ? spotPrice : optionAnalysis?.underlyingPrice || 10.0;
-  const dte = optionAnalysis?.selectedExpirationInfo?.dte || 15;
+  const spot = spotPrice > 0 ? spotPrice : (optionAnalysis?.underlyingPrice ?? 0);
+  const dte = optionAnalysis?.selectedExpirationInfo?.dte ?? CNPI_RULES.DERIVATIVES.EXPIRATION.DEFAULT_DTE;
   const expDate = optionAnalysis?.selectedExpiration || '2026-09-18';
   const lotSize = 1000;
   const bias: 'ALTA' | 'BAIXA' | 'LATERAL' | 'NEUTRO' =
@@ -794,7 +796,7 @@ export function electBestOptionStrategy(
         maxAllowedRatioPct: spreadRules.MAX_DEBIT_TO_WIDTH * 100,
         minRecommendedRatioPct: spreadRules.MIN_DEBIT_TO_WIDTH * 100,
         isAdequate: altDebitRatioPct <= spreadRules.MAX_DEBIT_TO_WIDTH * 100,
-        statusLabel: altDebitRatioPct <= (spreadRules.TARGET_DEBIT_TO_WIDTH || 0.25) * 100
+        statusLabel: altDebitRatioPct <= spreadRules.TARGET_DEBIT_TO_WIDTH * 100
           ? `✓ Custo Excelente (${altDebitRatioPct}% da largura ≤ 25%)`
           : `✓ Custo Adequado (${altDebitRatioPct}% da largura ≤ 30%)`,
         recommendationRule: `Travas a Débito: Nunca pagar mais que 25% a 30% da largura das pernas (teto: ${(spreadRules.MAX_DEBIT_TO_WIDTH * 100).toFixed(0)}%) para preservar assimetria de retorno.`,
@@ -1165,7 +1167,7 @@ export function electBestOptionStrategy(
         maxAllowedRatioPct: spreadRules.MAX_DEBIT_TO_WIDTH * 100,
         minRecommendedRatioPct: spreadRules.MIN_DEBIT_TO_WIDTH * 100,
         isAdequate: altDebitRatioPct <= spreadRules.MAX_DEBIT_TO_WIDTH * 100,
-        statusLabel: altDebitRatioPct <= (spreadRules.TARGET_DEBIT_TO_WIDTH || 0.25) * 100
+        statusLabel: altDebitRatioPct <= spreadRules.TARGET_DEBIT_TO_WIDTH * 100
           ? `✓ Custo Excelente (${altDebitRatioPct}% da largura ≤ 25%)`
           : `✓ Custo Adequado (${altDebitRatioPct}% da largura ≤ 30%)`,
         recommendationRule: `Travas a Débito: Nunca pagar mais que 25% a 30% da largura das pernas (teto: ${(spreadRules.MAX_DEBIT_TO_WIDTH * 100).toFixed(0)}%) para preservar assimetria de retorno.`,
@@ -1477,6 +1479,9 @@ export function electBestOptionStrategy(
       totalPerLot: Number((totalCredit * lotSize).toFixed(2)),
     };
 
+    const breakEvenLower = Number((shortPut.strike - totalCredit).toFixed(2));
+    const breakEvenUpper = Number((shortCall.strike + totalCredit).toFixed(2));
+
     const strategyResult: ElectedOptionStrategy = {
       strategySpec: OPTION_25_STRATEGIES[19], // #20 Iron Condor
       title: `Iron Condor a Crédito (Faixa R$ ${shortPut.strike.toFixed(2)} a R$ ${shortCall.strike.toFixed(2)})`,
@@ -1493,7 +1498,9 @@ export function electBestOptionStrategy(
       isCredit: true,
       totalCostOrCreditForLot: Number((totalCredit * lotSize).toFixed(2)),
       spreadWidth: width,
-      breakEven: Number(((shortPut.strike + shortCall.strike) / 2).toFixed(2)),
+      breakEven: breakEvenLower,
+      breakEvenLower,
+      breakEvenUpper,
       maxProfit: totalCredit,
       maxProfitLot: Number((totalCredit * lotSize).toFixed(2)),
       maxLoss,
@@ -1501,7 +1508,7 @@ export function electBestOptionStrategy(
       returnOnRiskPct: Number(((totalCredit / maxLoss) * 100).toFixed(1)),
       riskRewardRatio: `1 : ${(maxLoss / totalCredit).toFixed(1)}`,
       pricingViability,
-      tradeCheckGuide: `Estrutura de 4 pernas vendendo as opções intermediárias (${shortPut.strike.toFixed(2)} PUT e ${shortCall.strike.toFixed(2)} CALL) e comprando as extremidades para limitar risco total.`,
+      tradeCheckGuide: `Estrutura de 4 pernas vendendo as opções intermediárias (${shortPut.strike.toFixed(2)} PUT e ${shortCall.strike.toFixed(2)} CALL) e comprando as extremidades para limitar risco total. Break-evens no vencimento: R$ ${breakEvenLower.toFixed(2)} (inferior) e R$ ${breakEvenUpper.toFixed(2)} (superior).`,
       takeProfitRule: {
         targetPrice: `Preço oscilando entre R$ ${shortPut.strike.toFixed(2)} e R$ ${shortCall.strike.toFixed(2)}`,
         profitGoal: `50% a 60% do crédito recebido (R$ ${(totalCredit * 0.55 * lotSize).toFixed(2)})`,

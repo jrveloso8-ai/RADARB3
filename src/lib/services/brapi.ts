@@ -325,14 +325,10 @@ export class BrapiService {
         financialDebtToEbitda = Number(((financialDebt - totalCash) / ebitda).toFixed(2));
       }
 
-      // Reconciliação oficial para bluechips com passivos específicos de balanço (ex: VALE3)
+      // Reconciliação para bluechips com passivos operacionais de provisão (ex: VALE3)
       if (cleanSymbol === 'VALE3') {
-        // Na VALE3, o totalDebt bruto inclui provisões de Samarco/Brumadinho e descomissionamento.
-        // Se a dívida bruta IFRS calculada for distorcida (> 2.5x), utiliza a dívida financeira real calculada
-        if (!financialDebtToEbitda || financialDebtToEbitda > 2.5) {
-          financialDebtToEbitda = financialDebt && totalCash && ebitda && ebitda > 0
-            ? Number(((financialDebt - totalCash) / ebitda).toFixed(2))
-            : 0.8;
+        if (financialDebt !== null && totalCash !== null && ebitda !== null && ebitda > 0) {
+          financialDebtToEbitda = Number(((financialDebt - totalCash) / ebitda).toFixed(2));
         }
       }
 
