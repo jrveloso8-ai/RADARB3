@@ -660,7 +660,7 @@ export const OptionsTracking5DView: React.FC<OptionsTracking5DViewProps> = ({
                     Mapa de Calor Visual das Variações de OI (5 Dias)
                   </h3>
                   <p className="text-xs text-gray-400 font-mono">
-                    Distribuição visual imediata de montagens e desmontes por strike
+                    Distribuição visual imediata de montagens e desmontes por strike • Linha ciano neon indica o Preço SPOT
                   </p>
                 </div>
               </div>
@@ -703,52 +703,91 @@ export const OptionsTracking5DView: React.FC<OptionsTracking5DViewProps> = ({
               </div>
             </div>
 
-            {/* Grid Térmico de Blocos */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
-              {data.strikesTable
+            {/* Grid Térmico de Blocos com Linha Divisória de Preço SPOT */}
+            {(() => {
+              const filteredStrikes = data.strikesTable
                 .filter((item) => (heatmapFilter === 'ALL' ? true : item.type === heatmapFilter))
-                .sort((a, b) => a.strike - b.strike)
-                .map((item) => {
-                  const pct = item.change5DPercent;
-                  return (
-                    <div
-                      key={`${item.type}_${item.strike}`}
-                      title={`Strike R$ ${item.strike.toFixed(2)} (${item.type})\nOI Atual: ${item.currentOI.toLocaleString('pt-BR')}\nVariação 5D: ${pct !== null ? `${pct > 0 ? '+' : ''}${pct}%` : 'N/D'}\n${item.isWithin2Sigma ? 'Dentro do Range 2σ' : 'Fora do Range 2σ'}`}
-                      className={`p-2.5 rounded-xl border transition-all hover:scale-105 cursor-pointer font-mono flex flex-col justify-between ${
-                        item.isWithin2Sigma ? 'ring-1 ring-cyan-500/40' : ''
-                      } ${getThermalStyle(pct)}`}
-                    >
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="font-bold">
-                          {item.type === 'CALL' ? 'CALL' : 'PUT'}
-                        </span>
-                        {item.isWithin2Sigma && (
-                          <span className="text-[9px] px-1 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
-                            2σ
-                          </span>
-                        )}
-                      </div>
+                .sort((a, b) => a.strike - b.strike);
+              const spotPrice = data.spotBands?.spotPrice ?? 0;
+              const firstAboveSpotIndex = filteredStrikes.findIndex((item) => item.strike > spotPrice);
 
-                      <div className="my-1 text-center">
-                        <span className="text-xs font-black block text-white">
-                          R$ {item.strike.toFixed(2)}
+              const renderSpotLine = () => (
+                <div
+                  key="spot_price_divider_line"
+                  className="col-span-full my-2.5 py-1.5 flex items-center gap-3 select-none"
+                >
+                  <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent via-cyan-500 to-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
+                  <div className="px-3.5 py-1 rounded-full bg-cyan-950/90 border border-cyan-400/80 text-cyan-300 font-mono text-[11px] font-bold shadow-[0_0_12px_rgba(34,211,238,0.3)] flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                    <span>
+                      PREÇO SPOT: <strong className="text-white">R$ {spotPrice.toFixed(2)}</strong> (MERCADO À VISTA)
+                    </span>
+                    {data.spotBands && data.spotBands.zScore !== null && (
+                      <>
+                        <span className="text-cyan-400/60">•</span>
+                        <span className="text-[10px] text-cyan-200">
+                          Z-SCORE: {data.spotBands.zScore > 0 ? '+' : ''}{data.spotBands.zScore.toFixed(2)}σ
                         </span>
-                        <span className="text-[11px] font-bold block mt-0.5">
-                          {pct !== null ? `${pct > 0 ? '+' : ''}${pct}%` : 'N/D'}
-                        </span>
-                      </div>
+                      </>
+                    )}
+                  </div>
+                  <div className="h-[2px] flex-1 bg-gradient-to-l from-transparent via-cyan-500 to-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
+                </div>
+              );
 
-                      <div className="text-[9px] text-center opacity-80">
-                        {item.currentOI >= 1000000
-                          ? `${(item.currentOI / 1000000).toFixed(1)}M`
-                          : item.currentOI >= 1000
-                          ? `${(item.currentOI / 1000).toFixed(0)}K`
-                          : item.currentOI}
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+                  {filteredStrikes.map((item, idx) => {
+                    const pct = item.change5DPercent;
+                    const showSpotLineBefore = firstAboveSpotIndex !== -1 && idx === firstAboveSpotIndex;
+                    return (
+                      <React.Fragment key={`${item.type}_${item.strike}`}>
+                        {showSpotLineBefore && renderSpotLine()}
+                        <div
+                          title={`Strike R$ ${item.strike.toFixed(2)} (${item.type})\nOI Atual: ${item.currentOI.toLocaleString('pt-BR')}\nVariação 5D: ${pct !== null ? `${pct > 0 ? '+' : ''}${pct}%` : 'N/D'}\nDistância Spot: ${item.distanceFromSpotPercent > 0 ? '+' : ''}${item.distanceFromSpotPercent}%\n${item.isWithin2Sigma ? 'Dentro do Range 2σ' : 'Fora do Range 2σ'}`}
+                          className={`p-2.5 rounded-xl border transition-all hover:scale-105 cursor-pointer font-mono flex flex-col justify-between ${
+                            item.isWithin2Sigma ? 'ring-1 ring-cyan-500/40' : ''
+                          } ${getThermalStyle(pct)}`}
+                        >
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-bold">
+                              {item.type === 'CALL' ? 'CALL' : 'PUT'}
+                            </span>
+                            {item.isWithin2Sigma && (
+                              <span className="text-[9px] px-1 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
+                                2σ
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="my-1 text-center">
+                            <span className="text-xs font-black block text-white">
+                              R$ {item.strike.toFixed(2)}
+                            </span>
+                            <span className="text-[11px] font-bold block mt-0.5">
+                              {pct !== null ? `${pct > 0 ? '+' : ''}${pct}%` : 'N/D'}
+                            </span>
+                            <span className="text-[9px] text-cyan-200/90 block mt-0.5 font-medium">
+                              {item.distanceFromSpotPercent > 0 ? `+${item.distanceFromSpotPercent}%` : `${item.distanceFromSpotPercent}%`}
+                            </span>
+                          </div>
+
+                          <div className="text-[9px] text-center opacity-80">
+                            {item.currentOI >= 1000000
+                              ? `${(item.currentOI / 1000000).toFixed(1)}M`
+                              : item.currentOI >= 1000
+                              ? `${(item.currentOI / 1000).toFixed(0)}K`
+                              : item.currentOI}
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
+                  {/* Se todos os strikes forem menores ou iguais ao SPOT */}
+                  {firstAboveSpotIndex === -1 && filteredStrikes.length > 0 && renderSpotLine()}
+                </div>
+              );
+            })()}
           </div>
 
           {/* 6. Tabela Detalhada de Variação de Open Interest (1D e 5D) */}
