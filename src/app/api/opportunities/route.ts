@@ -7,7 +7,8 @@ import { calculateHistoricalVolatility } from '@/lib/domain/volatility';
 import { calculateSupportResistance } from '@/lib/domain/indicators';
 import { getMostLiquidB3Expiration } from '@/lib/domain/options-barriers';
 import { analyzeAssetTrend } from '@/lib/domain/trends';
-import { calculateMaxPain } from '@/lib/domain/black-scholes';
+import { calculateMaxPain, calculateBlackScholes } from '@/lib/domain/black-scholes';
+import { getRiskFreeRate } from '@/lib/config/macro';
 import { resolveConservativeFundamentals, resolveRealIvAtm } from '@/lib/domain/opportunity-guards';
 
 export const dynamic = 'force-dynamic';
@@ -86,11 +87,19 @@ export async function GET(request: NextRequest) {
         let realOptionsData: {
           debit?: number;
           deltaCallLong?: number;
+          strikeCallLong?: number;
+          deltaCallShort?: number;
+          strikeCallShort?: number;
           deltaPutLong?: number;
+          strikePutLong?: number;
+          deltaPutShort?: number;
+          strikePutShort?: number;
           netCredit?: number;
           pop?: number;
           putPremium?: number;
           putDelta?: number;
+          putStrike?: number;
+          putSymbol?: string;
         } | undefined = undefined;
 
         try {
@@ -105,39 +114,84 @@ export async function GET(request: NextRequest) {
           realIvAtm = resolveRealIvAtm(analytics);
 
           if (analytics && analytics.length > 0) {
-            // Seleção de contratos reais próximos aos strikes das estratégias
             const spot = quote.regularMarketPrice;
-            const calls = analytics.filter(
-              (a) => !a.symbol.includes('W') && (a.strike ?? 0) >= spot * 0.95 && typeof a.optionPrice === 'number'
-            );
-            const puts = analytics.filter(
-              (a) => (a.strike ?? 0) <= spot * 1.05 && typeof a.optionPrice === 'number'
-            );
+            const r = getRiskFreeRate();
+            const expDate = new Date(mostLiquidExp.date);
+            const now = new Date();
+            const dte = Math.max(1, Math.round((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+            const T = dte / 252;
+            const sigma = realIvAtm ? realIvAtm / 100 : (hv21 && hv21 > 0 ? hv21 / 100 : 0.25);
 
-            // Call ATM mais líquida/próxima do spot
-            const callAtm = calls.sort((a, b) => Math.abs((a.strike || 0) - spot) - Math.abs((b.strike || 0) - spot))[0];
-            // Call OTM ~ +6% acima do spot
-            const callOtm = calls.sort((a, b) => Math.abs((a.strike || 0) - spot * 1.06) - Math.abs((b.strike || 0) - spot * 1.06))[0];
-            // Put OTM ~ -6% abaixo do spot
-            const putOtm = puts.sort((a, b) => Math.abs((a.strike || 0) - spot * 0.94) - Math.abs((b.strike || 0) - spot * 0.94))[0];
+            // Filtrar e enriquecer opções com Delta determinístico
+            const enrichedCalls = analytics
+              .filter((a) => !a.symbol.includes('W') && typeof a.strike === 'number' && a.strike > 0)
+              .map((a) => {
+                const delta = typeof a.delta === 'number'
+                  ? a.delta
+                  : calculateBlackScholes(spot, a.strike!, T, r, sigma, 'call').delta;
+                return { ...a, calculatedDelta: delta };
+              });
 
-            if (callAtm && callAtm.optionPrice && callAtm.optionPrice > 0) {
-              const debit = callOtm && callOtm.optionPrice
-                ? Math.max(0.10, callAtm.optionPrice - callOtm.optionPrice)
-                : Number((callAtm.optionPrice * 0.45).toFixed(2));
+            const enrichedPuts = analytics
+              .filter((a) => !a.symbol.includes('W') && typeof a.strike === 'number' && a.strike > 0)
+              .map((a) => {
+                const delta = typeof a.delta === 'number'
+                  ? a.delta
+                  : calculateBlackScholes(spot, a.strike!, T, r, sigma, 'put').delta;
+                return { ...a, calculatedDelta: delta };
+              });
 
-              const putPrem = putOtm && putOtm.optionPrice && putOtm.optionPrice > 0 ? putOtm.optionPrice : undefined;
+            // 1. Put OTM para The Wheel / Cash-Secured Put (Delta alvo ~ -0.28, estritamente K < spot)
+            const otmPuts = enrichedPuts.filter((p) => (p.strike || 0) <= spot * 0.999);
+            const putOtm = (otmPuts.length > 0 ? otmPuts : enrichedPuts).sort(
+              (a, b) => Math.abs(a.calculatedDelta - (-0.28)) - Math.abs(b.calculatedDelta - (-0.28))
+            )[0];
 
-              realOptionsData = {
-                debit: Number(debit.toFixed(2)),
-                deltaCallLong: typeof callAtm.delta === 'number' ? callAtm.delta : undefined,
-                deltaPutLong: typeof putOtm?.delta === 'number' ? putOtm.delta : undefined,
-                netCredit: putPrem ? Number((putPrem * 0.65).toFixed(2)) : undefined,
-                pop: typeof callAtm.delta === 'number' ? Math.round(Math.abs(callAtm.delta) * 100) : undefined,
-                putPremium: putPrem,
-                putDelta: typeof putOtm?.delta === 'number' ? putOtm.delta : undefined,
-              };
-            }
+            // 2. Call ATM para Bull Call Spread (Delta alvo ~ +0.50)
+            const callAtm = [...enrichedCalls].sort(
+              (a, b) => Math.abs(a.calculatedDelta - 0.50) - Math.abs(b.calculatedDelta - 0.50)
+            )[0];
+
+            // 3. Call OTM para perna vendida de Bull Call Spread (Delta alvo ~ +0.28, estritamente K > spot)
+            const otmCalls = enrichedCalls.filter((c) => (c.strike || 0) >= spot * 1.001);
+            const callOtm = (otmCalls.length > 0 ? otmCalls : enrichedCalls).sort(
+              (a, b) => Math.abs(a.calculatedDelta - 0.28) - Math.abs(b.calculatedDelta - 0.28)
+            )[0];
+
+            // 4. Put ATM para perna comprada de Bear Put Spread (Delta alvo ~ -0.50)
+            const putAtm = [...enrichedPuts].sort(
+              (a, b) => Math.abs(a.calculatedDelta - (-0.50)) - Math.abs(b.calculatedDelta - (-0.50))
+            )[0];
+
+            const callAtmPrice = callAtm && typeof callAtm.optionPrice === 'number' && callAtm.optionPrice > 0 ? callAtm.optionPrice : undefined;
+            const callOtmPrice = callOtm && typeof callOtm.optionPrice === 'number' && callOtm.optionPrice > 0 ? callOtm.optionPrice : undefined;
+            const putOtmPrice = putOtm && typeof putOtm.optionPrice === 'number' && putOtm.optionPrice > 0 ? putOtm.optionPrice : undefined;
+            const putAtmPrice = putAtm && typeof putAtm.optionPrice === 'number' && putAtm.optionPrice > 0 ? putAtm.optionPrice : undefined;
+
+            const debit = callAtmPrice
+              ? (callOtmPrice ? Math.max(0.10, callAtmPrice - callOtmPrice) : Number((callAtmPrice * 0.45).toFixed(2)))
+              : undefined;
+
+            const putDeltaVal = putOtm ? Number(putOtm.calculatedDelta.toFixed(4)) : undefined;
+            const popVal = putDeltaVal ? Math.round((1 - Math.abs(putDeltaVal)) * 100) : (callAtm ? Math.round(Math.abs(callAtm.calculatedDelta) * 100) : undefined);
+
+            realOptionsData = {
+              debit: debit ? Number(debit.toFixed(2)) : undefined,
+              deltaCallLong: callAtm ? Number(callAtm.calculatedDelta.toFixed(2)) : undefined,
+              strikeCallLong: callAtm?.strike,
+              deltaCallShort: callOtm ? Number(callOtm.calculatedDelta.toFixed(2)) : undefined,
+              strikeCallShort: callOtm?.strike,
+              deltaPutLong: putAtm ? Number(putAtm.calculatedDelta.toFixed(2)) : undefined,
+              strikePutLong: putAtm?.strike,
+              deltaPutShort: putDeltaVal ? Number(putDeltaVal.toFixed(2)) : undefined,
+              strikePutShort: putOtm?.strike,
+              netCredit: putOtmPrice ? Number((putOtmPrice * 0.65).toFixed(2)) : undefined,
+              pop: popVal,
+              putPremium: putOtmPrice,
+              putDelta: putDeltaVal,
+              putStrike: putOtm?.strike,
+              putSymbol: putOtm?.symbol,
+            };
           }
 
           // Cálculo real de Max Pain via calculateMaxPain a partir de open interest das posições

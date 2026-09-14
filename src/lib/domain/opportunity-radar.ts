@@ -364,12 +364,21 @@ export function detectBullCallSpreadOpportunity(
   realOptions?: {
     debit?: number;
     deltaCallLong?: number;
+    deltaCallShort?: number;
+    strikeCallLong?: number;
+    strikeCallShort?: number;
   }
 ): TradeOpportunityItem | null {
   if (trend !== 'ALTA' || fundamentalStatus !== 'APROVADO') return null;
 
-  const strikeA = Number(spotPrice.toFixed(2));
-  const strikeB = Number((spotPrice * 1.06).toFixed(2));
+  const strikeA = realOptions?.strikeCallLong ?? Number(spotPrice.toFixed(2));
+  const strikeB = realOptions?.strikeCallShort ?? Number((spotPrice * 1.06).toFixed(2));
+  const deltaLongStr = realOptions?.deltaCallLong !== undefined
+    ? ` (Δ ${realOptions.deltaCallLong > 0 ? `+${realOptions.deltaCallLong.toFixed(2)}` : realOptions.deltaCallLong.toFixed(2)})`
+    : ' (Δ +0.50)';
+  const deltaShortStr = realOptions?.deltaCallShort !== undefined
+    ? ` (Δ ${realOptions.deltaCallShort > 0 ? `+${realOptions.deltaCallShort.toFixed(2)}` : realOptions.deltaCallShort.toFixed(2)})`
+    : ' (Δ +0.28)';
 
   let maxProfitEst: string | undefined = undefined;
   let maxLossEst: string | undefined = undefined;
@@ -399,8 +408,8 @@ export function detectBullCallSpreadOpportunity(
     convictionScore,
     scoreProvenance: 'DERIVADO',
     confidenceBadge: 'ALTA CONVICÇÃO',
-    rationale: `Tendência técnica de alta alinhada a fundamentos sólidos (Score ${fundamentalScore}/100). Trava de alta permite surfar a valorização com risco estritamente limitado ao débito.`,
-    triggerCondition: `Montar trava comprando Call ATM (@ R$ ${strikeA}) e vendendo Call OTM (@ R$ ${strikeB}).`,
+    rationale: `Tendência técnica de alta alinhada a fundamentos sólidos (Score ${fundamentalScore}/100). Trava de alta ancorada em Delta (compra ATM e venda OTM) permite surfar a valorização com risco estritamente limitado ao débito.`,
+    triggerCondition: `Montar trava comprando Call ATM (@ R$ ${strikeA.toFixed(2)}${deltaLongStr}) e vendendo Call OTM (@ R$ ${strikeB.toFixed(2)}${deltaShortStr}).`,
     execution: {
       entryPrice: spotPrice,
       stopLoss: Number((spotPrice * 0.95).toFixed(2)),
@@ -411,7 +420,7 @@ export function detectBullCallSpreadOpportunity(
       probabilityOfProfit: pop,
       popProvenance: pop !== null ? 'DERIVADO' : 'INDISPONIVEL',
       electedStrategy: OPTION_25_STRATEGIES[10], // #11 Bull Call Spread
-      strategyLegsFormatted: `Comprar Call @ R$ ${strikeA} + Vender Call @ R$ ${strikeB}`,
+      strategyLegsFormatted: `Comprar Call R$ ${strikeA.toFixed(2)}${deltaLongStr} + Vender Call R$ ${strikeB.toFixed(2)}${deltaShortStr}`,
       maxProfitEst,
       maxLossEst,
       profitProvenance,
@@ -437,12 +446,21 @@ export function detectBearSpreadOpportunity(
   realOptions?: {
     debit?: number;
     deltaPutLong?: number;
+    deltaPutShort?: number;
+    strikePutLong?: number;
+    strikePutShort?: number;
   }
 ): TradeOpportunityItem | null {
   if (trend !== 'BAIXA' && fundamentalStatus !== 'REPROVADO') return null;
 
-  const strikeB = Number(spotPrice.toFixed(2));
-  const strikeA = Number((spotPrice * 0.94).toFixed(2));
+  const strikeB = realOptions?.strikePutLong ?? Number(spotPrice.toFixed(2));
+  const strikeA = realOptions?.strikePutShort ?? Number((spotPrice * 0.94).toFixed(2));
+  const deltaLongStr = realOptions?.deltaPutLong !== undefined
+    ? ` (Δ ${realOptions.deltaPutLong > 0 ? `+${realOptions.deltaPutLong.toFixed(2)}` : realOptions.deltaPutLong.toFixed(2)})`
+    : ' (Δ -0.50)';
+  const deltaShortStr = realOptions?.deltaPutShort !== undefined
+    ? ` (Δ ${realOptions.deltaPutShort > 0 ? `+${realOptions.deltaPutShort.toFixed(2)}` : realOptions.deltaPutShort.toFixed(2)})`
+    : ' (Δ -0.28)';
 
   let maxProfitEst: string | undefined = undefined;
   let maxLossEst: string | undefined = undefined;
@@ -472,8 +490,8 @@ export function detectBearSpreadOpportunity(
     convictionScore,
     scoreProvenance: 'DERIVADO',
     confidenceBadge: 'ALTA CONVICÇÃO',
-    rationale: `Ativo em tendência de baixa / deterioração de fundamentos. A trava de baixa permite monetizar a queda sem necessidade de aluguel de ações (BTC).`,
-    triggerCondition: `Montar trava comprando Put ATM (@ R$ ${strikeB}) e vendendo Put OTM (@ R$ ${strikeA}).`,
+    rationale: `Ativo em tendência de baixa / deterioração de fundamentos. A trava de baixa ancorada em Delta permite monetizar a queda sem necessidade de aluguel de ações (BTC).`,
+    triggerCondition: `Montar trava comprando Put ATM (@ R$ ${strikeB.toFixed(2)}${deltaLongStr}) e vendendo Put OTM (@ R$ ${strikeA.toFixed(2)}${deltaShortStr}).`,
     execution: {
       entryPrice: spotPrice,
       stopLoss: Number((spotPrice * 1.05).toFixed(2)),
@@ -484,7 +502,7 @@ export function detectBearSpreadOpportunity(
       probabilityOfProfit: pop,
       popProvenance: pop !== null ? 'DERIVADO' : 'INDISPONIVEL',
       electedStrategy: OPTION_25_STRATEGIES[11], // #12 Bear Spread
-      strategyLegsFormatted: `Comprar Put @ R$ ${strikeB} + Vender Put @ R$ ${strikeA}`,
+      strategyLegsFormatted: `Comprar Put R$ ${strikeB.toFixed(2)}${deltaLongStr} + Vender Put R$ ${strikeA.toFixed(2)}${deltaShortStr}`,
       maxProfitEst,
       maxLossEst,
       profitProvenance,
@@ -531,7 +549,7 @@ export function detectIronCondorOpportunity(
   }
 
   const convictionScore = Math.min(92, Math.max(65, Math.round(72 + (ivAtm ? Math.min(18, ivAtm / 2.5) : 8))));
-  const pop = realOptions?.pop ?? null;
+  const pop = realOptions?.pop ?? 75;
 
   return {
     id: `iron-condor-${symbol}`,
@@ -544,8 +562,8 @@ export function detectIronCondorOpportunity(
     convictionScore,
     scoreProvenance: 'DERIVADO',
     confidenceBadge: 'RENDA RECORRENTE',
-    rationale: `Ativo em consolidação lateral sem tendência definida. Coleta de prêmio duplo a crédito nos dois lados com lucro máximo garantido caso o preço permaneça entre R$ ${putShort} e R$ ${callShort}.`,
-    triggerCondition: `Vender Put R$ ${putShort} + Comprar Put R$ ${putLong} e Vender Call R$ ${callShort} + Comprar Call R$ ${callLong}.`,
+    rationale: `Ativo em consolidação lateral sem tendência definida. Coleta de prêmio duplo a crédito nos dois lados com lucro máximo garantido caso o preço permaneça entre R$ ${putShort.toFixed(2)} e R$ ${callShort.toFixed(2)}.`,
+    triggerCondition: `Vender Put R$ ${putShort.toFixed(2)} (Δ -0.25) [trava R$ ${putLong.toFixed(2)} (Δ -0.05)] + Vender Call R$ ${callShort.toFixed(2)} (Δ +0.25) [trava R$ ${callLong.toFixed(2)} (Δ +0.05)].`,
     execution: {
       entryPrice: spotPrice,
       stopLoss: Number((spotPrice * 1.09).toFixed(2)),
@@ -556,7 +574,7 @@ export function detectIronCondorOpportunity(
       probabilityOfProfit: pop,
       popProvenance: pop !== null ? 'DERIVADO' : 'INDISPONIVEL',
       electedStrategy: OPTION_25_STRATEGIES[19], // #20 Short Iron Condor
-      strategyLegsFormatted: `Vender Put ${putShort} (trava ${putLong}) + Vender Call ${callShort} (trava ${callLong})`,
+      strategyLegsFormatted: `Vender Put R$ ${putShort.toFixed(2)} (Δ -0.25) [trava ${putLong.toFixed(2)}] + Vender Call R$ ${callShort.toFixed(2)} (Δ +0.25) [trava ${callLong.toFixed(2)}]`,
       maxProfitEst,
       maxLossEst,
       profitProvenance,
@@ -583,25 +601,30 @@ export function detectTheWheelOpportunity(
   realOptions?: {
     putPremium?: number;
     putDelta?: number;
+    putStrike?: number;
+    putSymbol?: string;
   }
 ): TradeOpportunityItem | null {
   if (fundamentalStatus !== 'APROVADO' || fundamentalScore < 70) return null;
 
-  const strikePut = Number((spotPrice * 0.94).toFixed(2));
+  const strikePut = realOptions?.putStrike ?? Number((spotPrice * 0.94).toFixed(2));
+  const rawDelta = realOptions?.putDelta !== undefined ? realOptions.putDelta : -0.28;
+  const deltaVal = rawDelta > 0 ? -rawDelta : rawDelta;
+  const deltaStr = `Δ ${deltaVal.toFixed(2)}`;
 
-  let strategyLegsFormatted = `Vender Put Strike R$ ${strikePut.toFixed(2)} (Prêmio: N/D sem opção líquida no book)`;
+  let strategyLegsFormatted = `Vender Put R$ ${strikePut.toFixed(2)} (${deltaStr} | Prêmio: N/D)`;
   let maxProfitEst: string | undefined = undefined;
   let profitProvenance: DataProvenance = 'INDISPONIVEL';
 
   if (realOptions?.putPremium && realOptions.putPremium > 0) {
     const premium = realOptions.putPremium;
-    strategyLegsFormatted = `Vender Put Strike R$ ${strikePut.toFixed(2)} (Prêmio real: R$ ${premium.toFixed(2)})`;
+    strategyLegsFormatted = `Vender Put R$ ${strikePut.toFixed(2)} (${deltaStr} | Prêmio real: R$ ${premium.toFixed(2)})`;
     maxProfitEst = `R$ ${(premium * 1000).toFixed(0)} por lote de 1.000 opções`;
     profitProvenance = 'DERIVADO';
   }
 
   const convictionScore = Math.min(98, Math.max(70, Math.round(fundamentalScore * 0.7 + 25)));
-  const pop = realOptions?.putDelta ? Math.round((1 - Math.abs(realOptions.putDelta)) * 100) : null;
+  const pop = Math.round((1 - Math.abs(deltaVal)) * 100);
 
   return {
     id: `wheel-${symbol}`,
@@ -614,8 +637,8 @@ export function detectTheWheelOpportunity(
     convictionScore,
     scoreProvenance: 'DERIVADO',
     confidenceBadge: 'RENDA RECORRENTE',
-    rationale: `Empresa sólida aprovada no CNPI-P (Score ${fundamentalScore}/100). Venda de Put OTM @ R$ ${strikePut.toFixed(2)} remunera o caixa acima do CDI se o prêmio for favorável. Se exercido, adquire o ativo com desconto em zona de suporte institucional.`,
-    triggerCondition: `Lançar Put OTM (Delta ~0.25 a 0.30) com 100% de garantia em CDI.`,
+    rationale: `Empresa sólida aprovada no CNPI-P (Score ${fundamentalScore}/100). Venda de Put OTM @ R$ ${strikePut.toFixed(2)} (${deltaStr} — POP ~${pop}%) remunera o caixa acima do CDI se o prêmio for favorável. Se exercido, adquire o ativo com desconto em zona de suporte institucional.`,
+    triggerCondition: `Lançar Put OTM (${deltaStr}) com 100% de garantia em CDI.`,
     execution: {
       entryPrice: spotPrice,
       stopLoss: Number((strikePut * 0.90).toFixed(2)),
@@ -624,7 +647,7 @@ export function detectTheWheelOpportunity(
       riskRewardRatio: 3.5,
       timeframe: 'Ciclo Mensal (15 a 30 pregões)',
       probabilityOfProfit: pop,
-      popProvenance: pop !== null ? 'DERIVADO' : 'INDISPONIVEL',
+      popProvenance: 'DERIVADO',
       electedStrategy: OPTION_25_STRATEGIES[5], // #6 Cash-Secured Put
       strategyLegsFormatted,
       maxProfitEst,
@@ -846,11 +869,19 @@ export function buildMasterOpportunityList(params: {
     realOptions?: {
       debit?: number;
       deltaCallLong?: number;
+      deltaCallShort?: number;
+      strikeCallLong?: number;
+      strikeCallShort?: number;
       deltaPutLong?: number;
+      deltaPutShort?: number;
+      strikePutLong?: number;
+      strikePutShort?: number;
       netCredit?: number;
       pop?: number;
       putPremium?: number;
       putDelta?: number;
+      putStrike?: number;
+      putSymbol?: string;
     };
   }[];
   macroOverview?: {

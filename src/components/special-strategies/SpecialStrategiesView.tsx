@@ -561,6 +561,7 @@ export const SpecialStrategiesView: React.FC<SpecialStrategiesViewProps> = ({ on
                           <th className="py-3 px-3">Série (CALL)</th>
                           <th className="py-3 px-2">Vencimento</th>
                           <th className="py-3 px-2 text-right">Strike</th>
+                          <th className="py-3 px-2 text-right text-cyan-400">Delta</th>
                           <th className="py-3 px-2 text-right">Profundidade</th>
                           <th className="py-3 px-2 text-right">Preço Mercado</th>
                           <th className="py-3 px-2 text-right text-emerald-400">Valor Justo</th>
@@ -597,6 +598,9 @@ export const SpecialStrategiesView: React.FC<SpecialStrategiesViewProps> = ({ on
                               </td>
                               <td className="py-3 px-2 text-right font-bold text-white">
                                 R$ {cand.strike.toFixed(2)}
+                              </td>
+                              <td className="py-3 px-2 text-right font-bold text-cyan-300 font-mono">
+                                Δ {cand.delta.toFixed(2)}
                               </td>
                               <td className="py-3 px-2 text-right text-emerald-400">
                                 {cand.depthPercent.toFixed(1)}% ITM
@@ -962,14 +966,14 @@ export const SpecialStrategiesView: React.FC<SpecialStrategiesViewProps> = ({ on
                               <td className="py-3 px-3">
                                 <span className="font-bold text-white block">{cand.longLeg.symbol}</span>
                                 <span className="text-[10px] text-gray-400 block">
-                                  K R$ {cand.longLeg.strike.toFixed(2)} · {cand.longLeg.expirationDate}
+                                  K R$ {cand.longLeg.strike.toFixed(2)} · <strong className="text-cyan-300 font-mono">Δ {cand.longLeg.delta.toFixed(2)}</strong> · {cand.longLeg.expirationDate}
                                 </span>
                               </td>
 
                               <td className="py-3 px-2">
                                 <span className="font-bold text-white block">{cand.shortLeg.symbol}</span>
                                 <span className="text-[10px] text-blue-400 block">
-                                  K R$ {cand.shortLeg.strike.toFixed(2)} (+{cand.shortLeg.otmDistancePercent}%)
+                                  K R$ {cand.shortLeg.strike.toFixed(2)} (+{cand.shortLeg.otmDistancePercent}%) · <strong className="text-cyan-300 font-mono">Δ {cand.shortLeg.delta.toFixed(2)}</strong>
                                 </span>
                               </td>
 
@@ -1268,6 +1272,7 @@ export const SpecialStrategiesView: React.FC<SpecialStrategiesViewProps> = ({ on
                           <th className="py-3 px-3">Série (PUT)</th>
                           <th className="py-3 px-2">Vencimento</th>
                           <th className="py-3 px-2 text-right">Strike</th>
+                          <th className="py-3 px-2 text-right text-cyan-400">Delta</th>
                           <th className="py-3 px-2 text-right">Distância OTM</th>
                           <th className="py-3 px-2 text-right">Prêmio Put</th>
                           <th className="py-3 px-2 text-right text-blue-400">Preço Efetivo</th>
@@ -1306,6 +1311,10 @@ export const SpecialStrategiesView: React.FC<SpecialStrategiesViewProps> = ({ on
 
                               <td className="py-3 px-2 text-right font-bold text-white">
                                 R$ {cand.strike.toFixed(2)}
+                              </td>
+
+                              <td className="py-3 px-2 text-right font-bold text-cyan-300 font-mono">
+                                Δ {cand.delta ? (cand.delta > 0 ? `-${cand.delta.toFixed(2)}` : cand.delta.toFixed(2)) : '-0.28'}
                               </td>
 
                               <td className="py-3 px-2 text-right text-gray-400">

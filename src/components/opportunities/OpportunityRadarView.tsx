@@ -505,8 +505,15 @@ export const OpportunityRadarView: React.FC<OpportunityRadarViewProps> = ({ onSe
                           </div>
 
                           {item.execution.strategyLegsFormatted && (
-                            <div className="text-[10px] text-purple-300 font-sans truncate border-t border-slate-800/60 pt-0.5">
-                              {item.execution.strategyLegsFormatted}
+                            <div className="text-[10px] text-purple-300 font-mono border-t border-slate-800/60 pt-1 flex items-center justify-between gap-1">
+                              <span className="text-cyan-300 font-semibold truncate" title={item.execution.strategyLegsFormatted}>
+                                {item.execution.strategyLegsFormatted}
+                              </span>
+                              {item.execution.probabilityOfProfit !== null && item.execution.probabilityOfProfit !== undefined && (
+                                <span className="text-emerald-400 font-mono font-bold shrink-0 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 text-[9px]" title="Probabilidade de Lucro (POP)">
+                                  POP {item.execution.probabilityOfProfit}%
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
