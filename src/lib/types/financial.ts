@@ -436,4 +436,36 @@ export interface OITrackingResult {
   candles: OITrackingCandle[];
 }
 
+export interface Top10OIItem {
+  strike: number;
+  type: 'CALL' | 'PUT';
+  symbol: string;
+  currentOI: number;
+  prev1DOI: number | null;
+  prev5DOI: number | null;
+  change1DPercent: number | null;
+  change1DContracts: number | null;
+  change5DPercent: number | null;
+  change5DContracts: number | null;
+  distanceFromSpotPercent: number;
+  flowSignal: 'ACCUMULATION' | 'UNWINDING' | 'STABLE' | 'NO_HISTORY';
+}
 
+export interface Top10OIResult {
+  symbol: string;
+  spotPrice: number;
+  selectedExpiration: string;
+  selectedDte: number;
+  isRolloverPeriod: boolean;
+  availableExpirations: B3ExpirationInfo[];
+  top10Calls: Top10OIItem[];
+  top10Puts: Top10OIItem[];
+  totalCallsOI: number;
+  totalPutsOI: number;
+  callPutRatio: number;
+  dates: {
+    current: string;
+    d1: string;
+    d5: string;
+  };
+}

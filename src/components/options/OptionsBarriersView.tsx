@@ -17,6 +17,7 @@ import {
   Activity,
   CheckCircle2,
   HelpCircle,
+  Award,
 } from 'lucide-react';
 import { OptionAnalysisResult } from '@/lib/types/financial';
 import { safeFetchJson } from '@/lib/utils/api-client';
@@ -24,6 +25,7 @@ import { OptionPayoffChart } from './OptionPayoffChart';
 import { isActionableStrategy } from '@/lib/domain/cme-election';
 import { DataValue } from '../shared/DataValue';
 import { OptionsTracking5DView } from './OptionsTracking5DView';
+import { OptionsTop10View } from './OptionsTop10View';
 
 interface OptionsBarriersViewProps {
   initialSymbol?: string;
@@ -34,7 +36,7 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
   initialSymbol = 'PETR4',
   hideTopNav = false,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'OVERVIEW' | 'TRACKING_5D'>('OVERVIEW');
+  const [activeSubTab, setActiveSubTab] = useState<'OVERVIEW' | 'TRACKING_5D' | 'TOP_10_OI'>('OVERVIEW');
   const [symbol, setSymbol] = useState(initialSymbol);
   const [searchInput, setSearchInput] = useState(initialSymbol);
   const [selectedExpiration, setSelectedExpiration] = useState<string>('');
@@ -116,6 +118,19 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
             <Activity className="w-4 h-4 text-emerald-400" />
             <span>2) Rastreamento 5D & Bandas 200P</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('TOP_10_OI')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold font-mono transition shadow-sm ${
+              activeSubTab === 'TOP_10_OI'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-cyan-500/10 font-bold'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800/60 border border-transparent'
+            }`}
+          >
+            <Award className="w-4 h-4 text-cyan-400" />
+            <span>3) Top 10 OI Líquidas</span>
+          </button>
         </div>
 
         <span className="text-[11px] text-gray-500 font-mono hidden sm:inline mr-2">
@@ -125,6 +140,8 @@ export const OptionsBarriersView: React.FC<OptionsBarriersViewProps> = ({
 
       {activeSubTab === 'TRACKING_5D' ? (
         <OptionsTracking5DView initialSymbol={symbol} />
+      ) : activeSubTab === 'TOP_10_OI' ? (
+        <OptionsTop10View initialSymbol={symbol} />
       ) : (
         <>
           {/* 1. TOP BAR / PROVENIÊNCIA DOS PILARES (quando exibido globalmente) */}
