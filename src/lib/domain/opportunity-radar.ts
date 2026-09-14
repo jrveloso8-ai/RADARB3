@@ -94,7 +94,7 @@ export function matchBestOptionStrategyFrom25(params: {
       const strikeA = Number((spot * 1.05).toFixed(2));
       return {
         strategy: OPTION_25_STRATEGIES[4], // #5 Covered Call
-        strategyLegsFormatted: `Manter ${spot.toFixed(2)} à vista + Vender Call OTM @ R$ ${strikeA}`,
+        strategyLegsFormatted: `Manter R$ ${spot.toFixed(2)} à vista + Vender Call OTM R$ ${strikeA.toFixed(2)} (Δ +0.28)`,
         rationale: 'Renda recorrente com coleta de prêmio inflado (IV Alta) e taxa de proteção.',
         isCredit: true,
       };
@@ -104,7 +104,7 @@ export function matchBestOptionStrategyFrom25(params: {
       const strikeA = Number((spot * 0.95).toFixed(2));
       return {
         strategy: OPTION_25_STRATEGIES[5], // #6 Cash-Secured Put
-        strategyLegsFormatted: `Vender Put OTM @ R$ ${strikeA} com 100% de garantia em CDI`,
+        strategyLegsFormatted: `Vender Put OTM R$ ${strikeA.toFixed(2)} (Δ -0.28) com 100% de garantia em CDI`,
         rationale: 'Coleta de prêmio em CDI; se exercido, compra a ação com 5% de desconto no suporte.',
         isCredit: true,
       };
@@ -114,7 +114,7 @@ export function matchBestOptionStrategyFrom25(params: {
       const strikeA = Number((spot * 1.02).toFixed(2));
       return {
         strategy: OPTION_25_STRATEGIES[6], // #7 Long Call
-        strategyLegsFormatted: `Comprar Call ATM/OTM @ R$ ${strikeA}`,
+        strategyLegsFormatted: `Comprar Call ATM/OTM R$ ${strikeA.toFixed(2)} (Δ +0.50)`,
         rationale: 'Opções baratas com compressão de vol. Lucro exponencial com expansão de Vega e Delta.',
         isCredit: false,
       };
@@ -125,7 +125,7 @@ export function matchBestOptionStrategyFrom25(params: {
     const strikeB = Number((spot * 1.05).toFixed(2));
     return {
       strategy: OPTION_25_STRATEGIES[10], // #11 Bull Call Spread
-      strategyLegsFormatted: `Comprar Call @ R$ ${strikeA} + Vender Call @ R$ ${strikeB}`,
+      strategyLegsFormatted: `Comprar Call R$ ${strikeA.toFixed(2)} (Δ +0.50) + Vender Call R$ ${strikeB.toFixed(2)} (Δ +0.28)`,
       rationale: 'Assimetria favorável de alta moderada com risco e retorno pré-definidos.',
       isCredit: false,
     };
@@ -139,7 +139,7 @@ export function matchBestOptionStrategyFrom25(params: {
       const strikeA = Number((spot * 0.98).toFixed(2));
       return {
         strategy: OPTION_25_STRATEGIES[7], // #8 Long Put
-        strategyLegsFormatted: `Comprar Put ATM/OTM @ R$ ${strikeA}`,
+        strategyLegsFormatted: `Comprar Put ATM/OTM R$ ${strikeA.toFixed(2)} (Δ -0.50)`,
         rationale: 'Seguro barato para capturar crash ou queda acelerada sem exigir aluguel de ações.',
         isCredit: false,
       };
@@ -149,7 +149,7 @@ export function matchBestOptionStrategyFrom25(params: {
     const strikeA = Number((spot * 0.94).toFixed(2));
     return {
       strategy: OPTION_25_STRATEGIES[11], // #12 Bear Spread (Put / Call)
-      strategyLegsFormatted: `Comprar Put @ R$ ${strikeB} + Vender Put @ R$ ${strikeA}`,
+      strategyLegsFormatted: `Comprar Put R$ ${strikeB.toFixed(2)} (Δ -0.50) + Vender Put R$ ${strikeA.toFixed(2)} (Δ -0.28)`,
       rationale: 'Trava de baixa eficiente que dispensa aluguel (BTC) e limita o risco ao custo pago.',
       isCredit: false,
     };
@@ -163,7 +163,7 @@ export function matchBestOptionStrategyFrom25(params: {
       const strikeA = Number(spot.toFixed(2));
       return {
         strategy: OPTION_25_STRATEGIES[16], // #17 Long Straddle
-        strategyLegsFormatted: `Comprar Call ATM @ R$ ${strikeA} + Comprar Put ATM @ R$ ${strikeA}`,
+        strategyLegsFormatted: `Comprar Call ATM R$ ${strikeA.toFixed(2)} (Δ +0.50) + Comprar Put ATM R$ ${strikeA.toFixed(2)} (Δ -0.50)`,
         rationale: 'Volatilidade comprimida antes de rompimento explosivo. Lucro em qualquer direção.',
         isCredit: false,
       };
@@ -173,7 +173,7 @@ export function matchBestOptionStrategyFrom25(params: {
     const strikeCall = Number((spot * 1.05).toFixed(2));
     return {
       strategy: OPTION_25_STRATEGIES[18], // #19 Long Strangle
-      strategyLegsFormatted: `Comprar Put OTM @ R$ ${strikePut} + Comprar Call OTM @ R$ ${strikeCall}`,
+      strategyLegsFormatted: `Comprar Put OTM R$ ${strikePut.toFixed(2)} (Δ -0.25) + Comprar Call OTM R$ ${strikeCall.toFixed(2)} (Δ +0.25)`,
       rationale: 'Aposta em grande descolamento de preços com custo inicial menor que o Straddle.',
       isCredit: false,
     };
@@ -188,7 +188,7 @@ export function matchBestOptionStrategyFrom25(params: {
       const strikeRight = Number((maxPainStrike * 1.04).toFixed(2));
       return {
         strategy: OPTION_25_STRATEGIES[15], // #16 Iron Butterfly
-        strategyLegsFormatted: `Vender Straddle @ R$ ${maxPainStrike} + Comprar Put @ R$ ${strikeLeft} e Call @ R$ ${strikeRight}`,
+        strategyLegsFormatted: `Vender Straddle R$ ${maxPainStrike.toFixed(2)} (Δ 0.00) + Comprar Put R$ ${strikeLeft.toFixed(2)} (Δ -0.25) e Call R$ ${strikeRight.toFixed(2)} (Δ +0.25)`,
         rationale: 'Captura do efeito atrator de Max Pain com coleta máxima de prêmio a crédito.',
         isCredit: true,
       };
@@ -199,8 +199,8 @@ export function matchBestOptionStrategyFrom25(params: {
     const strikeC = Number((maxPainStrike * 1.04).toFixed(2));
     return {
       strategy: OPTION_25_STRATEGIES[12], // #13 Long Butterfly
-      strategyLegsFormatted: `Comprar 1 Call @ R$ ${strikeA}, Vender 2 Calls @ R$ ${strikeB}, Comprar 1 Call @ R$ ${strikeC}`,
-      rationale: 'Alvo milimétrico no Max Pain com custo reduzido e retorno assimétrico.',
+      strategyLegsFormatted: `Comprar 1 Call R$ ${strikeA.toFixed(2)} (Δ +0.65), Vender 2 Calls R$ ${strikeB.toFixed(2)} (Δ +0.50), Comprar 1 Call R$ ${strikeC.toFixed(2)} (Δ +0.35)`,
+      rationale: 'Alvo milimétrico no Max Pain com custo reduzido e retorno assimétrico com Delta neutro.',
       isCredit: false,
     };
   }
@@ -212,7 +212,7 @@ export function matchBestOptionStrategyFrom25(params: {
   const callLong = Number((spot * 1.08).toFixed(2));
   return {
     strategy: OPTION_25_STRATEGIES[19], // #20 Short Iron Condor
-    strategyLegsFormatted: `Vender Put @ R$ ${putShort} (comprar ${putLong}) + Vender Call @ R$ ${callShort} (comprar ${callLong})`,
+    strategyLegsFormatted: `Vender Put R$ ${putShort.toFixed(2)} (Δ -0.25) [trava R$ ${putLong.toFixed(2)}] + Vender Call R$ ${callShort.toFixed(2)} (Δ +0.25) [trava R$ ${callLong.toFixed(2)}]`,
     rationale: 'Estratégia rainha de renda mensal: lucrar com a passagem do tempo dentro do túnel.',
     isCredit: true,
   };
@@ -788,7 +788,7 @@ export function detectIntermarketOpportunities(
           probabilityOfProfit: null,
           popProvenance: 'INDISPONIVEL',
           electedStrategy: OPTION_25_STRATEGIES[10], // #11 Bull Call Spread
-          strategyLegsFormatted: `Comprar Call ATM @ R$ ${target.price.toFixed(2)} + Vender Call OTM @ R$ ${(target.price * 1.05).toFixed(2)}`,
+          strategyLegsFormatted: `Comprar Call R$ ${target.price.toFixed(2)} (Δ +0.50) + Vender Call R$ ${(target.price * 1.05).toFixed(2)} (Δ +0.28)`,
           maxProfitEst: undefined,
           maxLossEst: undefined,
           profitProvenance: 'INDISPONIVEL',
@@ -831,7 +831,7 @@ export function detectIntermarketOpportunities(
           probabilityOfProfit: null,
           popProvenance: 'INDISPONIVEL',
           electedStrategy: OPTION_25_STRATEGIES[10],
-          strategyLegsFormatted: `Bull Spread com Calls de VALE3`,
+          strategyLegsFormatted: `Comprar Call R$ ${vale3.price.toFixed(2)} (Δ +0.50) + Vender Call R$ ${(vale3.price * 1.05).toFixed(2)} (Δ +0.28)`,
           maxProfitEst: undefined,
           maxLossEst: undefined,
           profitProvenance: 'INDISPONIVEL',
